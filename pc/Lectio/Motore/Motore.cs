@@ -67,8 +67,8 @@ public sealed class Motore : IDisposable
     private Configurazione config;
     private string? token;
     private int svegliaChiesta;
-    private int scaricamentoInCorso;
-    private EsitoScaricamento? ultimoScaricamento;
+    private int preparazioneInCorso;
+    private EsitoPreparazione? ultimaPreparazione;
     private bool inPreparazione;
     private bool primoGiroFatto;
     private DateTimeOffset? casaVerificataFino;
@@ -89,6 +89,7 @@ public sealed class Motore : IDisposable
         }
         Audio = new CacheAudio(percorsi.Lezioni, this.client);
         Aggiornatore = new Aggiornatore(this.client, Versione.Codice);
+        CartellaAggiornamento = percorsi.Aggiornamento;
     }
 
     public CacheAudio Audio { get; }
@@ -97,8 +98,14 @@ public sealed class Motore : IDisposable
     /// <summary>Il controllo delle versioni nuove vale solo per il programma scompattato dallo zip.</summary>
     public bool AggiornamentiAttivi { get; set; }
 
-    /// <summary>Dove salvare lo zip della versione nuova (la cartella Download; nei test una temporanea).</summary>
-    public string CartellaDownload { get; set; } = Cartelle.Download();
+    /// <summary>Dove si prepara la versione nuova (<c>aggiornamento</c> nella cartella dei dati).</summary>
+    public string CartellaAggiornamento { get; set; }
+
+    /// <summary>La versione nuova scaricata, controllata e scompattata: si installa quando Lectio si chiude.</summary>
+    public AggiornamentoPronto? Pronta => AggiornamentiAttivi ? Aggiornatore.Pronta(CartellaAggiornamento, Versione.Codice, orologio()) : null;
+
+    /// <summary>Il nome della versione appena installata (primo avvio dopo l'aggiornamento), altrimenti null.</summary>
+    public string? AppenaAggiornato { get; private set; }
 
     /// <summary>Avviato con <c>--diagnosi</c>: la pagina prova audio e invio dei file e scrive l'esito nel diario.</summary>
     public bool Diagnosi { get; set; }
@@ -113,8 +120,9 @@ public sealed class Motore : IDisposable
 
     public event Action? StatoCambiato;
     public event Action? TemaCambiato;
-    public event Action<VersioneNuova>? AggiornamentoDisponibile;
-    public event Action<EsitoScaricamento>? ScaricamentoFinito;
+
+    /// <summary>A fine preparazione della versione nuova (riuscita o no).</summary>
+    public event Action<EsitoPreparazione>? PreparazioneFinita;
 
     public bool Abbinato
     {
@@ -229,6 +237,7 @@ public sealed class Motore : IDisposable
     public void Avvia()
     {
         if (ciclo != null) return;
+        if (AggiornamentiAttivi) AppenaAggiornato = Aggiornatore.LeggiFatto(CartellaAggiornamento);
         fine = new CancellationTokenSource();
         ciclo = Task.Run(() => CicloAsync(fine.Token));
     }
@@ -248,7 +257,8 @@ public sealed class Motore : IDisposable
 
     private async Task CicloAsync(CancellationToken annulla)
     {
-        long prossimaVersione = Environment.TickCount64 + 20_000;
+        long primaVersione = Environment.TickCount64 + 20_000;
+        long prossimaVersione = primaVersione;
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(1), annulla).ConfigureAwait(false);
@@ -259,20 +269,23 @@ public sealed class Motore : IDisposable
                     await GiroAsync(annulla).ConfigureAwait(false);
                     if (AggiornamentiAttivi && Environment.TickCount64 >= prossimaVersione && Credenziali().Server != null)
                     {
+                        if (prossimaVersione == primaVersione) PulisciAggiornamento();
                         prossimaVersione = Environment.TickCount64 + (long)IntervalloVersione.TotalMilliseconds;
                         var (base_, _) = await CollegamentoAsync(annulla).ConfigureAwait(false);
                         // Lo zip non ha bisogno del token: se la casa non si verifica si prova lo stesso (lo protegge la firma).
                         var server = base_ ?? Credenziali().Server!;
-                        var nuova = await Aggiornatore.ControllaAsync(server, annulla).ConfigureAwait(false);
-                        if (nuova != null) AggiornamentoDisponibile?.Invoke(nuova);
+                        await Aggiornatore.ControllaAsync(server, annulla).ConfigureAwait(false);
+                        // Una versione nuova si scarica e si prepara subito, da sola; si installa quando Lectio si chiude.
+                        var nuova = Aggiornatore.Disponibile;
+                        var gia = Aggiornatore.Pronta(CartellaAggiornamento, Versione.Codice, orologio(), ancheSeFallita: true);
+                        if (nuova != null && (gia?.Codice ?? 0) < nuova.Codice) AvviaPreparazione();
                     }
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
                     Log.Errore("giro in sottofondo", e);
                 }
-                // §11: ogni 20 secondi mentre una lezione è in preparazione; altrimenti solo quando serve.
-                var attesa = InPreparazione ? IntervalloPreparazione : TimeSpan.FromMinutes(30);
+                var attesa = AttesaGiro(InPreparazione, AggiornamentiAttivi && Credenziali().Server != null, Environment.TickCount64, prossimaVersione);
                 await sveglia.WaitAsync(attesa, annulla).ConfigureAwait(false);
                 Interlocked.Exchange(ref svegliaChiesta, 0);
             }
@@ -280,6 +293,19 @@ public sealed class Motore : IDisposable
         catch (OperationCanceledException)
         {
         }
+    }
+
+    /// <summary>
+    /// Quanto dorme il giro: §11, ogni 20 secondi mentre una lezione è in preparazione, altrimenti mezz'ora (o prima,
+    /// se lo sveglia la finestra). Ma mai oltre il prossimo controllo delle versioni, che altrimenti salterebbe:
+    /// Lectio di solito resta aperto meno di mezz'ora.
+    /// </summary>
+    internal static TimeSpan AttesaGiro(bool inPreparazione, bool aggiornamenti, long adessoMs, long prossimaVersioneMs)
+    {
+        var attesa = inPreparazione ? IntervalloPreparazione : TimeSpan.FromMinutes(30);
+        if (!aggiornamenti) return attesa;
+        var mancano = TimeSpan.FromMilliseconds(Math.Max(1000, prossimaVersioneMs - adessoMs));
+        return mancano < attesa ? mancano : attesa;
     }
 
     /// <summary>
@@ -397,7 +423,8 @@ public sealed class Motore : IDisposable
         Configurazione c;
         lock (stato) c = config;
         var nuova = Aggiornatore.Disponibile;
-        var scaricato = ultimoScaricamento;
+        var preparata = ultimaPreparazione;
+        var pronta = Pronta;
         var scaricate = Audio.Elenco();
         return new JsonObject
         {
@@ -422,9 +449,9 @@ public sealed class Motore : IDisposable
             {
                 ["attivo"] = AggiornamentiAttivi,
                 ["disponibile"] = nuova?.Nome,
-                ["scaricamento_in_corso"] = Volatile.Read(ref scaricamentoInCorso) == 1,
-                ["scaricato"] = scaricato?.Ok == true ? scaricato.File : null,
-                ["errore_scaricamento"] = scaricato?.Ok == false ? scaricato.Errore : null,
+                ["in_corso"] = Volatile.Read(ref preparazioneInCorso) == 1,
+                ["pronta"] = pronta?.Nome,
+                ["errore"] = preparata?.Ok == false && pronta == null ? preparata.Errore : null,
             },
         };
     }
@@ -760,29 +787,45 @@ public sealed class Motore : IDisposable
 
     // ---------------- Aggiornamento ----------------
 
-    /// <summary>Scarica in sottofondo lo zip della versione nuova; a fine lavoro <see cref="ScaricamentoFinito"/>.</summary>
-    public bool AvviaScaricamento()
+    /// <summary>
+    /// Scarica, controlla e scompatta in sottofondo la versione nuova; a fine lavoro <see cref="PreparazioneFinita"/>.
+    /// Si installa poi da sola quando Lectio si chiude (Program.Main).
+    /// </summary>
+    public bool AvviaPreparazione()
     {
         if (Aggiornatore.Disponibile == null) return false;
-        if (Interlocked.Exchange(ref scaricamentoInCorso, 1) == 1) return false;
-        ultimoScaricamento = null;
+        if (Interlocked.Exchange(ref preparazioneInCorso, 1) == 1) return false;
+        ultimaPreparazione = null;
         _ = Task.Run(async () =>
         {
-            EsitoScaricamento esito;
+            EsitoPreparazione esito;
             try
             {
-                esito = await Aggiornatore.ScaricaAsync(CartellaDownload).ConfigureAwait(false);
+                esito = await Aggiornatore.PreparaAsync(CartellaAggiornamento, orologio()).ConfigureAwait(false);
             }
             catch (Exception e)
             {
-                Log.Errore("scaricamento della versione nuova", e);
-                esito = new EsitoScaricamento(false, null, "Lo scaricamento non è riuscito. Riprova più tardi.");
+                Log.Errore("preparazione della versione nuova", e);
+                esito = new EsitoPreparazione(false, null, "Lo scaricamento non è riuscito. Riprova più tardi.");
             }
-            ultimoScaricamento = esito;
-            Interlocked.Exchange(ref scaricamentoInCorso, 0);
-            ScaricamentoFinito?.Invoke(esito);
+            ultimaPreparazione = esito;
+            Interlocked.Exchange(ref preparazioneInCorso, 0);
+            PreparazioneFinita?.Invoke(esito);
         });
         return true;
+    }
+
+    /// <summary>Al primo controllo dopo l'avvio: via quello che resta dell'aggiornamento di prima (in sottofondo, mai bloccante).</summary>
+    private void PulisciAggiornamento()
+    {
+        try
+        {
+            Aggiornatore.Pulisci(CartellaAggiornamento, Versione.Codice);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Errore("pulizia dopo l'aggiornamento", e);
+        }
     }
 
     // ---------------- Aiuti ----------------

@@ -342,6 +342,12 @@ tastiera); il server la corregge.
 - Modello senza prezzo nel listino → 503 `fornitore_non_disponibile` con frase semplice su stima e creazione.
 - `GET /scarica/lectio-pc.zip.sig` (firma ECDSA P-256 in base64 dello zip del PC) e in `GET /api/versione`
   `pc.firma: true|false`. Il programma PC installa un aggiornamento solo con firma valida.
+- Aggiornamenti da soli (1.0.1). PC: 20 s dopo l'avvio e poi ogni 12 ore legge `/api/versione`; una versione
+  nuova si scarica, si controlla (impronta, dimensione, firma) e si scompatta in `%LOCALAPPDATA%\Lectio\aggiornamento`;
+  lo zip contiene `Lectio\versione.json` (`codice`, `nome`, coperto dalla firma) e si accetta solo con `codice` più
+  alto del programma. Si installa quando Lectio si chiude (o al primo avvio dopo, e poi si riapre). Android: il
+  controllo delle 12 ore e quello un minuto dopo che si lascia l'app installano senza chiedere, mai con l'app sullo
+  schermo o una lezione che suona (in quel caso si scarica soltanto).
 
 ### 15.3 Materie: creazione e modifica
 Già in sezione 4 (`POST/PATCH/DELETE /api/materie`). In più: `prof` facoltativo (0-40 caratteri), `nome`

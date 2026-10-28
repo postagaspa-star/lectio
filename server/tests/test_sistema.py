@@ -2,6 +2,7 @@
 testo per Gemini (12) ed errori sempre in JSON (1)."""
 
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -93,7 +94,8 @@ def test_revoca_dispositivo(client, auth):
 
 def test_versione_con_impronta_dei_file(client, app):
     v = client.get("/api/versione").json()
-    assert v["server"] == "1.0.1" and v["android"]["codice"] == 1 and v["android"]["sha256"] is None
+    annunciate = json.loads(Path(app.state.settings.versioni_path).read_text(encoding="utf-8"))
+    assert v["server"] == "1.0.1" and v["android"]["codice"] == annunciate["android"]["codice"] and v["android"]["sha256"] is None
     cartella = Path(app.state.settings.apk_dir)
     cartella.mkdir(parents=True, exist_ok=True)
     (cartella / "lectio.apk").write_bytes(b"apk finto")

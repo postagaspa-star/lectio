@@ -10,6 +10,7 @@ import androidx.core.content.IntentCompat
 import eu.stgm.lectio.BuildConfig
 import eu.stgm.lectio.LectioApp
 import eu.stgm.lectio.dati.VersioneApp
+import eu.stgm.lectio.lettore.CentroAscolto
 import eu.stgm.lectio.notifiche.Notificatore
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.LectioClient
@@ -126,6 +127,12 @@ class Aggiornatore(private val context: Context) {
             ) {
                 return EsitoAggiornamento.Rimandato(ultima.nome)
             }
+            // L'installazione chiude l'app: mentre la usi o ascolti si scarica soltanto, e si installa
+            // quando la lasci (AggiornamentoWorker parte da MainActivity.onStop).
+            if (!MomentoAggiornamento.libero(AppInPrimoPiano.visibile, CentroAscolto.stato.value.suona)) {
+                preparatore.prepara(ultima)
+                return EsitoAggiornamento.Rimandato(ultima.nome)
+            }
         }
         return when (val pronto = preparatore.prepara(ultima)) {
             is PreparatoreAggiornamento.Preparazione.Pronto -> {
@@ -196,6 +203,12 @@ class Aggiornatore(private val context: Context) {
 object AppInPrimoPiano {
     @Volatile
     var visibile: Boolean = false
+}
+
+/** Quando un aggiornamento trovato in sottofondo si può installare senza disturbare. */
+object MomentoAggiornamento {
+    /** Mai con Lectio sullo schermo né con una lezione che suona: l'installazione chiuderebbe tutto. */
+    fun libero(visibile: Boolean, suona: Boolean): Boolean = !visibile && !suona
 }
 
 /** L'esito di PackageInstaller: se Android vuole la conferma, finestra subito o notifica. */

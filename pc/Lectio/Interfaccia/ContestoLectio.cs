@@ -17,8 +17,6 @@ namespace Lectio.Interfaccia;
 public sealed class ContestoLectio : ApplicationContext
 {
     private static readonly TimeSpan IntervalloAvvisi = TimeSpan.FromSeconds(6);
-    private const string AzioneScarica = "scarica-aggiornamento";
-    private const string AzioneMostraZip = "mostra-zip";
 
     private readonly MotoreLectio motore;
     private readonly Ponte ponte;
@@ -31,9 +29,14 @@ public sealed class ContestoLectio : ApplicationContext
     private readonly System.Windows.Forms.Timer timerAvvisi;
     private FinestraLectio? finestra;
     private Notifica? ultimaMostrata;
-    private string? zipScaricato;
     private bool avvisatoCheResta;
     private bool uscito;
+
+    /// <summary>Windows si sta spegnendo (o si esce dall'account): la versione nuova si installa al prossimo avvio.</summary>
+    public bool FineSessione { get; private set; }
+
+    /// <summary>"Aggiorna adesso" nelle Impostazioni: dopo l'installazione Lectio si riapre.</summary>
+    public bool RiapriDopo { get; private set; }
 
     public ContestoLectio(MotoreLectio motore, Opzioni opzioni, Istanza istanza)
     {
@@ -71,27 +74,21 @@ public sealed class ContestoLectio : ApplicationContext
         motore.NuovaNotifica += n => SulFiloGrafico(() => Accoda(n));
         motore.Novita += json => SulFiloGrafico(() => finestra?.MandaNovita(json));
         motore.StatoCambiato += () => SulFiloGrafico(SuStatoCambiato);
-        motore.AggiornamentoDisponibile += v => SulFiloGrafico(() =>
-            Accoda(new Notifica("C'è una versione nuova di Lectio", $"È uscita la {v.Nome}. Fai clic per scaricarla.", AzioneScarica)));
-        motore.ScaricamentoFinito += esito => SulFiloGrafico(() =>
+        // Gli aggiornamenti si scaricano e si installano da soli (Program.Main, alla chiusura): qui solo il bottone
+        // "Aggiorna adesso" e, al primo avvio dopo, l'avviso che è andata.
+        ponte.AggiornaAdesso = () => SulFiloGrafico(() =>
         {
-            if (esito.Ok && esito.File != null)
-            {
-                zipScaricato = esito.File;
-                Cartelle.MostraFile(esito.File);
-                Accoda(new Notifica("Versione nuova scaricata e controllata", "Chiudi Lectio e scompatta lo zip nella cartella del programma, sostituendo i file.", AzioneMostraZip));
-            }
-            else
-            {
-                Accoda(new Notifica("Versione nuova non scaricata", esito.Errore ?? "Riprova più tardi.", "impostazioni"));
-            }
+            RiapriDopo = true;
+            _ = EsciAsync();
         });
+        Microsoft.Win32.SystemEvents.SessionEnding += SuFineSessione;
 
         istanza.RichiestaApertura += () => SulFiloGrafico(() => Apri(null));
         istanza.SvuotaAperturaInSospeso();
 
         motore.Avvia();
         Apri(null);
+        if (motore.AppenaAggiornato is string versione) Accoda(new Notifica("Lectio si è aggiornato", $"Adesso hai la versione {versione}."));
 
         if (opzioni.EsciDopoSecondi is int secondi)
         {
@@ -211,20 +208,10 @@ public sealed class ContestoLectio : ApplicationContext
 
     private void SuClicAvviso()
     {
-        var destinazione = ultimaMostrata?.Frammento;
-        switch (destinazione)
-        {
-            case AzioneScarica:
-                if (motore.AvviaScaricamento()) Accoda(new Notifica("Lectio scarica la versione nuova", "Quando ha finito e ha controllato il file, te lo dice."));
-                break;
-            case AzioneMostraZip:
-                if (zipScaricato != null) Cartelle.MostraFile(zipScaricato);
-                break;
-            default:
-                Apri(destinazione);
-                break;
-        }
+        Apri(ultimaMostrata?.Frammento);
     }
+
+    private void SuFineSessione(object? mittente, Microsoft.Win32.SessionEndingEventArgs e) => FineSessione = true;
 
     // ---------------- Chiusura ----------------
 
@@ -240,6 +227,7 @@ public sealed class ContestoLectio : ApplicationContext
         if (uscito) return;
         uscito = true;
         Log.Info("Lectio si chiude");
+        Microsoft.Win32.SystemEvents.SessionEnding -= SuFineSessione;
         timerAvvisi.Stop();
         finestra?.ChiudiSenzaChiedere();
         tasti.Dispose();

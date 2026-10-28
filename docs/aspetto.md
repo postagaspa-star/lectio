@@ -266,7 +266,8 @@ nell'app per quando non c'è rete).
   alle domande (interruttore), Risposte scritte (interruttore, acceso di base), Domande predefinite (Obbligatorie / Si possono
   saltare), Velocità predefinita, **Tetto del mese** (0,50-10 €, predefinito 2 €; la riga
   dice quanto si è speso), Tema (sistema / chiaro / scuro), **Come funziona Lectio** (visita guidata),
-  Aggiornamenti (versione + "Aggiorna" se c'è), Informazioni.
+  Aggiornamenti (versione e "Si aggiorna da sola"; con una versione pronta sul computer "Si installa da sola quando
+  chiudi Lectio" + **Aggiorna adesso**), Informazioni.
 - **Primo avvio / abbinamento**: simbolo, "Collega Lectio al server di casa", campo indirizzo (vuoto,
   segnaposto "http://192.168.x.x:8500"; l'indirizzo da fuori casa lo manda poi il server), campo codice di 8 cifre, pulsante pieno **Collega**. Errori chiari con cosa fare.
 - **Senza rete**: pillola in alto "Senza rete: vedi solo le lezioni scaricate"; le azioni che servono il server

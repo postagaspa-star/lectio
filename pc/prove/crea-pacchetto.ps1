@@ -4,8 +4,10 @@
 
     Fa `dotnet publish` self-contained per win-x64 A CARTELLA (non single-file), come Sol e Pactum: niente
     eseguibile che si scompatta da solo. Lo zip contiene una cartella `Lectio\` con `Lectio.exe`, le dll del
-    runtime .NET, la cartella `ui` (con il carattere Figtree) e `OFL.txt` (la licenza del carattere).
-    Il programma gira da lì: non si installa, non si copia da nessuna parte, non parte da solo con Windows.
+    runtime .NET, la cartella `ui` (con il carattere Figtree), `OFL.txt` (la licenza del carattere) e
+    `versione.json` (codice e nome da Versione.cs: sta dentro lo zip, quindi lo copre la firma).
+    Il programma gira da lì e non parte da solo con Windows. Le versioni dopo le installa da sé nella
+    stessa cartella, quando Lectio si chiude.
 
     Lo zip va messo sul server con la sua firma lectio-pc.zip.sig (GET /scarica/lectio-pc.zip e
     GET /scarica/lectio-pc.zip.sig); in server/app/versioni.json vanno
@@ -56,6 +58,13 @@ if (-not (Test-Path (Join-Path $staging 'ui\font\Figtree.ttf'))) { throw "Il car
 if (-not (Test-Path (Join-Path $staging 'OFL.txt'))) { throw "OFL.txt non è finito accanto all'exe." }
 if (-not (Test-Path (Join-Path $staging 'coreclr.dll'))) { throw "Manca coreclr.dll: la pubblicazione non è self-contained a cartella." }
 $versione = (Get-Item $exe).VersionInfo.FileVersion
+
+# versione.json: il programma installato accetta solo un pacchetto con un codice più alto del suo.
+$testoVersione = Get-Content -Raw -Encoding UTF8 (Join-Path $radicePc 'Lectio\Versione.cs')
+$nomeV = [regex]::Match($testoVersione, 'Nome = "([^"]+)"').Groups[1].Value
+$codiceV = [regex]::Match($testoVersione, 'Codice = (\d+);').Groups[1].Value
+if (-not $nomeV -or -not $codiceV) { throw "Non trovo Nome e Codice in Versione.cs." }
+[IO.File]::WriteAllText((Join-Path $staging 'versione.json'), "{`"codice`": $codiceV, `"nome`": `"$nomeV`"}", (New-Object Text.UTF8Encoding $false))
 
 Write-Host "Creo lo zip..." -ForegroundColor Cyan
 Remove-Item $zip -ErrorAction SilentlyContinue

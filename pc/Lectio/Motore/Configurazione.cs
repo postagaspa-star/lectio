@@ -20,6 +20,9 @@ public sealed class Percorsi
     public string Lezioni => Path.Combine(Radice, "lezioni");
 
     public string Log => Path.Combine(Radice, "log");
+
+    /// <summary>La versione nuova scaricata e scompattata, in attesa di installarsi (vedi <see cref="Aggiornatore"/>).</summary>
+    public string Aggiornamento => Path.Combine(Radice, "aggiornamento");
     public string WebView => Path.Combine(Radice, "WebView2");
 }
 

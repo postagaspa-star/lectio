@@ -62,7 +62,7 @@
       if (senzaMaterie && !d.prossima) {
         svuota(corpo, h('div', { class: 'colonna' }, h('div', { class: 'scheda rilievo vuoto' },
           h('p', null, 'Aggiungi la prima materia'),
-          h('button', { type: 'button', class: 'pulsante pieno', onclick: () => A.apriMateria(null) }, icona('piu'), 'Aggiungi la prima materia'),
+          h('button', { type: 'button', class: 'pulsante pieno', onclick: () => A.apriMateria(null) }, icona('piu'), 'Nuova materia'),
           h('button', { type: 'button', class: 'pulsante testo', 'data-azione': 'visita', onclick: () => A.avviaVisita && A.avviaVisita() }, 'Prima volta? Guarda come funziona'))), h('div'));
         return;
       }
@@ -915,10 +915,13 @@
     // Aggiornamenti
     const agg = mot.aggiornamento || {};
     let rigaAgg;
-    if (agg.scaricato) rigaAgg = voce('Versione nuova scaricata', 'Chiudi Lectio e scompatta lo zip nella cartella del programma.');
-    else if (agg.disponibile) rigaAgg = voce('È uscita la versione ' + agg.disponibile, agg.errore_scaricamento || null,
-      h('button', { type: 'button', class: 'pulsante tenue', disabled: agg.scaricamento_in_corso ? true : null, onclick: async () => { const r = await A.api.post('/locale/scarica-aggiornamento', {}); A.avviso(r.ok ? 'La scarico: quando ha finito te lo dico.' : r.errore); } }, agg.scaricamento_in_corso ? 'La sto scaricando…' : 'Aggiorna'));
-    else rigaAgg = voce('Versione ' + (mot.versione || '1.0.0'), 'È l\'ultima');
+    // Si scarica e si installa da sola (alla chiusura); qui si vede a che punto è, e si può anticipare.
+    if (agg.pronta) rigaAgg = voce('È pronta la versione ' + agg.pronta, 'Si installa da sola quando chiudi Lectio.',
+      h('button', { type: 'button', class: 'pulsante tenue', onclick: async () => { const r = await A.api.post('/locale/aggiorna-e-riavvia', {}); if (!r.ok) A.avviso(r.errore); } }, 'Aggiorna adesso'));
+    else if (agg.in_corso) rigaAgg = voce('Arriva la versione ' + (agg.disponibile || 'nuova'), 'La sto scaricando e controllando.');
+    else if (agg.disponibile) rigaAgg = voce('È uscita la versione ' + agg.disponibile, agg.errore || null,
+      h('button', { type: 'button', class: 'pulsante tenue', onclick: async () => { const r = await A.api.post('/locale/scarica-aggiornamento', {}); if (r.ok) { A.avviso('La scarico: poi si installa da sola.'); A.disegna(); } else A.avviso(r.errore); } }, agg.errore ? 'Riprova' : 'Scarica adesso'));
+    else rigaAgg = voce('Versione ' + (mot.versione || '1.0.0'), agg.attivo ? 'Si aggiorna da sola' : 'È l\'ultima');
 
     const nScaricate = (mot.scaricate || []).length;
     svuota(pag,

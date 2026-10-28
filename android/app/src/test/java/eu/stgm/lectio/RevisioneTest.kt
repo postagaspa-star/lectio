@@ -4,6 +4,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.SavedStateHandle
+import eu.stgm.lectio.aggiornamento.MomentoAggiornamento
 import eu.stgm.lectio.dati.Ascolto
 import eu.stgm.lectio.dati.ArchivioAudio
 import eu.stgm.lectio.dati.CacheMemoria
@@ -717,5 +718,13 @@ class RevisioneTest {
         server.rispondi("GET /api/voci", """[{"id":"azure:x","nome":"Isabella","tipo":"gratis","disponibile":true}]""")
         vm.carica()
         aspetta { vm.stato.value.voceGratis }
+    }
+
+    @Test
+    fun `aggiornamento in sottofondo mai con l'app sullo schermo o una lezione che suona`() {
+        assertTrue(MomentoAggiornamento.libero(visibile = false, suona = false))
+        assertFalse(MomentoAggiornamento.libero(visibile = true, suona = false))
+        assertFalse(MomentoAggiornamento.libero(visibile = false, suona = true))
+        assertFalse(MomentoAggiornamento.libero(visibile = true, suona = true))
     }
 }

@@ -22,6 +22,15 @@ public sealed class Opzioni
     /// </summary>
     public bool Diagnosi { get; private set; }
 
+    /// <summary>
+    /// Avviato dal Lectio di prima per installare questa versione (<see cref="Sostituzione"/>): la cartella del
+    /// programma da aggiornare, il processo da aspettare e se riaprire Lectio alla fine.
+    /// </summary>
+    public bool ApplicaAggiornamento { get; private set; }
+    public string? Programma { get; private set; }
+    public int? Attendi { get; private set; }
+    public bool Riapri { get; private set; }
+
     public static Opzioni Da(string[] args)
     {
         var o = new Opzioni();
@@ -37,6 +46,10 @@ public sealed class Opzioni
                 case "--esci-dopo": o.EsciDopoSecondi = int.Parse(Prossimo(), CultureInfo.InvariantCulture); break;
                 case "--no-aggiorna": o.NonAggiornare = true; break;
                 case "--diagnosi": o.Diagnosi = true; break;
+                case Sostituzione.Argomento: o.ApplicaAggiornamento = true; break;
+                case "--programma": o.Programma = Prossimo(); break;
+                case "--attendi": o.Attendi = int.Parse(Prossimo(), CultureInfo.InvariantCulture); break;
+                case "--riapri": o.Riapri = true; break;
             }
         }
         return o;
@@ -65,6 +78,9 @@ internal static class Program
             return 2;
         }
 
+        // Il Lectio nuovo lanciato dal vecchio: si installa senza finestre ed esce.
+        if (opzioni.ApplicaAggiornamento) return Sostituzione.Esegui(opzioni);
+
         ApplicationConfiguration.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) => Log.Errore("eccezione non gestita nella finestra", e.Exception);
@@ -86,17 +102,34 @@ internal static class Program
         var percorsi = new Percorsi(opzioni.CartellaDati);
         Log.Inizia(percorsi.Log);
         Log.Info($"Lectio {Versione.Nome} avviato");
+        var aggiornamenti = !opzioni.NonAggiornare && !opzioni.Diagnosi && Installazione.ÈPacchetto;
+
+        // Una versione nuova già pronta e non ancora installata (per esempio Lectio si è chiuso mentre Windows si
+        // spegneva) si installa adesso, prima della finestra: Lectio si riapre da solo dopo pochi secondi.
+        if (aggiornamenti && Aggiornatore.Pronta(percorsi.Aggiornamento, Versione.Codice, DateTimeOffset.Now) is { } pronta
+            && Sostituzione.Avvia(pronta, AppContext.BaseDirectory, opzioni.CartellaDati, riapri: true))
+        {
+            return 0;
+        }
         Installazione.AssicuraUi(AppContext.BaseDirectory);
 
         using var motore = new Motore.Motore(percorsi)
         {
-            AggiornamentiAttivi = !opzioni.NonAggiornare && !opzioni.Diagnosi && Installazione.ÈPacchetto,
+            AggiornamentiAttivi = aggiornamenti,
             Diagnosi = opzioni.Diagnosi,
         };
         if (opzioni.Diagnosi) Diagnosi.PreparaAudio(percorsi.Lezioni);
 
-        Application.Run(new ContestoLectio(motore, opzioni, istanza));
+        var contesto = new ContestoLectio(motore, opzioni, istanza);
+        Application.Run(contesto);
         Log.Info("Lectio chiuso");
+
+        // Chiuso Lectio, la versione nuova pronta si installa adesso. Mai mentre Windows si spegne: la copia
+        // resterebbe a metà (in quel caso si installa al prossimo avvio, qui sopra).
+        if (aggiornamenti && !contesto.FineSessione && Aggiornatore.Pronta(percorsi.Aggiornamento, Versione.Codice, DateTimeOffset.Now) is { } dopo)
+        {
+            Sostituzione.Avvia(dopo, AppContext.BaseDirectory, opzioni.CartellaDati, riapri: contesto.RiapriDopo);
+        }
         return 0;
     }
 }

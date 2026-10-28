@@ -20,7 +20,7 @@ public class ClientContrattoTest
         Assert.Equal("/api/materie", richiesta.Percorso);
         Assert.Equal("Bearer " + Banco.Token, richiesta.Autorizzazione);
         Assert.Null(richiesta.Corpo);
-        Assert.StartsWith("Lectio-PC/1.0.0", richiesta.Agente);
+        Assert.StartsWith("Lectio-PC/" + Versione.Nome, richiesta.Agente);
 
         rete = false;
         var r2 = await b.Motore.InoltraAsync("GET", "api/materie", "", null);

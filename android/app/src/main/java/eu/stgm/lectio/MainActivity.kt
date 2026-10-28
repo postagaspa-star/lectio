@@ -57,6 +57,7 @@ import eu.stgm.lectio.dati.Impostazioni
 import eu.stgm.lectio.dati.Sorgente
 import eu.stgm.lectio.dati.SorgenteEsempio
 import eu.stgm.lectio.dati.TemaScelto
+import eu.stgm.lectio.lavori.AggiornamentoWorker
 import eu.stgm.lectio.lavori.PreparazioneWorker
 import eu.stgm.lectio.lavori.scaricaLezione
 import eu.stgm.lectio.lettore.CentroAscolto
@@ -160,6 +161,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         AppInPrimoPiano.visibile = false
+        if (!isChangingConfigurations) AggiornamentoWorker.pianifica(this)
         super.onStop()
     }
 

@@ -88,7 +88,7 @@ public class PonteTest
         var stato = await ponte.GestisciAsync("GET", new Uri(Base, "locale/stato"), null);
         Assert.Equal(200, stato.Stato);
         Assert.Equal(true, Json.Booleano(Json.Nodo(stato.Json)!["abbinato"]));
-        Assert.Equal("1.0.0", Json.Testo(Json.Nodo(stato.Json)!["versione"]));
+        Assert.Equal(Versione.Nome, Json.Testo(Json.Nodo(stato.Json)!["versione"]));
 
         var copia = await ponte.GestisciAsync("POST", new Uri(Base, "locale/copia"), Encoding.UTF8.GetBytes("{\"testo\":\"Trascrivi questa verifica\"}"));
         Assert.Equal(200, copia.Stato);

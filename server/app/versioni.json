@@ -1,6 +1,6 @@
 {
   "server": "1.0.1",
-  "android": {"codice": 1, "nome": "1.0.0"},
-  "pc": {"codice": 1, "nome": "1.0.0"},
-  "nota": "Prima versione di Lectio: audio-lezioni tarate sulle verifiche del prof."
+  "android": {"codice": 2, "nome": "1.0.1"},
+  "pc": {"codice": 2, "nome": "1.0.1"},
+  "nota": "Gli aggiornamenti si installano da soli: sul telefono quando lasci l'app, sul computer quando chiudi Lectio."
 }

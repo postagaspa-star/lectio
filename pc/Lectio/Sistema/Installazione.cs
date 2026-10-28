@@ -1,9 +1,9 @@
 namespace Lectio.Sistema;
 
 /// <summary>
-/// Lectio non si installa: gira dalla cartella dove lo zip è stato scompattato. Non si copia da nessuna
-/// parte, non si avvia da solo con Windows e non scrive nel registro. I suoi dati stanno in
-/// <c>%LOCALAPPDATA%\Lectio</c>.
+/// Lectio non ha un programma di installazione: gira dalla cartella dove lo zip è stato scompattato, non si
+/// avvia da solo con Windows e non scrive nel registro. Le versioni nuove le installa da sé in quella stessa
+/// cartella (<see cref="Sostituzione"/>). I suoi dati stanno in <c>%LOCALAPPDATA%\Lectio</c>.
 /// </summary>
 public static class Installazione
 {

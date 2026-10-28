@@ -35,6 +35,9 @@ public sealed class Ponte
     /// <summary>Accende o spegne i tasti multimediali della tastiera (c'è una lezione nel lettore).</summary>
     public Action<bool>? Tasti { get; set; }
 
+    /// <summary>"Aggiorna adesso": Lectio si chiude, installa la versione pronta e si riapre.</summary>
+    public Action? AggiornaAdesso { get; set; }
+
     /// <summary>Il tema scelto nelle impostazioni (null = come Windows).</summary>
     public string? TemaScelto => motore.TemaScelto;
 
@@ -219,9 +222,18 @@ public sealed class Ponte
                 Tasti?.Invoke(Json.Booleano(o?["attivi"]) ?? false);
                 return Task.FromResult(new JsonObject { ["ok"] = true });
             }),
-            "scarica-aggiornamento" => ("POST", () => Task.FromResult(motore.AvviaScaricamento()
+            "scarica-aggiornamento" => ("POST", () => Task.FromResult(motore.AvviaPreparazione()
                 ? new JsonObject { ["ok"] = true }
                 : new JsonObject { ["errore"] = motore.Aggiornatore.Disponibile == null ? "Non c'è una versione nuova da scaricare." : "Lo scaricamento è già in corso.", ["codice"] = "non_disponibile" })),
+            "aggiorna-e-riavvia" => ("POST", () =>
+            {
+                if (motore.Pronta == null || AggiornaAdesso == null)
+                {
+                    return Task.FromResult(new JsonObject { ["errore"] = "Non c'è una versione nuova pronta da installare.", ["codice"] = "non_disponibile" });
+                }
+                AggiornaAdesso();
+                return Task.FromResult(new JsonObject { ["ok"] = true });
+            }),
             // Solo con --diagnosi; altrimenti la rotta non c'è.
             "diagnosi" when motore.Diagnosi => ("POST", () =>
             {

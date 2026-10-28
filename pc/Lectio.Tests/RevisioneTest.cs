@@ -257,7 +257,7 @@ public class RevisioneTest
         using var altra = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var firma = Encoding.ASCII.GetBytes(Convert.ToBase64String(altra.SignData(zip, HashAlgorithmName.SHA256)));
         var finto = new HandlerFinto(r => r.Percorso.EndsWith(".sig", StringComparison.Ordinal) ? (404, "{}")
-            : (200, "{\"pc\":{\"codice\":2,\"nome\":\"1.0.1\",\"sha256\":\"" + sha + "\",\"byte\":" + zip.Length + "}}"));
+            : (200, "{\"pc\":{\"codice\":99,\"nome\":\"1.0.1\",\"sha256\":\"" + sha + "\",\"byte\":" + zip.Length + "}}"));
         finto.RispondeByte = r => r.Percorso == "/scarica/lectio-pc.zip" ? zip : caso == "altra-chiave" && r.Percorso == "/scarica/lectio-pc.zip.sig" ? firma : null;
         using var client = new ClientLectio(finto);
         var a = new Aggiornatore(client, Versione.Codice, Convert.ToBase64String(chiave.ExportSubjectPublicKeyInfo()));
@@ -272,7 +272,7 @@ public class RevisioneTest
     [Fact]
     public async Task Se_il_server_dice_che_la_versione_nuova_non_e_firmata_non_si_scarica_niente()
     {
-        var finto = new HandlerFinto(_ => (200, "{\"pc\":{\"codice\":2,\"nome\":\"1.0.1\",\"sha256\":\"" + new string('a', 64) + "\",\"firma\":false}}"));
+        var finto = new HandlerFinto(_ => (200, "{\"pc\":{\"codice\":99,\"nome\":\"1.0.1\",\"sha256\":\"" + new string('a', 64) + "\",\"firma\":false}}"));
         using var client = new ClientLectio(finto);
         var a = new Aggiornatore(client, Versione.Codice);
         Assert.NotNull(await a.ControllaAsync("https://lectio.esempio.ts.net"));

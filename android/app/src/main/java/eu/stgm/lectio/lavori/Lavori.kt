@@ -312,6 +312,36 @@ class ControlloWorker(context: Context, params: WorkerParameters) : CoroutineWor
     }
 }
 
+/**
+ * Un minuto dopo che hai lasciato l'app: se c'è una versione nuova si installa adesso, così non aspetta il
+ * controllo delle 12 ore. Se nel frattempo sei tornato in Lectio o una lezione suona, si scarica soltanto.
+ */
+class AggiornamentoWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext as LectioApp
+        if (app.archivio.leggi() == null) return Result.success()
+        try {
+            Aggiornatore(app).controlla(inSottofondo = true)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Ci riprova la prossima volta che lasci l'app, o il controllo delle 12 ore.
+        }
+        return Result.success()
+    }
+
+    companion object {
+        fun pianifica(context: Context) {
+            val richiesta = OneTimeWorkRequestBuilder<AggiornamentoWorker>()
+                .setInitialDelay(1, TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            // REPLACE: conta l'ultima volta che hai lasciato l'app.
+            WorkManager.getInstance(context).enqueueUniqueWork("aggiorna-dopo", ExistingWorkPolicy.REPLACE, richiesta)
+        }
+    }
+}
+
 /** Dopo il riavvio del telefono o un aggiornamento: i controlli ripartono. */
 class AvvioReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

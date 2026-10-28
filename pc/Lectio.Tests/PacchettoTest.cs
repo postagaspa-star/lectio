@@ -25,11 +25,11 @@ public class PacchettoTest
         Assert.Equal("false", Valore("PublishTrimmed"));
         Assert.Equal("win-x64", Valore("RuntimeIdentifier"));
         var progetto = File.ReadAllText(Pc("Lectio", "Lectio.csproj"));
-        Assert.Contains("<Version>1.0.0</Version>", progetto);
+        Assert.Contains("<Version>1.0.1</Version>", progetto);
         Assert.Contains("<AssemblyName>Lectio</AssemblyName>", progetto);
         Assert.DoesNotContain("PublishSingleFile>true", progetto);
-        Assert.Equal("1.0.0", Versione.Nome);
-        Assert.Equal(1, Versione.Codice);
+        Assert.Equal("1.0.1", Versione.Nome);
+        Assert.Equal(2, Versione.Codice);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class PacchettoTest
         var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(zip));
         using var chiave = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
         var firma = Encoding.ASCII.GetBytes(Convert.ToBase64String(chiave.SignData(zip, System.Security.Cryptography.HashAlgorithmName.SHA256)));
-        var finto = new HandlerFinto(_ => (200, "{\"server\":\"1.0.0\",\"pc\":{\"codice\":2,\"nome\":\"1.0.1\",\"sha256\":\"" + sha + "\",\"byte\":" + zip.Length + "}}"));
+        var finto = new HandlerFinto(_ => (200, "{\"server\":\"1.0.0\",\"pc\":{\"codice\":99,\"nome\":\"1.0.1\",\"sha256\":\"" + sha + "\",\"byte\":" + zip.Length + "}}"));
         finto.RispondeByte = r => r.Percorso == "/scarica/lectio-pc.zip" ? zip : r.Percorso == "/scarica/lectio-pc.zip.sig" ? firma : null;
         using var client = new ClientLectio(finto);
         var a = new Aggiornatore(client, Versione.Codice, Convert.ToBase64String(chiave.ExportSubjectPublicKeyInfo()));
@@ -173,7 +173,7 @@ public class PacchettoTest
     [Fact]
     public async Task Aggiornamento_con_impronta_sbagliata_si_scarta()
     {
-        var finto = new HandlerFinto(_ => (200, "{\"pc\":{\"codice\":2,\"nome\":\"1.0.1\",\"sha256\":\"" + new string('a', 64) + "\"}}"));
+        var finto = new HandlerFinto(_ => (200, "{\"pc\":{\"codice\":99,\"nome\":\"1.0.1\",\"sha256\":\"" + new string('a', 64) + "\"}}"));
         finto.RispondeByte = r => r.Percorso == "/scarica/lectio-pc.zip" ? new byte[] { 1, 2, 3 } : null;
         using var client = new ClientLectio(finto);
         var a = new Aggiornatore(client, Versione.Codice);
