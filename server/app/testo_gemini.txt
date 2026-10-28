@@ -1,0 +1,10 @@
+Trascrivi questa verifica in un file di testo, senza inventare niente. Usa sempre questo schema:
+MATERIA: … | PROF: … | DATA: … | TIPO: scritta/orale | VOTO: …
+Per ogni domanda:
+## Domanda N (punti: …)
+TESTO: la domanda parola per parola
+MIA RISPOSTA: quello che ho scritto io
+CORREZIONI DEL PROF: tutto quello che ha segnato o scritto, anche a penna o a margine, indicando a quale punto si riferisce
+PUNTI PRESI: …
+Alla fine: COMMENTO DEL PROF: …
+Se una parte non si legge scrivi [illeggibile], non indovinare.

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Lectio — Nuova lezione</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2F3CB0;text-decoration:none}a:hover{color:#1F2A8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F5F4F0; color: #1A1A1F; font-family: Figtree, system-ui, sans-serif">
+
+<sc-if value="{{ scelta }}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 104px; overflow-y: auto; padding: 12px 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; align-items: center; gap: 12px">
+<a href="Materia.dc.html" aria-label="Indietro" style="width: 44px; height: 44px; border-radius: 999px; background: #ECEAE4; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<span style="display: flex; align-items: center; gap: 8px; background: #FBF1DE; color: #8A5506; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700"><span style="width: 8px; height: 8px; border-radius: 999px; background: #C27C0E"></span>Storia</span>
+</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.6px">Nuova lezione</h1>
+
+<label style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">ARGOMENTO</span>
+<input value="L'Impero romano da Augusto a Nerone" style="height: 52px; border-radius: 14px; border: none; background: #FFFFFF; padding: 0 14px; font-family: inherit; font-size: 16px; font-weight: 500; color: #1A1A1F; box-shadow: 0 1px 2px rgba(20,20,30,.04)">
+</label>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">PER</span>
+<span style="align-self: flex-start; background: #FFFFFF; border-radius: 999px; padding: 9px 14px; font-size: 15px; font-weight: 700; box-shadow: 0 1px 2px rgba(20,20,30,.04)">Verifica di giovedì 30 ottobre</span>
+</div>
+
+<div style="display: flex; align-items: center; gap: 12px; background: #FFFFFF; border-radius: 18px; padding: 12px 16px; box-shadow: 0 1px 2px rgba(20,20,30,.04)">
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">USERÒ</span><span style="font-size: 15px; font-weight: 700">4 verifiche e 3 appunti di Storia</span></div>
+<button style="height: 40px; padding: 0 10px; border: none; background: none; color: #2F3CB0; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">Cambia</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">DURATA</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: #ECEAE4; border-radius: 16px; padding: 4px">
+<sc-for list="{{ durate }}" as="d" hint-placeholder-count="4">
+<button onClick="{{ d.pick }}" style="{{ d.stile }}">{{ d.etichetta }}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">DOMANDE</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background: #ECEAE4; border-radius: 16px; padding: 4px">
+<button onClick="{{ obbligatorie }}" style="{{ stileObbligatorie }}">Obbligatorie</button>
+<button onClick="{{ saltabili }}" style="{{ stileSaltabili }}">Si possono saltare</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">VOCE</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<button onClick="{{ sceltaLorenzo }}" style="{{ stileLorenzo }}">
+<span style="font-size: 17px; font-weight: 800">Lorenzo</span>
+<span style="font-size: 14px; font-weight: 500; color: #5E5E68">voce espressiva</span>
+<span style="font-size: 16px; font-weight: 800; margin-top: 6px">{{ costoLorenzo }}</span>
+</button>
+<button onClick="{{ sceltaGratis }}" style="{{ stileGratis }}">
+<span style="font-size: 17px; font-weight: 800">Voce gratis</span>
+<span style="font-size: 14px; font-weight: 500; color: #5E5E68">Isabella</span>
+<span style="font-size: 16px; font-weight: 800; margin-top: 6px">0 €</span>
+</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border-radius: 18px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(20,20,30,.04)">
+<div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 600"><span>Questo mese 0,80 €</span><span>{{ dopo }}</span></div>
+<div style="height: 8px; border-radius: 999px; background: #ECEAE4; display: flex; overflow: hidden">
+<div style="width: 40%; background: #3D4ED8"></div>
+<div style="{{ barraQuesta }}"></div>
+</div>
+<span style="font-size: 14px; font-weight: 500; color: #74747D">Si azzera il 1° novembre</span>
+</div>
+</div>
+
+<div style="position: absolute; left: 20px; right: 20px; bottom: 28px">
+<button onClick="{{ prepara }}" style="width: 100%; height: 58px; border-radius: 18px; border: none; background: #3D4ED8; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 700; box-shadow: 0 8px 20px rgba(61,78,216,.28); cursor: pointer">{{ etichettaPulsante }}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ preparazione }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; padding: 12px 20px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+<div style="height: 44px"></div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #8A5506">STORIA · {{ minuti }}</span>
+<h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.2">L'Impero romano da Augusto a Nerone</h1>
+</div>
+<div style="background: #FFFFFF; border-radius: 22px; padding: 8px 18px; box-shadow: 0 1px 2px rgba(20,20,30,.04), 0 10px 28px rgba(20,20,30,.07); display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid #ECEBE6">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2B8A3E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>
+<span style="font-size: 16px; font-weight: 600; color: #5E5E68">Leggo il materiale</span></div>
+<div style="display: flex; align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid #ECEBE6">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2B8A3E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>
+<span style="font-size: 16px; font-weight: 600; color: #5E5E68">Scrivo la lezione</span></div>
+<div style="display: flex; align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid #ECEBE6">
+<span style="width: 22px; height: 22px; border-radius: 999px; border: 3px solid #ECEEFE; border-top-color: #3D4ED8; box-sizing: border-box"></span>
+<span style="font-size: 16px; font-weight: 800; color: #2F3CB0">Registro la voce · 3 di 7</span></div>
+<div style="display: flex; align-items: center; gap: 12px; height: 54px">
+<span style="width: 22px; height: 22px; border-radius: 999px; border: 2px solid #ECEAE4; box-sizing: border-box"></span>
+<span style="font-size: 16px; font-weight: 600; color: #74747D">Monto l'audio</span></div>
+</div>
+<div style="height: 8px; border-radius: 999px; background: #ECEAE4"><div style="width: 62%; height: 8px; border-radius: 999px; background: #3D4ED8"></div></div>
+<span style="font-size: 15px; font-weight: 600; color: #5E5E68">Puoi uscire: ti avviso io.</span>
+<div style="flex-grow: 1"></div>
+<a href="Lettore.dc.html" style="height: 58px; border-radius: 18px; background: #ECEEFE; color: #2F3CB0; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700">Vai al lettore (esempio)</a>
+<button onClick="{{ indietro }}" style="height: 48px; border: none; background: none; color: #5E5E68; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">Torna alla scelta</button>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const durata = s.durata || 20;
+const voce = s.voce || 'lorenzo';
+const costi = { 15: [0.21, 0.02], 20: [0.27, 0.02], 30: [0.41, 0.03], 45: [0.61, 0.04] };
+const euro = (n) => n.toFixed(2).replace('.', ',') + ' €';
+const costo = voce === 'lorenzo' ? costi[durata][0] : costi[durata][1];
+const dopo = 0.80 + costo;
+const base = 'height: 44px; border-radius: 12px; border: none; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; ';
+const scheda = 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border-radius: 18px; font-family: inherit; color: #1A1A1F; text-align: left; cursor: pointer; background: #FFFFFF; ';
+return {
+scelta: !s.prepara,
+preparazione: !!s.prepara,
+durate: [15, 20, 30, 45].map((m) => ({
+etichetta: m + ' min',
+stile: base + (m === durata ? 'background: #FFFFFF; color: #1A1A1F; box-shadow: 0 1px 3px rgba(20,20,30,.12);' : 'background: transparent; color: #5E5E68;'),
+pick: () => this.setState({ durata: m })
+})),
+stileObbligatorie: base + (!s.saltabili ? 'background: #FFFFFF; color: #1A1A1F; box-shadow: 0 1px 3px rgba(20,20,30,.12);' : 'background: transparent; color: #5E5E68;'),
+stileSaltabili: base + (s.saltabili ? 'background: #FFFFFF; color: #1A1A1F; box-shadow: 0 1px 3px rgba(20,20,30,.12);' : 'background: transparent; color: #5E5E68;'),
+obbligatorie: () => this.setState({ saltabili: false }),
+saltabili: () => this.setState({ saltabili: true }),
+costoLorenzo: euro(costi[durata][0] - costi[durata][1]),
+stileLorenzo: scheda + (voce === 'lorenzo' ? 'border: 2px solid #3D4ED8;' : 'border: 2px solid transparent;'),
+stileGratis: scheda + (voce === 'gratis' ? 'border: 2px solid #3D4ED8;' : 'border: 2px solid transparent;'),
+sceltaLorenzo: () => this.setState({ voce: 'lorenzo' }),
+sceltaGratis: () => this.setState({ voce: 'gratis' }),
+dopo: 'dopo questa ' + euro(dopo) + ' di 2 €',
+barraQuesta: 'width: ' + Math.round(costo / 2 * 100) + '%; background: #A9B1F5;',
+etichettaPulsante: 'Prepara la lezione · ' + euro(costo),
+minuti: durata + ' MIN',
+prepara: () => this.setState({ prepara: true }),
+indietro: () => this.setState({ prepara: false })
+};
+}
+}
+</script>
+</body>
+</html>

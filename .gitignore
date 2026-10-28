@@ -1,0 +1,24 @@
+.gradle/
+build/
+local.properties
+.idea/
+.kotlin/
+captures/
+*.apk
+*.aab
+.venv/
+__pycache__/
+*.db
+.env
+bin/
+obj/
+dist/
+*.gguf
+
+# Lectio
+*.mp3
+*.wav
+lezioni-audio/
+*.jks
+keystore.properties
+tailscale/.env

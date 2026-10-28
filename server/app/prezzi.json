@@ -1,0 +1,18 @@
+{
+  "nota": "Prezzi in dollari dai listini dei fornitori. Il costo vero si calcola dai numeri che il fornitore restituisce; il cambio porta in euro.",
+  "cambio_usd_eur": 0.86,
+  "testo": {
+    "mistral-small-latest": {"entrata_per_milione": 0.20, "uscita_per_milione": 0.60},
+    "mistral-medium-latest": {"entrata_per_milione": 0.40, "uscita_per_milione": 2.00}
+  },
+  "ocr": {
+    "mistral-ocr-latest": {"per_mille_pagine": 4.0}
+  },
+  "voce": {
+    "voxtral-mini-tts-3-0": {"per_mille_caratteri": 0.016}
+  },
+  "azure": {
+    "per_mille_caratteri": 0.0,
+    "caratteri_gratis_al_mese": 500000
+  }
+}

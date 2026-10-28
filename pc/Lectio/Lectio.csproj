@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <RootNamespace>Lectio</RootNamespace>
+    <AssemblyName>Lectio</AssemblyName>
+    <AssemblyTitle>Lectio</AssemblyTitle>
+    <Product>Lectio</Product>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <ApplicationIcon>Risorse\lectio.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <!-- Il pacchetto WebView2 si porta dietro anche la parte WPF, che qui non si usa: il conflitto su WindowsBase non conta. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <Import Project="Pubblicazione.props" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lectio.Tests" />
+    <EmbeddedResource Include="Risorse\lectio.ico" LogicalName="Lectio.Risorse.lectio.ico" />
+  </ItemGroup>
+
+  <!--
+    L'interfaccia sta in pc/ui: si copia nella cartella ui accanto a Lectio.exe e
+    viaggia anche dentro l'exe (se manca accanto, Installazione.AssicuraUi la estrae).
+  -->
+  <PropertyGroup>
+    <LectioCartellaUi>$(MSBuildProjectDirectory)\..\ui\</LectioCartellaUi>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="$(LectioCartellaUi)**\*" LinkBase="ui" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="$(LectioCartellaUi)**\*" LogicalName="ui/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+    <!-- La licenza del carattere anche accanto all'exe, in vista. -->
+    <Content Include="$(LectioCartellaUi)font\OFL.txt" Link="OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

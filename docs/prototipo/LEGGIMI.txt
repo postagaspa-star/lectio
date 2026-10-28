@@ -1,0 +1,3 @@
+Prototipo cliccabile fatto sulla tela Design (Claude Artifact), copiato qui come file HTML.
+File: Main (Oggi), Materie (+ Nuova materia), Materia (+ Prossime, Da ripassare, foglio Aggiungi), NuovaLezione (+ In preparazione), Lettore (+ risposta scritta e correzione), Gemini, Pc.
+Solo tema chiaro: il tema scuro e le altre pagine sono in docs/aspetto.md.

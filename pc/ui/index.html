@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <!-- Solo file di questa cartella, solo chiamate a questa origine (/locale/* e /server/*) e l'audio delle
+       lezioni scaricate dalla cartella virtuale del programma: niente internet. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; media-src https://audio.lectio.locale; base-uri 'none'; form-action 'none'">
+  <title>Lectio</title>
+  <link rel="stylesheet" href="stile.css">
+</head>
+<body>
+  <div id="app" class="app" aria-busy="true">
+    <p class="avvio">Lectio si sta aprendo…</p>
+  </div>
+  <div id="avvisi" class="avvisi" role="status" aria-live="polite"></div>
+  <noscript><p class="avvio">Per funzionare Lectio ha bisogno di JavaScript.</p></noscript>
+  <script src="logica.js"></script>
+  <script src="esempio.js"></script>
+  <script src="api.js"></script>
+  <script src="base.js"></script>
+  <script src="pagine.js"></script>
+  <script src="lezione.js"></script>
+  <script src="lettore.js"></script>
+  <script src="visita.js"></script>
+  <script src="avvio.js"></script>
+</body>
+</html>

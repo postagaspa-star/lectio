@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- L'accento di Lectio (docs/aspetto.md §1): il quadrato del simbolo. -->
+    <color name="ic_launcher_background">#3D4ED8</color>
+    <color name="fondo_avvio">#F5F4F0</color>
+</resources>

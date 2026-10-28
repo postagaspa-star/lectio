@@ -1,0 +1,74 @@
+# Lectio sul NAS (Docker Compose, progetto "lectio"). Cartella sul NAS: /volume1/docker/Lectio-NAS
+#
+# Due container:
+#   lectio            -> il server: legge il materiale, prepara le lezioni (testo Mistral, voce
+#                        Mistral o Azure), monta l'MP3 con ffmpeg, tiene i conti
+#   lectio-tailscale  -> indirizzo https fisso e pubblico (Tailscale Funnel, come Sol e Pactum):
+#                        telefono e PC funzionano installando solo l'app. Ogni richiesta chiede
+#                        comunque il codice del dispositivo, e l'abbinamento si blocca dopo 10
+#                        tentativi sbagliati.
+#
+# Le chiavi stanno in due file separati, mai nel repo, e si scrivono con nas/imposta-chiave.sh:
+#   server/.env     -> LECTIO_MISTRAL_KEY, LECTIO_AZURE_KEY, LECTIO_AZURE_REGIONE (le vede solo lectio)
+#   tailscale/.env  -> TS_AUTHKEY (la vede solo lectio-tailscale)
+# Così il container di Tailscale non ha le chiavi a pagamento, e Lectio non ha quella di Tailscale.
+# Prima volta: "touch server/.env tailscale/.env" (anche vuoti: senza chiavi Lectio parte in
+# modalità prova).
+name: lectio
+
+services:
+  lectio:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: lectio-server:1.0.0
+    container_name: lectio
+    restart: unless-stopped
+    ports:
+      # In casa (LAN). Dietro c'è sempre il token del dispositivo. Sul NAS 8000, 8080, 8100,
+      # 8200, 8300 e 8400 sono già occupate da altre app.
+      - "8500:8000"
+    env_file:
+      - ./server/.env
+    environment:
+      LECTIO_DATI: /data
+      LECTIO_DB: /data/lectio.db
+      LECTIO_APK_DIR: /apk
+    volumes:
+      - lectio-data:/data
+      - ./server/apk:/apk
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  lectio-tailscale:
+    # Versione fissata (la stessa che gira già sul NAS per Sol): si aggiorna a mano, non da sola.
+    image: tailscale/tailscale:v1.102.5
+    container_name: lectio-tailscale
+    restart: unless-stopped
+    env_file:
+      - ./tailscale/.env         # solo TS_AUTHKEY
+    environment:
+      TS_HOSTNAME: lectio
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_AUTH_ONCE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - lectio-tailscale-stato:/var/lib/tailscale
+      - ./tailscale:/config
+    depends_on:
+      - lectio
+    logging:
+      driver: json-file
+      options:
+        max-size: "2m"
+        max-file: "2"
+    profiles:
+      - tailscale                # parte solo quando TS_AUTHKEY c'è: docker compose --profile tailscale up -d
+
+volumes:
+  lectio-data:
+  lectio-tailscale-stato:

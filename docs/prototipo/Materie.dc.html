@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Lectio — Materie</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2F3CB0;text-decoration:none}a:hover{color:#1F2A8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F5F4F0; color: #1A1A1F; font-family: Figtree, system-ui, sans-serif">
+<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 160px; overflow-y: auto; padding: 16px 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+<h1 style="margin: 8px 0 8px; font-size: 30px; font-weight: 800; letter-spacing: -0.6px">Materie</h1>
+<a href="Materia.dc.html" style="background: #FFFFFF; border-radius: 22px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(20,20,30,.04); display: flex; align-items: center; gap: 14px; color: #1A1A1F">
+<span style="width: 48px; height: 48px; border-radius: 15px; background: #FBF1DE; color: #8A5506; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800">S</span>
+<span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Storia</span><span style="font-size: 14px; font-weight: 500; color: #5E5E68">Prof. Rossi · 4 verifiche · 63%</span></span>
+<span style="background: #FFF4E0; color: #8A5506; border-radius: 999px; padding: 5px 10px; font-size: 13px; font-weight: 700">3 da ripassare</span>
+</a>
+<div style="background: #FFFFFF; border-radius: 22px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(20,20,30,.04); display: flex; align-items: center; gap: 14px">
+<span style="width: 48px; height: 48px; border-radius: 15px; background: #E3F6F8; color: #0B6474; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800">D</span>
+<span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Diritto ed economia</span><span style="font-size: 14px; font-weight: 500; color: #5E5E68">Prof.ssa Bianchi · 2 verifiche · 70%</span></span>
+</div>
+<div style="background: #FFFFFF; border-radius: 22px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(20,20,30,.04); display: flex; align-items: center; gap: 14px">
+<span style="width: 48px; height: 48px; border-radius: 15px; background: #F1ECFE; color: #5532C9; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800">S</span>
+<span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">Scienze umane</span><span style="font-size: 14px; font-weight: 500; color: #5E5E68">Prof. Verdi · 1 interrogazione</span></span>
+</div>
+<sc-for list="{{ nuove }}" as="m" hint-placeholder-count="0">
+<div style="background: #FFFFFF; border-radius: 22px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(20,20,30,.04); display: flex; align-items: center; gap: 14px">
+<span style="{{ m.piastrella }}">{{ m.iniziale }}</span>
+<span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 700">{{ m.nome }}</span><span style="font-size: 14px; font-weight: 500; color: #5E5E68">{{ m.sotto }}</span></span>
+</div>
+</sc-for>
+</div>
+
+<div style="position: absolute; left: 20px; right: 20px; bottom: 90px">
+<button onClick="{{ apri }}" style="width: 100%; height: 58px; border-radius: 18px; border: none; background: #3D4ED8; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: inherit; font-size: 17px; font-weight: 700; box-shadow: 0 8px 20px rgba(61,78,216,.28); cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Nuova materia</button>
+</div>
+
+<nav style="position: absolute; left: 0; right: 0; bottom: 0; height: 76px; background: #FFFFFF; border-top: 1px solid #ECEBE6; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; padding: 0 8px">
+<a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #5E5E68; font-size: 12px; font-weight: 600">
+<span style="width: 56px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E5E68" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg></span>Oggi</a>
+<a href="Materie.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #2F3CB0; font-size: 12px; font-weight: 700">
+<span style="width: 56px; height: 30px; border-radius: 999px; background: #ECEEFE; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F3CB0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"></path><path d="M4 21V5"></path><path d="M8 7h6"></path></svg></span>Materie</a>
+<a href="Lettore.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #5E5E68; font-size: 12px; font-weight: 600">
+<span style="width: 56px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E5E68" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"></path><rect x="3" y="14" width="5" height="7" rx="2"></rect><rect x="16" y="14" width="5" height="7" rx="2"></rect></svg></span>Lezioni</a>
+<a href="Gemini.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #5E5E68; font-size: 12px; font-weight: 600">
+<span style="width: 56px; height: 30px; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E5E68" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2"></path></svg></span>Per Gemini</a>
+</nav>
+
+<sc-if value="{{ foglio }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; background: rgba(15,15,25,.45); display: flex; flex-direction: column; justify-content: flex-end">
+<button onClick="{{ chiudi }}" aria-label="Chiudi" style="flex-grow: 1; border: none; background: transparent; cursor: pointer"></button>
+<div style="background: #FFFFFF; border-radius: 28px 28px 0 0; padding: 10px 20px 28px; display: flex; flex-direction: column; gap: 16px">
+<div style="width: 40px; height: 5px; border-radius: 999px; background: #ECEAE4; align-self: center"></div>
+<h2 style="margin: 4px 0 0; font-size: 21px; font-weight: 800">Nuova materia</h2>
+<div style="{{ anteprima }}">
+<span style="{{ piastrella }}">{{ iniziale }}</span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 800">{{ nomeVisto }}</span><span style="font-size: 14px; font-weight: 600; color: #5E5E68">{{ profVisto }}</span></span>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">NOME</span>
+<input value="{{ nome }}" onInput="{{ scriviNome }}" placeholder="Per esempio Italiano" style="height: 52px; border-radius: 14px; border: none; background: #ECEAE4; padding: 0 14px; font-family: inherit; font-size: 16px; font-weight: 600; color: #1A1A1F">
+</label>
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">PROF</span>
+<input value="{{ prof }}" onInput="{{ scriviProf }}" placeholder="Cognome, se vuoi" style="height: 52px; border-radius: 14px; border: none; background: #ECEAE4; padding: 0 14px; font-family: inherit; font-size: 16px; font-weight: 600; color: #1A1A1F">
+</label>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">COLORE</span>
+<div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{ colori }}" as="c" hint-placeholder-count="8">
+<button onClick="{{ c.pick }}" aria-label="{{ c.nome }}" style="{{ c.stile }}"></button>
+</sc-for>
+</div>
+</div>
+<button onClick="{{ crea }}" style="{{ stileCrea }}">Crea materia</button>
+</div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const palette = [
+{ nome: 'ambra', pieno: '#C27C0E', tenue: '#FBF1DE', testo: '#8A5506' },
+{ nome: 'rosa', pieno: '#D6336C', tenue: '#FCE8EF', testo: '#A61E4D' },
+{ nome: 'petrolio', pieno: '#0C8599', tenue: '#E3F6F8', testo: '#0B6474' },
+{ nome: 'viola', pieno: '#7048E8', tenue: '#F1ECFE', testo: '#5532C9' },
+{ nome: 'blu', pieno: '#1C7ED6', tenue: '#E7F1FC', testo: '#1864AB' },
+{ nome: 'verde', pieno: '#2B8A3E', tenue: '#EAF6EC', testo: '#1F6A30' },
+{ nome: 'arancio', pieno: '#E8590C', tenue: '#FDEDE3', testo: '#B4440A' },
+{ nome: 'oliva', pieno: '#5C940D', tenue: '#EFF6E3', testo: '#466F0B' }
+];
+const scelto = s.colore == null ? 1 : s.colore;
+const c = palette[scelto];
+const nome = s.nome || '';
+const prof = s.prof || '';
+const tile = (col) => 'width: 48px; height: 48px; border-radius: 15px; background: ' + col.tenue + '; color: ' + col.testo + '; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; flex-shrink: 0;';
+const pronta = nome.trim().length > 0;
+return {
+foglio: !!s.foglio,
+apri: () => this.setState({ foglio: true, nome: '', prof: '', colore: 1 }),
+chiudi: () => this.setState({ foglio: false }),
+nome: nome,
+prof: prof,
+scriviNome: (e) => this.setState({ nome: e.target.value }),
+scriviProf: (e) => this.setState({ prof: e.target.value }),
+anteprima: 'display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 20px; background: ' + c.tenue + ';',
+piastrella: tile({ tenue: '#FFFFFF', testo: c.testo }),
+iniziale: pronta ? nome.trim()[0].toUpperCase() : '?',
+nomeVisto: pronta ? nome.trim() : 'Nome della materia',
+profVisto: prof.trim() ? 'Prof. ' + prof.trim() : 'Prof. da scrivere',
+colori: palette.map((p, i) => ({
+nome: p.nome,
+stile: 'height: 40px; border-radius: 999px; background: ' + p.pieno + '; border: none; cursor: pointer; ' + (i === scelto ? 'box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px ' + p.pieno + ';' : ''),
+pick: () => this.setState({ colore: i })
+})),
+stileCrea: 'height: 58px; border-radius: 18px; border: none; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer; ' + (pronta ? 'background: #3D4ED8; color: #FFFFFF; box-shadow: 0 8px 20px rgba(61,78,216,.28);' : 'background: #ECEAE4; color: #74747D;'),
+crea: () => {
+if (!pronta) return;
+const nuove = (s.nuove || []).concat([{ nome: nome.trim(), iniziale: nome.trim()[0].toUpperCase(), sotto: prof.trim() ? 'Prof. ' + prof.trim() + ' · ancora vuota' : 'Ancora vuota', piastrella: tile(c) }]);
+this.setState({ nuove: nuove, foglio: false });
+},
+nuove: s.nuove || []
+};
+}
+}
+</script>
+</body>
+</html>

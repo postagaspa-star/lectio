@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Il simbolo di Lectio (docs/aspetto.md §1): tre barrette bianche di altezza
+     diversa, pagine che diventano suono. Il quadrato accento è lo sfondo dell'icona
+     adattiva. Dentro la zona sicura (66dp al centro). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,42.5 h0 a4,4 0 0 1 4,4 v15 a4,4 0 0 1 -8,0 v-15 a4,4 0 0 1 4,-4 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,33 a4,4 0 0 1 4,4 v34 a4,4 0 0 1 -8,0 v-34 a4,4 0 0 1 4,-4 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,38.5 a4,4 0 0 1 4,4 v23 a4,4 0 0 1 -8,0 v-23 a4,4 0 0 1 4,-4 z" />
+</vector>

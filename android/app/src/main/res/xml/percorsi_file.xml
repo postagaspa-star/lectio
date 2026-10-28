@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Le foto scattate da "Aggiungi → Foto" passano dalla cache privata dell'app. -->
+<paths>
+    <cache-path name="foto" path="foto/" />
+</paths>

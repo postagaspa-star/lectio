@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    bin/ e obj/ fuori da OneDrive: il Desktop è sincronizzato, e OneDrive che
+    blocca un file mentre lo carica fa fallire la build a caso ("file in uso").
+    Il pacchetto finale resta in pc/dist (prove/crea-pacchetto.ps1).
+  -->
+  <PropertyGroup>
+    <LectioCartellaBuild>$(LOCALAPPDATA)\Lectio-pc\build\</LectioCartellaBuild>
+    <BaseIntermediateOutputPath>$(LectioCartellaBuild)$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(LectioCartellaBuild)$(MSBuildProjectName)\bin\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

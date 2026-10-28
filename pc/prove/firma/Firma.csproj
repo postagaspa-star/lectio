@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Lo strumento che firma il pacchetto (ECDSA P-256, SHA-256, firma in base64). NON finisce nel programma:
+    lo usa solo prove/crea-pacchetto.ps1. La chiave privata sta fuori dal repository
+    (C:\Users\andre\lectio-keys\pc-firma-privata.pem) e non si stampa mai.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>firma-lectio</AssemblyName>
+  </PropertyGroup>
+</Project>
