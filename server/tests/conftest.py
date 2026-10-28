@@ -36,14 +36,16 @@ def orologio(monkeypatch):
 
 @pytest.fixture
 def ambiente(tmp_path, monkeypatch):
+    # Dentro il container sul NAS l'ambiente ha le chiavi vere: nessun test deve vederle, nemmeno quelle
+    # aggiunte in futuro, quindi si tolgono tutte le variabili di Lectio e di Tailscale.
+    import os
+    for nome in list(os.environ):
+        if nome.startswith(("LECTIO_", "TS_")):
+            monkeypatch.delenv(nome, raising=False)
     monkeypatch.setenv("LECTIO_DATI", str(tmp_path / "dati"))
     monkeypatch.setenv("LECTIO_DB", str(tmp_path / "dati" / "lectio-test.db"))
     monkeypatch.setenv("LECTIO_SOTTOFONDO", "0")
     monkeypatch.setenv("LECTIO_APK_DIR", str(tmp_path / "apk"))
-    for nome in ("LECTIO_MISTRAL_KEY", "LECTIO_AZURE_KEY", "LECTIO_AZURE_REGIONE", "LECTIO_VERSIONI",
-                 "LECTIO_MODELLO_PIANO", "LECTIO_MODELLO_SCRITTURA", "LECTIO_MODELLO_OCR", "LECTIO_MODELLO_VOCE",
-                 "LECTIO_VOCE_MISTRAL", "LECTIO_PREZZI", "LECTIO_GEMINI"):
-        monkeypatch.delenv(nome, raising=False)
     return tmp_path
 
 
