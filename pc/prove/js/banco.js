@@ -34,7 +34,7 @@ const Esempio = require(path.join(UI, 'esempio.js'));
 function server(opzioni) {
   const o = opzioni || {};
   const s = {
-    esempio: Esempio.crea(o),
+    esempio: Esempio.crea(Object.assign({ oggi: '2026-10-27' }, o)),
     stato: {
       abbinato: o.abbinato !== false, server: o.abbinato === false ? null : 'https://lectio.esempio.ts.net', indirizzo_fuori: null, versione: '1.0.0',
       tutorial_visto: o.tutorialVisto !== false, tema: 'sistema', in_preparazione: false, scaricate: [], byte_scaricate: 0, diagnosi: false,
@@ -90,6 +90,13 @@ async function pagina(s, opzioni) {
   const html = fs.readFileSync(path.join(UI, 'index.html'), 'utf8').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<meta http-equiv[^>]*>/, '');
   const dom = new jsdom.JSDOM(html, { url: 'https://lectio.locale/index.html' + (o.hash || ''), runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
+  // L'orologio della pagina è fermo al giorno dei dati d'esempio (27 ottobre), così i test non invecchiano.
+  const D0 = w.Date;
+  const sposta = Date.parse('2026-10-27T10:00:00+01:00') - D0.now();
+  w.Date = class extends D0 {
+    constructor(...a) { if (a.length) super(...a); else super(D0.now() + sposta); }
+    static now() { return D0.now() + sposta; }
+  };
   const vita = { chiusa: false };
   w.LectioTempi = Object.assign({ preparazione: 120, sincronia: 400, torna: 300, copiato: 150, lettura: 120, rete: 100000, riparte: 100, avviso: 200 }, o.tempi || {});
   w.LectioCreaAudio = (url, durata) => { const a = new w.LectioApp.AudioFinto(durata); a.url = url; a.aMano = o.audioVero !== true; p.audio = a; return a; };

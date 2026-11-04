@@ -164,11 +164,31 @@
     { id: 'azure:it-IT-IsabellaMultilingualNeural', nome: 'Isabella', tipo: 'gratis', fornitore: 'azure', euro_al_minuto: 0, disponibile: true },
   ];
 
-  /** Un server finto nuovo, coi dati di partenza. `opzioni.vuoto` = primo uso (nessuna materia). */
+  const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
+  /** Ogni data "AAAA-MM-GG…" dentro x spostata di `giorni` (l'ora e il resto restano com'erano). */
+  function spostaDate(x, giorni) {
+    if (!giorni || x == null) return x;
+    if (typeof x === 'string') {
+      const m = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(x);
+      if (!m) return x;
+      const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + giorni));
+      return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0') + m[4];
+    }
+    if (Array.isArray(x)) return x.map((v) => spostaDate(v, giorni));
+    if (typeof x === 'object') return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, spostaDate(v, giorni)]));
+    return x;
+  }
+
+  /** Un server finto nuovo, coi dati di partenza. `opzioni.vuoto` = primo uso (nessuna materia); `opzioni.oggi` = il giorno dei test. */
   function crea(opzioni) {
     const o = opzioni || {};
+    // I dati sono scritti per il 27 ottobre: si spostano a oggi, così la visita guidata ha sempre verifiche in arrivo.
+    const oggiVero = o.oggi || iso(new Date());
+    const giorni = Math.round((Date.parse(oggiVero + 'T00:00:00Z') - Date.parse(OGGI + 'T00:00:00Z')) / 86400000);
+    const [anno, mese] = oggiVero.split('-').map(Number);
     const s = {
-      oggi: OGGI,
+      oggi: oggiVero,
       materie: o.vuoto ? [] : materie(),
       schede: o.vuoto ? {} : schede(),
       materiale: o.vuoto ? {} : materiale(),
@@ -180,10 +200,11 @@
         { domanda_id: 35, lezione_id: 12, lezione: 'L\'Impero romano da Augusto a Nerone', testo: 'Chi era Seiano e perché cadde?', esito: 'sbagliata', commento: 'Seiano non era un senatore: era il capo dei pretoriani.', quando: '2026-10-26T18:40:00+01:00' },
         { domanda_id: 33, lezione_id: 12, lezione: 'L\'Impero romano da Augusto a Nerone', testo: 'Che cosa fece Claudio per la Britannia?', esito: 'saltata', commento: null, quando: '2026-10-26T18:35:00+01:00' },
       ],
-      spesa: { mese: '2026-10', speso_eur: o.speso != null ? o.speso : 0.8, tetto_eur: 2.0, si_azzera_il: '2026-11-01', voce_gratis: { caratteri_usati: 88000, caratteri_mese: 500000 }, voci: [] },
+      spesa: { mese: oggiVero.slice(0, 7), speso_eur: o.speso != null ? o.speso : 0.8, tetto_eur: 2.0, si_azzera_il: iso(new Date(anno, mese, 1)), voce_gratis: { caratteri_usati: 88000, caratteri_mese: 500000 }, voci: [] },
       prossimoId: 200,
       chiamate: [],
     };
+    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare']) s[k] = spostaDate(s[k], giorni);
 
     const materia = (id) => s.materie.find((m) => m.id === Number(id)) || null;
     const breve = (m) => (m ? { id: m.id, nome: m.nome, colore: m.colore } : null);

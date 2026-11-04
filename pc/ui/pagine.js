@@ -632,7 +632,8 @@
     if (!vivo()) return;
     if (!r.ok) { svuota(pag, A.erroreConRiprova(r, () => A.disegna())); return; }
     const sc = r.dati || {};
-    const area = (valore, id, righe) => h('textarea', { class: 'campo', id, rows: String(righe || 4) }, (valore || []).join ? valore.join('\n') : valore || '');
+    // Elenchi su più righe; le note sono un testo (anche vuoto: '' non ha join).
+    const area = (valore, id, righe) => h('textarea', { class: 'campo', id, rows: String(righe || 4) }, Array.isArray(valore) ? valore.join('\n') : valore || '');
     const argomenti = area((sc.argomenti || []).map((a) => a.nome), 'sc-argomenti');
     const corregge = area(sc.cosa_corregge, 'sc-corregge');
     const premia = area(sc.cosa_premia, 'sc-premia');

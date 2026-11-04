@@ -419,6 +419,35 @@ test('In preparazione: si chiede ogni 20 s (qui accorciato) e a fine lavoro comp
 
 // --- Materie ---------------------------------------------------------------------------------------
 
+test('Cosa chiede il prof: Modifica si apre anche con le note vuote (come una scheda vera) e Salva manda il PUT', opz, async () => {
+  const p = await apri();
+  const scheda = {
+    materia_id: 1, aggiornata_il: null, basata_su: { verifiche: 0, interrogazioni: 2, esiti: 0 }, stato: 'pronta', errore: null,
+    argomenti: [{ nome: 'scultura greca classica', volte: 2, esempio: '' }], tipi_domanda: [],
+    cosa_corregge: ['Vuole le date'], cosa_premia: [], lunghezza_risposte: '', consigli: [], note_mie: '',
+  };
+  p.s.risposta = (m, percorso) => (m === 'GET' && percorso === '/server/api/materie/1/scheda' ? [200, scheda] : undefined);
+  p.A.vai('#materia/1/scheda');
+  await p.aspetta(() => p.q('[data-azione="salva-scheda"]'));
+  assert.equal(p.q('#sc-note').value, '');
+  assert.equal(p.q('#sc-corregge').value, 'Vuole le date');
+  p.scrivi(p.q('#sc-note'), 'Chiede sempre le date');
+  p.clic(p.q('[data-azione="salva-scheda"]'));
+  await p.aspetta(() => p.s.chiamate('PUT', '/server/api/materie/1/scheda').length === 1);
+  const corpo = p.s.chiamate('PUT', '/server/api/materie/1/scheda')[0].corpo;
+  assert.equal((typeof corpo === 'string' ? JSON.parse(corpo) : corpo).note_mie, 'Chiede sempre le date');
+});
+
+test('una pagina che va in errore a metà mostra "Questa pagina non si è aperta", non resta in caricamento', opz, async () => {
+  const p = await apri();
+  p.A.pagine.rotta_di_prova = async () => { throw new Error('prova'); };
+  const vero = p.A.pagine.scheda;
+  p.A.pagine.scheda = async (box, rotta, vivo) => { box.append(p.d.createElement('div')); throw new Error('prova'); };
+  p.A.vai('#materia/1/scheda');
+  await p.aspetta(() => /Questa pagina non si è aperta/.test(p.testo()));
+  p.A.pagine.scheda = vero;
+});
+
 test('Nuova materia: anteprima dal vivo, primo colore libero, Crea spento senza nome, errore sotto il nome', opz, async () => {
   const p = await apri();
   p.A.vai('#materie');

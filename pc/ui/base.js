@@ -412,7 +412,13 @@
     const disegnatore = A.pagine[rotta.vista] || A.pagine.oggi;
     try {
       const esito = disegnatore(pagina, rotta, () => giro === S.giro);
-      if (esito && typeof esito.catch === 'function') esito.catch((e) => console.error(e));
+      // Un errore a metà non lascia la pagina in caricamento per sempre.
+      if (esito && typeof esito.catch === 'function') {
+        esito.catch((e) => {
+          console.error(e);
+          if (giro === S.giro) svuota(pagina, h('div', { class: 'pagina' }, messaggio('errore', 'Questa pagina non si è aperta. Riprova.')));
+        });
+      }
     } catch (e) {
       console.error(e);
       svuota(pagina, h('div', { class: 'pagina' }, messaggio('errore', 'Questa pagina non si è aperta. Riprova.')));
