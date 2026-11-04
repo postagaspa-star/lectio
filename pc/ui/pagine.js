@@ -400,7 +400,7 @@
         h('button', { type: 'button', class: 'pulsante bianco', onclick: async () => { const r = await A.api.post('/server/api/materiale/' + x.id + '/riprova', {}); if (!r.ok) A.avviso(r.errore); ricarica(); } }, 'Riprova'),
         h('button', { type: 'button', class: 'tondo', 'aria-label': 'Elimina', onclick: () => eliminaMateriale(x, ricarica) }, icona('cestino')));
     }
-    return h('button', { type: 'button', class: 'riga riga-materiale', 'data-materiale': String(x.id), onclick: () => vediMateriale(x, m, ricarica) }, icona(iconaTipo(x.tipo), 'icona-tipo'),
+    return h('button', { type: 'button', class: 'riga riga-materiale', 'data-materiale': String(x.id), onclick: () => A.apriMateriale(x, m, ricarica) }, icona(iconaTipo(x.tipo), 'icona-tipo'),
       h('span', { class: 'testi' }, h('span', { class: 'forte' }, x.titolo || x.nome_file || 'Materiale'), h('span', { class: 'secondario' }, sotto),
         // §15.5: il server dice se ha letto solo una parte (per esempio le prime pagine).
         x.avviso ? h('span', { class: 'avviso-materiale', 'data-avviso': 'materiale' }, x.avviso) : null));
@@ -416,23 +416,131 @@
     return true;
   }
 
-  /** Il testo che il server ha letto (per controllare cosa ha capito), con Elimina nel menu. */
-  function vediMateriale(x, m, ricarica) {
-    A.apriFoglio({
-      titolo: x.titolo || 'Materiale',
-      corpo: async (c, ctl) => {
-        svuota(c, A.segnaposto(4));
-        const r = await A.api.get('/server/api/materiale/' + x.id);
-        if (!r.ok) { svuota(c, A.erroreConRiprova(r)); return; }
-        svuota(c,
-          h('span', { class: 'secondario' }, (L.NOMI_TIPO_MATERIALE[x.tipo] || '') + (x.data ? ' · ' + L.dataLunga(x.data) : '') + (x.caratteri ? ' · ' + L.migliaia(x.caratteri) + ' caratteri letti' : '')),
-          r.dati.avviso || x.avviso ? A.messaggio('avviso', r.dati.avviso || x.avviso) : null,
-          h('div', { class: 'testo-gemini', stile: { background: 'var(--fondo)', borderRadius: '16px', padding: '14px 16px', maxHeight: '50vh', overflowY: 'auto' } }, r.dati.testo || ''),
-          h('div', { class: 'azioni', stile: { justifyContent: 'flex-end' } },
-            h('button', { type: 'button', class: 'pulsante testo pericolo', onclick: async () => { if (await eliminaMateriale(x, ricarica)) ctl.chiudi(); } }, 'Elimina')));
-      },
+  /**
+   * "Che cos'è" (§16.4): due famiglie, Da studiare (Appunti, Libro) e Già corretta dal prof (Verifica,
+   * Interrogazione). La famiglia scelta ha il bordo accento; si sceglie con le pillole.
+   */
+  A.cheCosE = function (tipo, alCambio) {
+    const box = h('div', { class: 'famiglie', role: 'group', 'aria-label': 'Che cos\'è' });
+    function disegna(t) {
+      const fam = L.famigliaDi(t);
+      svuota(box, L.FAMIGLIE_MATERIALE.map((f) => h('div', { class: 'famiglia' + (f === fam ? ' scelta' : ''), 'data-famiglia': f.chiave },
+        h('span', { class: 'n' }, f.nome), h('span', { class: 'f' }, f.frase),
+        h('div', { class: 'pp' }, f.tipi.map((x) => h('button', {
+          type: 'button', class: 'nl-pillola', 'aria-pressed': x.tipo === t ? 'true' : 'false', 'data-tipo-materiale': x.tipo,
+          onclick: () => { disegna(x.tipo); if (alCambio) alCambio(x.tipo); },
+        }, x.nome))))));
+    }
+    disegna(tipo);
+    return box;
+  };
+
+  /**
+   * Un materiale (§5.1, prototipo MaterialePc): titolo che si cambia, da dove viene, Che cos'è, quello che il server
+   * ha letto (per controllare cosa ha capito), Salva (PATCH con i soli campi cambiati) ed Elimina con conferma.
+   */
+  A.apriMateriale = function (x, m, ricarica) {
+    let salvato = Object.assign({}, x);
+    const st = { tipo: x.tipo, invio: false, tutto: false, timer: null };
+    const titolo = h('input', { class: 'mat-titolo', id: 'mat-titolo', maxlength: '120', value: x.titolo || '', placeholder: 'Scrivi un titolo', autocomplete: 'off' });
+    const nota = h('span', { class: 'mat-nota', 'data-nota': 'titolo' });
+    const erroreTitolo = h('span', { class: 'errore-campo', role: 'alert' });
+    const letto = h('div', { class: 'letto', 'data-letto': 'si', 'aria-busy': 'true' }, h('div', { class: 'segnaposto riga-finta' }), h('div', { class: 'segnaposto riga-finta', stile: { width: '45%' } }));
+    const esito = h('div', { class: 'mat-esito' });
+    const salva = h('button', { type: 'button', class: 'pulsante pieno mat-salva', 'data-azione': 'salva-materiale' }, 'Salva');
+    const elimina = h('button', { type: 'button', class: 'pulsante testo elimina', 'data-azione': 'elimina-materiale' }, 'Elimina');
+    const famiglie = A.cheCosE(x.tipo, (t) => { st.tipo = t; torna(); });
+
+    function disegnaNota() {
+      const n = L.notaTitolo(salvato);
+      nota.textContent = n || '';
+      nota.style.display = n ? '' : 'none';
+    }
+    /** Dopo una modifica il pulsante torna "Salva". */
+    function torna() {
+      clearTimeout(st.timer);
+      salva.classList.remove('fatto');
+      svuota(salva, 'Salva');
+      erroreTitolo.textContent = '';
+    }
+    function salvatoPer2s() {
+      clearTimeout(st.timer);
+      salva.classList.add('fatto');
+      svuota(salva, icona('spunta'), 'Salvato');
+      st.timer = setTimeout(() => { if (salva.isConnected) torna(); }, T.copiato);
+    }
+    async function salvaOra() {
+      if (st.invio) return;
+      if (!L.pulisciTitolo(titolo.value)) { erroreTitolo.textContent = 'Scrivi un titolo.'; titolo.focus(); return; }
+      const campi = L.campiCambiati(salvato, { titolo: titolo.value, tipo: st.tipo });
+      svuota(esito);
+      if (!Object.keys(campi).length) { salvatoPer2s(); return; }
+      st.invio = true;
+      salva.disabled = true;
+      const r = await A.api.patch('/server/api/materiale/' + x.id, campi);
+      st.invio = false;
+      salva.disabled = false;
+      if (!r.ok) {
+        if (r.dati && r.dati.campo === 'titolo') erroreTitolo.textContent = r.errore;
+        else svuota(esito, A.messaggio('errore', r.errore));
+        return;
+      }
+      salvato = Object.assign({}, salvato, campi, r.dati || {});
+      titolo.value = salvato.titolo || '';
+      disegnaNota();
+      salvatoPer2s();
+      // Un tipo cambiato da o verso verifica rifà la scheda del prof: si ridisegna tutta la materia.
+      if (campi.tipo && S.aggiornaPagina) S.aggiornaPagina();
+      else if (ricarica) ricarica();
+    }
+    titolo.addEventListener('input', torna);
+    titolo.addEventListener('keydown', (e) => { if (e.key === 'Enter') salvaOra(); });
+    salva.addEventListener('click', salvaOra);
+
+    const ctl = A.apriFinestra({
+      etichetta: x.titolo || 'Materiale',
+      classe: 'finestra-materiale ' + A.classeMateria(m && m.colore),
+      suChiusura: () => clearTimeout(st.timer),
+      disegna: (f, c) => svuota(f, h('div', { class: 'mat-corpo' },
+        h('div', { class: 'mat-testa' }, A.pillolaMateria(m), h('span', { class: 'spazio' }),
+          h('button', { type: 'button', class: 'tondo', 'aria-label': 'Chiudi', onclick: () => c.chiudi() }, icona('chiudi'))),
+        h('label', { class: 'campo-gruppo', for: 'mat-titolo' }, h('span', { class: 'etichetta' }, 'Titolo'), titolo, nota, erroreTitolo),
+        h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Che cos\'è'), famiglie),
+        letto,
+        esito,
+        h('div', { class: 'mat-piede' }, salva, h('span', { class: 'spazio' }), elimina))),
     });
-  }
+    ctl.tipo = 'materiale';
+    disegnaNota();
+    elimina.addEventListener('click', async () => { if (await eliminaMateriale(salvato, ricarica)) ctl.chiudi(); });
+
+    async function caricaTesto() {
+      const r = await A.api.get('/server/api/materiale/' + x.id);
+      if (ctl.chiuso) return;
+      letto.removeAttribute('aria-busy');
+      if (!r.ok || !r.dati) { svuota(letto, A.erroreConRiprova(r, caricaTesto)); return; }
+      const testo = String(r.dati.testo || '');
+      const caratteri = r.dati.caratteri != null ? r.dati.caratteri : testo.length;
+      const corto = testo.length <= 360;
+      const corpo = h('div', { class: 'testo', 'data-testo': 'letto' });
+      const mostra = corto ? null : h('button', { type: 'button', class: 'pulsante testo', 'data-azione': 'mostra-tutto' });
+      const dis = () => {
+        corpo.textContent = corto || st.tutto ? testo : testo.slice(0, 360).trimEnd() + '…';
+        corpo.classList.toggle('tutto', st.tutto);
+        if (mostra) mostra.textContent = st.tutto ? 'Mostra meno' : 'Mostra tutto';
+      };
+      if (mostra) mostra.addEventListener('click', () => { st.tutto = !st.tutto; dis(); });
+      dis();
+      const avviso = r.dati.avviso || x.avviso;
+      svuota(letto,
+        h('span', { class: 'etichetta' }, 'Cosa ho letto · ' + L.migliaia(caratteri) + (caratteri === 1 ? ' carattere' : ' caratteri')),
+        avviso ? A.messaggio('avviso', avviso) : null,
+        testo ? corpo : h('span', { class: 'secondario' }, 'Non ho letto niente in questo file.'),
+        mostra);
+    }
+    caricaTesto();
+    return ctl;
+  };
 
   function apriAggiungiData(m) {
     A.apriFoglio({
@@ -502,7 +610,7 @@
   /** Appunti scritti o interrogazione orale raccontata: testo → POST JSON (§6). */
   function scritto(ctl, m, tipo) {
     ctl.titolo(tipo === 'appunti' ? 'Appunti di ' + m.nome : 'Interrogazione orale');
-    const titolo = h('input', { class: 'campo', maxlength: '120', value: tipo === 'appunti' ? '' : 'Interrogazione', placeholder: tipo === 'appunti' ? 'Per esempio Augusto e il principato' : '' });
+    const titolo = h('input', { class: 'campo', maxlength: '120', value: '', placeholder: 'Lo scrive Lectio' });
     const data = h('input', { class: 'campo', type: 'date', value: L.iso() });
     const esito = h('div');
     const area = (ph, id) => h('textarea', { class: 'campo', placeholder: ph, id, rows: '4' });
@@ -514,7 +622,10 @@
       const testo = tipo === 'appunti' ? campi[0].value.trim() : L.testoInterrogazione(campi[0].value, campi[1].value, campi[2].value);
       if (!testo) { svuota(esito, A.messaggio('errore', 'Scrivi qualcosa prima di aggiungere.')); return; }
       aggiungi.disabled = true;
-      const r = await A.api.post('/server/api/materie/' + m.id + '/materiale', { tipo, titolo: titolo.value.trim() || (tipo === 'appunti' ? 'Appunti' : 'Interrogazione'), data: data.value || null, testo });
+      // §16.3: il titolo si manda solo se Andrea l'ha scritto; altrimenti lo sceglie Lectio leggendo.
+      const corpo = { tipo, data: data.value || null, testo };
+      if (L.pulisciTitolo(titolo.value)) corpo.titolo = L.pulisciTitolo(titolo.value);
+      const r = await A.api.post('/server/api/materie/' + m.id + '/materiale', corpo);
       aggiungi.disabled = false;
       if (!r.ok) { svuota(esito, A.messaggio('errore', r.errore)); return; }
       ctl.chiudi();
@@ -547,32 +658,31 @@
   };
 
   /**
-   * Dopo la scelta dei file: in quale materia (se non si sa), tipo (verifica corretta / interrogazione / appunti /
-   * libro), titolo, data → Aggiungi. I file vanno al programma come byte e da lì al server.
+   * Dopo la scelta dei file: in quale materia (se non si sa), Che cos'è (§16.4: due famiglie, si parte da Appunti),
+   * titolo facoltativo (se resta vuoto lo scrive Lectio), data → Aggiungi. I file vanno al programma come byte e da lì
+   * al server.
    */
   A.flussoFile = function (file, opzioni) {
     const o = opzioni || {};
     const problemi = file.map((f) => L.controllaFile(f.name, f.size)).filter(Boolean);
     const buoni = file.filter((f) => !L.controllaFile(f.name, f.size));
     if (!buoni.length) { A.avviso(problemi[0]); return null; }
-    const st = { materia: o.materia || null, tipo: o.tipo || (buoni.every((f) => L.eImmagine(f.name)) ? 'verifica' : 'verifica'), invio: false };
+    const st = { materia: o.materia || null, tipo: o.tipo || 'appunti', invio: false };
     const ctl = A.apriFoglio({
       titolo: st.materia ? 'Aggiungi a ' + st.materia.nome : 'Manda il file a Lectio',
       corpo: (c, ctl2) => {
         const materie = h('div', { class: 'pillole', role: 'radiogroup', 'aria-label': 'In quale materia?' });
-        const tipi = h('div', { class: 'segmenti' });
-        const titolo = buoni.length === 1 ? h('input', { class: 'campo', maxlength: '120', value: L.titoloDaFile(buoni[0].name) }) : null;
+        const foto = buoni.filter((f) => L.eImmagine(f.name)).length;
+        const tipi = A.cheCosE(st.tipo, (t) => { st.tipo = t; });
+        const titolo = buoni.length === 1 ? h('input', { class: 'campo', id: 'carica-titolo', maxlength: '120', value: '', placeholder: foto ? 'Lo scrive Lectio leggendo la foto' : 'Lo scrive Lectio leggendo il file' }) : null;
         const data = h('input', { class: 'campo', type: 'date', value: L.iso() });
         const esito = h('div');
         const aggiungi = h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'aggiungi-file' });
-        const foto = buoni.filter((f) => L.eImmagine(f.name)).length;
         function dis() {
           svuota(materie, (S.materie || []).map((m) => h('button', {
             type: 'button', class: 'pillola scelta', role: 'radio', 'aria-pressed': st.materia && st.materia.id === m.id ? 'true' : 'false', 'aria-checked': st.materia && st.materia.id === m.id ? 'true' : 'false',
             onclick: () => { st.materia = m; ctl2.titolo('Aggiungi a ' + m.nome); dis(); },
           }, m.nome)));
-          tipi.style.setProperty('--n', String(L.TIPI_MATERIALE.length));
-          svuota(tipi, L.TIPI_MATERIALE.map((t) => h('button', { type: 'button', 'aria-pressed': st.tipo === t.tipo ? 'true' : 'false', onclick: () => { st.tipo = t.tipo; dis(); } }, t.nome)));
           aggiungi.textContent = st.invio ? 'Mando il file…' : buoni.length > 1 ? 'Aggiungi ' + buoni.length + ' file' : 'Aggiungi';
           aggiungi.disabled = !st.materia || st.invio || S.senzaRete;
         }
@@ -586,7 +696,9 @@
             let byte;
             try { byte = await leggiByte(f); } catch (e) { byte = null; }
             if (!byte) { svuota(esito, A.messaggio('errore', 'Non riesco a leggere "' + f.name + '" dal computer.')); break; }
-            const r = await A.api.carica(byte, { materia_id: st.materia.id, tipo: st.tipo, titolo: titolo && titolo.value.trim() ? titolo.value.trim() : L.titoloDaFile(f.name), data: data.value || '', nome: f.name });
+            // §16.3: niente titolo se Andrea non l'ha scritto: lo scrive Lectio leggendo il file.
+            const scritto = titolo ? L.pulisciTitolo(titolo.value) : '';
+            const r = await A.api.carica(byte, { materia_id: st.materia.id, tipo: st.tipo, titolo: scritto || undefined, data: data.value || '', nome: f.name });
             if (!r.ok) {
               svuota(esito, A.messaggio('errore', (buoni.length > 1 ? f.name + ': ' : '') + r.errore, [h('button', { type: 'button', class: 'pulsante bianco', onclick: () => aggiungi.click() }, 'Riprova')]));
               break;

@@ -1,7 +1,8 @@
 // I test dell'interfaccia vera (pc/ui) in jsdom, con un server finto (banco.js): abbinamento, Oggi, lettore con
 // le fermate alle domande e le risposte scritte (domande obbligatorie e saltabili), tasti mentre si scrive, punto di
-// ascolto (vince il più recente), senza rete, Nuova lezione (stime che si accavallano, tetto, "Userò"), Nuova
-// materia, Per Gemini, file trascinati, visita guidata (avanza solo con l'azione giusta, nessuna chiamata al server).
+// ascolto (vince il più recente), senza rete, Nuova lezione (stime che si accavallano, tetto, materiale suggerito,
+// tipo e indicazioni, riepilogo), un materiale (titolo e che cos'è), Nuova materia, Per Gemini, file trascinati,
+// visita guidata (avanza solo con l'azione giusta, nessuna chiamata al server).
 // Si lanciano con: node --test pc/prove/js
 'use strict';
 
@@ -337,7 +338,7 @@ test('chiudendo la finestra la pagina salva prima il punto (lectioPrimaDiChiuder
   assert.ok(p.s.chiamate('PUT', '/server/api/lezioni/12/ascolto').length > prima);
 });
 
-// --- Nuova lezione: stime, tetto, Userò --------------------------------------------------------------
+// --- Nuova lezione: stime, tetto, preparazione --------------------------------------------------------------
 
 test('Nuova lezione: stime che si accavallano, vince l\'ultima durata scelta; il pulsante dice il costo', opz, async () => {
   const p = await apri();
@@ -365,42 +366,11 @@ test('tetto: la voce espressiva che sforerebbe è spenta con "Sforerebbe il tett
   assert.match(p.q('[data-voce="espressiva"]').textContent, /Sforerebbe il tetto di 2 €/);
   assert.equal(p.q('[data-voce="gratis"]').getAttribute('aria-pressed'), 'true');
   assert.equal(p.q('[data-azione="prepara"]').textContent, 'Prepara la lezione · 0,02 €');
-  assert.match(p.q('.riga-mese').textContent, /dopo questa 1,87 € di 2 €/);
+  assert.match(p.q('[data-mese]').textContent, /dopo questa 1,87 € di 2 €/);
   p.clic(p.q('[data-azione="prepara"]'));
   await p.aspetta(() => p.s.chiamate('POST', '/server/api/lezioni').filter((x) => x.percorso === '/server/api/lezioni').length === 1);
   const corpo = p.s.chiamate('POST', '/server/api/lezioni').find((x) => x.percorso === '/server/api/lezioni').corpo;
-  assert.equal(corpo.voce, 'azure:it-IT-IsabellaMultilingualNeural');
-});
-
-test('Nuova lezione: "Userò" senza caricamenti; materiali mandati solo se si tocca Cambia; domande obbligatorie di base', opz, async () => {
-  const p = await apri();
-  p.A.nuovaLezione(1);
-  await p.aspetta(() => p.q('.riga-usero') && /0,25 €/.test(p.q('[data-azione="prepara"]').textContent));
-  assert.match(p.q('.riga-usero').textContent, /1 verifica, 1 interrogazione e 2 appunti di Storia/);
-  assert.equal(p.tutti('.finestra input[type="file"]').length, 0);
-  assert.equal(p.q('[data-saltabili="false"]').getAttribute('aria-pressed'), 'true');
-  p.clic(p.q('[data-azione="prepara"]'));
-  await p.aspetta(() => p.q('.fasi'));
-  const corpo1 = p.s.chiamate('POST', '/server/api/lezioni').find((x) => x.percorso === '/server/api/lezioni').corpo;
-  assert.equal('materiali' in corpo1, false);
-  assert.equal(corpo1.domande_saltabili, false);
-  assert.equal(corpo1.argomento, 'Impero romano da Augusto a Nerone');
-  assert.equal(corpo1.evento_id, 3);
-  assert.match(p.q('.finestra').textContent, /Puoi uscire: ti avviso io/);
-  // Con Cambia: un appunto spento → materiali = verifiche + interrogazioni + appunti accesi.
-  p.A.chiudiTuttiIVeli();
-  p.A.nuovaLezione(1);
-  await p.aspetta(() => p.pulsante('Cambia') && /0,25 €/.test(p.q('[data-azione="prepara"]').textContent));
-  p.clic(p.pulsante('Cambia'));
-  await p.aspetta(() => p.pulsante('Appunti: Augusto e il principato'));
-  p.clic(p.pulsante('Appunti: Augusto e il principato'));
-  p.clic(p.q('[data-saltabili="true"]'));
-  await p.aspetta(() => /1 appunto di Storia/.test(p.q('.riga-usero').textContent));
-  p.clic(p.q('[data-azione="prepara"]'));
-  await p.aspetta(() => p.s.chiamate('POST', '/server/api/lezioni').filter((x) => x.percorso === '/server/api/lezioni').length === 2);
-  const corpo2 = p.s.chiamate('POST', '/server/api/lezioni').filter((x) => x.percorso === '/server/api/lezioni')[1].corpo;
-  assert.deepEqual(corpo2.materiali.sort((a, b) => a - b), [7, 8, 10]);
-  assert.equal(corpo2.domande_saltabili, true);
+  assert.equal(corpo.voce, 'nas:giovanni');
 });
 
 test('In preparazione: si chiede ogni 20 s (qui accorciato) e a fine lavoro compare la spunta con Ascolta', opz, async () => {
@@ -415,6 +385,337 @@ test('In preparazione: si chiede ogni 20 s (qui accorciato) e a fine lavoro comp
   await p.aspetta(() => p.q('[data-azione="ascolta-pronta"]'), 3000);
   assert.ok(p.s.chiamate('GET', '/server/api/lezioni/' + id).length >= 1);
   assert.ok(p.q('.spunta-grande'));
+});
+
+// --- Nuova lezione v1.4 (§6, contratto §16): materiale sull'argomento, tipo, indicazioni, riepilogo ---------------
+
+const spuntati = (p) => p.tutti('.nl-mat[aria-checked="true"]').map((b) => Number(b.dataset.scelta)).sort((a, b) => a - b);
+const premuto = (el) => el.getAttribute('aria-pressed') === 'true';
+const ultima = (p, percorso) => p.s.chiamate('POST', percorso).filter((x) => x.percorso === percorso).pop();
+
+async function apriNuova(p, materia) {
+  p.A.nuovaLezione(materia || 1);
+  await p.aspetta(() => p.q('.nl-riepilogo') && /Prepara la lezione · /.test(p.q('[data-azione="prepara"]').textContent));
+}
+
+test('Nuova lezione: le caselle seguono i suggeriti finché non se ne tocca una; 400 ms dopo l\'ultima lettera; Sull\'argomento ci torna', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  // Argomento già scritto dalla verifica in arrivo: i suggeriti del server sono spuntati e hanno la pillola "argomento".
+  assert.equal(p.q('#nl-argomento').value, 'Impero romano da Augusto a Nerone');
+  assert.deepEqual(spuntati(p), [8, 11, 12, 13, 14, 15]);
+  assert.equal(p.q('[data-conta="materiale"]').textContent, '6 di 9 scelti');
+  assert.ok(premuto(p.q('[data-modo="argomento"]')));
+  assert.ok(p.q('[data-scelta="11"] .nl-sugg'));
+  assert.equal(p.q('[data-scelta="10"] .nl-sugg'), null);
+  const q0 = new URLSearchParams(p.s.chiamate('GET', '/server/api/materie/1/suggeriti')[0].percorso.split('?')[1]);
+  assert.equal(q0.get('argomento'), 'Impero romano da Augusto a Nerone');
+  assert.match(p.q('[data-riep="materiale"]').textContent, /^6 materiali: Nerone e l'incendio di Roma, Caligola e Claudio e altri 4$/);
+  // Due gruppi: appunti e libro, verifiche e interrogazioni del prof.
+  assert.equal(p.tutti('[data-gruppo="studio"] .nl-mat').length, 6);
+  assert.equal(p.tutti('[data-gruppo="prof"] .nl-mat').length, 3);
+  // Tocca una casella: da qui valgono le sue scelte.
+  p.clic(p.q('[data-scelta="10"]'));
+  assert.deepEqual(spuntati(p), [8, 10, 11, 12, 13, 14, 15]);
+  assert.equal(premuto(p.q('[data-modo="argomento"]')), false);
+  // Scrive un altro argomento: una sola richiesta, 400 ms dopo l'ultima lettera; le caselle non cambiano.
+  const prima = p.s.chiamate('GET', '/server/api/materie/1/suggeriti').length;
+  p.scrivi(p.q('#nl-argomento'), 'La crisi');
+  await B.dorme(150);
+  p.scrivi(p.q('#nl-argomento'), 'La crisi della Repubblica');
+  await B.dorme(250);
+  assert.equal(p.s.chiamate('GET', '/server/api/materie/1/suggeriti').length, prima, 'prima dei 400 ms non si chiede');
+  await p.aspetta(() => p.q('[data-scelta="7"] .nl-sugg'));
+  assert.equal(p.s.chiamate('GET', '/server/api/materie/1/suggeriti').length, prima + 1);
+  assert.deepEqual(spuntati(p), [8, 10, 11, 12, 13, 14, 15], 'le caselle toccate restano');
+  assert.equal(p.q('[data-riep="su"]').textContent, 'La crisi della Repubblica');
+  // Sull'argomento: di nuovo i suggeriti (del testo nuovo).
+  p.clic(p.q('[data-modo="argomento"]'));
+  assert.deepEqual(spuntati(p), [7, 10]);
+  assert.ok(premuto(p.q('[data-modo="argomento"]')));
+  await p.aspetta(() => ultima(p, '/server/api/lezioni/stima').corpo.materiali.slice().sort().join() === '10,7');
+});
+
+test('Nuova lezione: i suggeriti di un argomento vecchio arrivati dopo si buttano', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  p.s.ritardo = (m, percorso) => (percorso.includes('/suggeriti') && percorso.includes('Gracchi') ? 250 : 1);
+  const campo = p.q('#nl-argomento');
+  p.scrivi(campo, 'I Gracchi');
+  p.tasto('Enter', {}, campo);
+  await B.dorme(20);
+  p.scrivi(campo, 'Nerone');
+  p.tasto('Enter', {}, campo);
+  await p.aspetta(() => spuntati(p).join() === '12,15');
+  await B.dorme(400);
+  assert.deepEqual(spuntati(p), [12, 15], 'la risposta per "I Gracchi" è arrivata dopo ed è stata buttata');
+});
+
+test('Nuova lezione: Tutti e Nessuno; con niente spuntato il pulsante è spento e la stima non parte', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  p.clic(p.q('[data-modo="tutti"]'));
+  assert.deepEqual(spuntati(p), [6, 7, 8, 10, 11, 12, 13, 14, 15]);
+  assert.equal(p.q('[data-conta="materiale"]').textContent, '9 di 9 scelti');
+  assert.ok(premuto(p.q('[data-modo="tutti"]')));
+  assert.equal(premuto(p.q('[data-modo="argomento"]')), false);
+  await p.aspetta(() => ultima(p, '/server/api/lezioni/stima').corpo.materiali.length === 9);
+  const stime = p.s.chiamate('POST', '/server/api/lezioni/stima').length;
+  p.clic(p.q('[data-modo="nessuno"]'));
+  assert.deepEqual(spuntati(p), []);
+  assert.ok(premuto(p.q('[data-modo="nessuno"]')));
+  assert.equal(p.q('[data-azione="prepara"]').disabled, true);
+  assert.equal(p.q('[data-riep="materiale"]').textContent, 'Scegli almeno un materiale');
+  assert.ok(p.q('[data-riep="materiale"]').classList.contains('manca'));
+  await B.dorme(60);
+  assert.equal(p.s.chiamate('POST', '/server/api/lezioni/stima').length, stime, 'niente stima con niente spuntato');
+  assert.equal(p.s.chiamate('POST', '/server/api/lezioni/stima').filter((x) => x.corpo.materiali && !x.corpo.materiali.length).length, 0);
+  // Cerca nel materiale: filtra per titolo, senza badare agli accenti.
+  p.scrivi(p.q('#nl-cerca'), 'CALIGOLA');
+  assert.deepEqual(p.tutti('.nl-mat').map((b) => Number(b.dataset.scelta)), [14]);
+  assert.match(p.q('[data-gruppo="prof"]').textContent, /Nessun titolo con queste parole/);
+  p.scrivi(p.q('#nl-cerca'), '');
+  p.clic(p.q('[data-modo="argomento"]'));
+  assert.deepEqual(spuntati(p), [8, 11, 12, 13, 14, 15]);
+  await p.aspetta(() => !p.q('[data-azione="prepara"]').disabled);
+});
+
+test('Nuova lezione: tipo, indicazioni e spunti; la richiesta manda materiali, tipo e indicazioni (e la stima pure)', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  assert.equal(p.q('[data-riep="titolo"]').textContent, 'Spiegazione di 20 minuti');
+  assert.equal(p.q('[data-riep="struttura"]').textContent, '4 parti, una domanda dopo ognuna e 5 alla fine');
+  assert.equal(p.q('[data-riep="indicazioni"]').textContent, 'Nessuna: segue il materiale e la scheda del prof');
+  assert.equal(p.q('[data-riep="per"]').textContent, 'La verifica di giovedì 29 ottobre · domande obbligatorie');
+  const stime = p.s.chiamate('POST', '/server/api/lezioni/stima').length;
+  p.clic(p.q('[data-tipo="ripasso"]'));
+  assert.ok(premuto(p.q('[data-tipo="ripasso"]')));
+  assert.equal(p.q('[data-riep="titolo"]').textContent, 'Ripasso di 20 minuti');
+  assert.equal(p.q('[data-riep="struttura"]').textContent, 'I punti chiave in breve e 8 domande alla fine');
+  // Gli spunti aggiungono e tolgono la loro frase; il contatore segue.
+  p.scrivi(p.q('#nl-indicazioni'), '  Insisti su Seiano.  ');
+  const spunto = () => p.q('[data-spunto="Insisti su date e nomi"]');
+  assert.equal(premuto(spunto()), false);
+  p.clic(spunto());
+  assert.equal(p.q('#nl-indicazioni').value, 'Insisti su Seiano. Insisti su date e nomi.');
+  assert.ok(premuto(spunto()));
+  assert.equal(p.q('[data-conta="indicazioni"]').textContent, '42 / 600');
+  p.clic(spunto());
+  assert.equal(p.q('#nl-indicazioni').value, 'Insisti su Seiano.');
+  assert.equal(premuto(spunto()), false);
+  p.clic(p.q('[data-spunto="Tanti esempi"]'));
+  assert.equal(p.q('#nl-indicazioni').value, 'Insisti su Seiano. Usa tanti esempi concreti.');
+  assert.equal(p.q('[data-riep="indicazioni"]').textContent, 'Insisti su Seiano. Usa tanti esempi concreti.');
+  await B.dorme(40);
+  assert.equal(p.s.chiamate('POST', '/server/api/lezioni/stima').length, stime, 'tipo e indicazioni non rifanno la stima');
+  // La durata sì.
+  p.clic(p.q('[data-durata="30"]'));
+  await p.aspetta(() => p.q('[data-azione="prepara"]').textContent === 'Prepara la lezione · 0,38 €');
+  assert.equal(p.q('[data-riep="struttura"]').textContent, 'I punti chiave in breve e 10 domande alla fine');
+  const s = ultima(p, '/server/api/lezioni/stima').corpo;
+  assert.deepEqual(s.materiali.slice().sort((a, b) => a - b), [8, 11, 12, 13, 14, 15]);
+  assert.equal(s.tipo, 'ripasso');
+  assert.equal(s.indicazioni, 'Insisti su Seiano. Usa tanti esempi concreti.');
+  assert.equal(s.durata_min, 30);
+  p.clic(p.q('[data-saltabili="true"]'));
+  assert.equal(p.q('[data-riep="per"]').textContent, 'La verifica di giovedì 29 ottobre · domande che si possono saltare');
+  p.clic(p.q('[data-per="nessuna"]'));
+  assert.equal(p.q('[data-riep="per"]').textContent, 'Nessuna data · domande che si possono saltare');
+  p.clic(p.q('[data-azione="prepara"]'));
+  await p.aspetta(() => p.q('.fasi'));
+  const corpo = ultima(p, '/server/api/lezioni').corpo;
+  assert.deepEqual(Object.assign({}, corpo, { materiali: corpo.materiali.slice().sort((a, b) => a - b) }), {
+    materia_id: 1, evento_id: null, argomento: 'Impero romano da Augusto a Nerone', durata_min: 30, voce: 'mistral:voice_482', domande_saltabili: true,
+    tipo: 'ripasso', indicazioni: 'Insisti su Seiano. Usa tanti esempi concreti.', materiali: [8, 11, 12, 13, 14, 15],
+  });
+  // La lezione d'esempio li riporta (come il server).
+  const l = p.s.esempio.stato.lezioni[0];
+  assert.equal(l.tipo, 'ripasso');
+  assert.equal(l.indicazioni, 'Insisti su Seiano. Usa tanti esempi concreti.');
+});
+
+test('Nuova lezione: pulsante spento senza argomento, senza materiale, e quando la stima non lo consente (con la frase del server)', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  const prepara = () => p.q('[data-azione="prepara"]');
+  p.scrivi(p.q('#nl-argomento'), '   ');
+  assert.equal(prepara().disabled, true);
+  assert.equal(p.q('[data-riep="su"]').textContent, 'Manca l\'argomento');
+  assert.ok(p.q('[data-riep="su"]').classList.contains('manca'));
+  // Argomento vuoto: nessun suggerito, niente spuntato.
+  await p.aspetta(() => spuntati(p).length === 0);
+  assert.equal(p.q('[data-riep="materiale"]').textContent, 'Scegli almeno un materiale');
+  p.scrivi(p.q('#nl-argomento'), 'Augusto');
+  await p.aspetta(() => !prepara().disabled);
+  assert.deepEqual(spuntati(p), [8, 11, 12, 13, 14]);
+  p.A.chiudiTuttiIVeli();
+  p.chiudi();
+  // Il tetto: anche la voce gratis sforerebbe → pulsante spento e sotto la frase del server.
+  const p2 = await apri({ speso: 1.99 });
+  p2.A.nuovaLezione(1);
+  await p2.aspetta(() => p2.q('.nl-sotto .messaggio'));
+  assert.equal(p2.q('[data-azione="prepara"]').disabled, true);
+  assert.match(p2.q('.nl-sotto').textContent, /Sforerebbe il tetto di 2 €: usa la voce gratis/);
+  assert.equal(p2.q('[data-voce="espressiva"]').disabled, true);
+  assert.equal(p2.q('[data-voce="gratis"]').disabled, true);
+});
+
+test('Nuova lezione: la voce non attiva è spenta e tratteggiata con "Non ancora attiva"; le altre col costo di questa durata', opz, async () => {
+  const p = await apri({}, {}, (s) => {
+    const prima = s.esempio.richiesta;
+    s.esempio.richiesta = (m, percorso, corpo) => {
+      const r = prima(m, percorso, corpo);
+      if (percorso === '/server/api/voci') r.dati.slice(1).forEach((v) => { v.disponibile = false; });
+      return r;
+    };
+  });
+  await apriNuova(p);
+  const gratis = p.q('[data-voce="gratis"]');
+  assert.equal(gratis.disabled, true);
+  assert.ok(gratis.classList.contains('spenta'));
+  // Le voci del NAS tengono il loro nome anche spente.
+  assert.match(gratis.textContent, /Giovanni.*Non ancora attiva/);
+  assert.match(p.q('[data-voce="espressiva"]').textContent, /Lorenzo.*voce espressiva · 0,25 €/);
+  assert.ok(premuto(p.q('[data-voce="espressiva"]')));
+  // Una sola stima: le voci non attive non si stimano.
+  assert.ok(p.s.chiamate('POST', '/server/api/lezioni/stima').every((x) => x.corpo.voce === 'mistral:voice_482'));
+});
+
+test('Nuova lezione: nessuna voce attiva → pulsante spento e sotto il perché; la barra della finestra stretta dice lo stesso', opz, async () => {
+  const p = await apri({}, {}, (s) => {
+    const prima = s.esempio.richiesta;
+    s.esempio.richiesta = (m, percorso, corpo) => {
+      const r = prima(m, percorso, corpo);
+      if (percorso === '/server/api/voci') r.dati.forEach((v) => { v.disponibile = false; });
+      return r;
+    };
+  });
+  p.A.nuovaLezione(1);
+  // Si aspetta anche la barra: finché i suggeriti non arrivano lì c'è "Scegli almeno un materiale", che viene prima.
+  await p.aspetta(() => p.q('.nl-sotto') && /Nessuna voce è attiva/.test(p.q('.nl-sotto').textContent)
+    && p.q('.nl-barra .due.manca') && /Nessuna voce è attiva/.test(p.q('.nl-barra .due.manca').textContent));
+  assert.equal(p.q('[data-azione="prepara"]').disabled, true);
+  assert.equal(p.q('[data-azione="prepara-barra"]').disabled, true);
+  assert.match(p.q('.nl-barra').textContent, /Spiegazione · 20 min · \d+ materiali/);
+  assert.match(p.q('.nl-barra .due.manca').textContent, /Nessuna voce è attiva/);
+  assert.equal(p.s.chiamate('POST', '/server/api/lezioni/stima').length, 0, 'senza voci non si stima');
+});
+
+test('Nuova lezione: la barra della finestra stretta ha tipo, durata, materiale, il mese e lo stesso pulsante', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  const barra = () => p.q('.nl-barra');
+  await p.aspetta(() => /Prepara la lezione ·/.test(p.q('[data-azione="prepara-barra"]').textContent));
+  assert.equal(p.q('[data-azione="prepara-barra"]').textContent, p.q('[data-azione="prepara"]').textContent);
+  assert.match(barra().querySelector('.uno').textContent, /^Spiegazione · 20 min · \d+ materiali$/);
+  assert.match(barra().querySelector('.due').textContent, /^dopo questa .+ di 2 €$/);
+  p.clic(p.q('[data-tipo="ripasso"]'));
+  assert.match(barra().querySelector('.uno').textContent, /^Ripasso · 20 min/);
+  p.scrivi(p.q('#nl-argomento'), '');
+  assert.equal(barra().querySelector('.due').textContent, 'Manca l\'argomento');
+  assert.equal(p.q('[data-azione="prepara-barra"]').disabled, true);
+  p.scrivi(p.q('#nl-argomento'), 'Augusto');
+  await p.aspetta(() => !p.q('[data-azione="prepara-barra"]').disabled);
+  p.clic(p.q('[data-azione="prepara-barra"]'));
+  await p.aspetta(() => p.s.chiamate('POST', '/server/api/lezioni').some((x) => x.percorso === '/server/api/lezioni'));
+  assert.equal(p.s.chiamate('POST', '/server/api/lezioni').find((x) => x.percorso === '/server/api/lezioni').corpo.tipo, 'ripasso');
+});
+
+// --- Un materiale: titolo e che cos'è (§5.1) -----------------------------------------------------------
+
+test('materiale: la finestra mostra titolo, da dove viene, che cos\'è e cosa ho letto; Salva manda solo i campi cambiati', opz, async () => {
+  const p = await apri();
+  p.A.vai('#materia/1');
+  await p.aspetta(() => p.q('[data-materiale="14"]'));
+  p.clic(p.q('[data-materiale="14"]'));
+  await p.aspetta(() => p.q('[data-testo="letto"]'));
+  const vero = p.s.esempio.stato.materiale[1].find((x) => x.id === 14);
+  assert.equal(p.q('#mat-titolo').value, 'Caligola e Claudio');
+  assert.equal(p.q('[data-nota="titolo"]').textContent, 'Dalla foto IMG_20261025_1712.jpg · titolo scritto da Lectio leggendo la foto');
+  assert.ok(p.q('[data-famiglia="studio"]').classList.contains('scelta'));
+  assert.ok(premuto(p.q('[data-tipo-materiale="appunti"]')));
+  assert.match(p.q('[data-letto]').textContent, new RegExp('Cosa ho letto · ' + vero.caratteri + ' caratteri'));
+  assert.match(p.q('[data-testo="letto"]').textContent, /…$/, 'si vede solo l\'inizio');
+  p.clic(p.q('[data-azione="mostra-tutto"]'));
+  assert.equal(p.q('[data-testo="letto"]').textContent, vero.testo);
+  // Senza cambiare niente: nessuna richiesta.
+  p.clic(p.q('[data-azione="salva-materiale"]'));
+  await p.aspetta(() => p.q('[data-azione="salva-materiale"]').textContent === 'Salvato');
+  assert.equal(p.s.chiamate('PATCH', '/server/api/materiale/14').length, 0);
+  // Solo il tipo.
+  p.clic(p.q('[data-tipo-materiale="verifica"]'));
+  assert.equal(p.q('[data-azione="salva-materiale"]').textContent, 'Salva');
+  assert.ok(p.q('[data-famiglia="prof"]').classList.contains('scelta'));
+  p.clic(p.q('[data-azione="salva-materiale"]'));
+  await p.aspetta(() => p.s.chiamate('PATCH', '/server/api/materiale/14').length === 1);
+  assert.deepEqual(p.s.chiamate('PATCH', '/server/api/materiale/14')[0].corpo, { tipo: 'verifica' });
+  await p.aspetta(() => p.q('[data-azione="salva-materiale"]').textContent === 'Salvato');
+  // Solo il titolo (spazi in più tolti): da qui il titolo è di Andrea e la nota sparisce.
+  p.scrivi(p.q('#mat-titolo'), '  Caligola,  Claudio e la Britannia ');
+  p.clic(p.q('[data-azione="salva-materiale"]'));
+  await p.aspetta(() => p.s.chiamate('PATCH', '/server/api/materiale/14').length === 2);
+  assert.deepEqual(p.s.chiamate('PATCH', '/server/api/materiale/14')[1].corpo, { titolo: 'Caligola, Claudio e la Britannia' });
+  await p.aspetta(() => p.q('[data-nota="titolo"]').textContent === '');
+  await p.aspetta(() => p.q('[data-materiale="14"]') && /Caligola, Claudio e la Britannia/.test(p.q('[data-materiale="14"]').textContent));
+  // Titolo vuoto: si ferma con la frase, niente richiesta.
+  p.scrivi(p.q('#mat-titolo'), '  ');
+  p.clic(p.q('[data-azione="salva-materiale"]'));
+  assert.match(p.q('.mat-corpo .errore-campo').textContent, /Scrivi un titolo/);
+  assert.equal(p.s.chiamate('PATCH', '/server/api/materiale/14').length, 2);
+  // Elimina chiede conferma.
+  p.clic(p.q('[data-azione="elimina-materiale"]'));
+  await p.aspetta(() => p.q('[data-azione="conferma"]'));
+  p.clic(p.q('[data-azione="conferma"]'));
+  await p.aspetta(() => p.s.chiamate('DELETE', '/server/api/materiale/14').length === 1);
+  await p.aspetta(() => !p.q('.finestra-materiale'));
+});
+
+test('caricamento: Che cos\'è in due famiglie, parte da Appunti; senza titolo scritto non si manda il titolo', opz, async () => {
+  const p = await apri();
+  p.A.vai('#materia/1');
+  await p.aspetta(() => p.q('.zona-trascina'));
+  p.A.suFileTrascinati([new p.w.File(['foto'], 'IMG_20261104_1647.jpg', { type: 'image/jpeg' })]);
+  await p.aspetta(() => p.q('[data-azione="aggiungi-file"]'));
+  assert.ok(p.q('.foglio [data-famiglia="studio"]').classList.contains('scelta'));
+  assert.ok(premuto(p.q('.foglio [data-tipo-materiale="appunti"]')));
+  assert.match(p.q('.foglio').textContent, /Da studiare.*Lectio lo spiega e ci fa le domande.*Già corretta dal prof.*Lectio impara come chiede e corregge/);
+  assert.equal(p.q('#carica-titolo').value, '');
+  assert.equal(p.q('#carica-titolo').getAttribute('placeholder'), 'Lo scrive Lectio leggendo la foto');
+  p.clic(p.q('[data-azione="aggiungi-file"]'));
+  await p.aspetta(() => p.s.chiamate('POST', '/locale/carica').length === 1);
+  let q = new URLSearchParams(p.s.chiamate('POST', '/locale/carica')[0].percorso.split('?')[1]);
+  assert.equal(q.get('tipo'), 'appunti');
+  assert.equal(q.get('titolo'), null, 'niente titolo: lo scrive Lectio');
+  assert.equal(q.get('nome'), 'IMG_20261104_1647.jpg');
+  // Un altro file: Verifica e un titolo scritto da Andrea.
+  await p.aspetta(() => !p.q('.foglio'));
+  p.A.suFileTrascinati([new p.w.File(['testo'], 'storia.pdf', { type: 'application/pdf' })]);
+  await p.aspetta(() => p.q('[data-azione="aggiungi-file"]'));
+  assert.equal(p.q('#carica-titolo').getAttribute('placeholder'), 'Lo scrive Lectio leggendo il file');
+  p.clic(p.q('.foglio [data-tipo-materiale="verifica"]'));
+  assert.ok(p.q('.foglio [data-famiglia="prof"]').classList.contains('scelta'));
+  p.scrivi(p.q('#carica-titolo'), ' Verifica su Augusto ');
+  p.clic(p.q('[data-azione="aggiungi-file"]'));
+  await p.aspetta(() => p.s.chiamate('POST', '/locale/carica').length === 2);
+  q = new URLSearchParams(p.s.chiamate('POST', '/locale/carica')[1].percorso.split('?')[1]);
+  assert.equal(q.get('tipo'), 'verifica');
+  assert.equal(q.get('titolo'), 'Verifica su Augusto');
+});
+
+test('appunti scritti: senza titolo scritto non si manda il titolo', opz, async () => {
+  const p = await apri();
+  p.A.vai('#materia/1');
+  await p.aspetta(() => p.q('[data-azione="aggiungi-materiale"]'));
+  p.clic(p.q('[data-azione="aggiungi-materiale"]'));
+  await p.aspetta(() => p.q('[data-riga="appunti"]'));
+  p.clic(p.q('[data-riga="appunti"]'));
+  await p.aspetta(() => p.q('#testo-appunti'));
+  p.scrivi(p.q('#testo-appunti'), 'Seiano era il prefetto del pretorio.');
+  p.clic(p.q('[data-azione="aggiungi-scritto"]'));
+  await p.aspetta(() => p.s.chiamate('POST', '/server/api/materie/1/materiale').length === 1);
+  const corpo = p.s.chiamate('POST', '/server/api/materie/1/materiale')[0].corpo;
+  assert.equal('titolo' in corpo, false);
+  assert.equal(corpo.tipo, 'appunti');
 });
 
 // --- Materie ---------------------------------------------------------------------------------------
@@ -504,7 +805,7 @@ test('Materia: Da ripassare apre il lettore fermo su quella domanda', opz, async
   assert.equal(p.audio.paused, true);
 });
 
-test('file trascinato nella materia: il riquadro si accende, poi tipo/titolo/data e i byte vanno al programma', opz, async () => {
+test('file trascinato nella materia: il riquadro si accende, poi che cos\'è/titolo/data e i byte vanno al programma', opz, async () => {
   const p = await apri();
   p.A.vai('#materia/1');
   await p.aspetta(() => p.q('.zona-trascina'));
@@ -524,8 +825,8 @@ test('file trascinato nella materia: il riquadro si accende, poi tipo/titolo/dat
   const c = p.s.chiamate('POST', '/locale/carica')[0];
   const q = new URLSearchParams(c.percorso.split('?')[1]);
   assert.equal(q.get('materia_id'), '1');
-  assert.equal(q.get('tipo'), 'verifica');
-  assert.equal(q.get('titolo'), 'verifica 12 ottobre');
+  assert.equal(q.get('tipo'), 'appunti', 'file e foto partono da Appunti');
+  assert.equal(q.get('titolo'), null, 'il titolo lo scrive Lectio');
   assert.equal(q.get('nome'), 'verifica_12_ottobre.txt');
   assert.equal(c.byte, 29);
   await p.aspetta(() => p.q('.riga-materiale.in-lettura'));
@@ -655,4 +956,23 @@ test('visita guidata: "Salta la visita" e Esc la chiudono e si torna ai dati ver
   p.clic(p.q('[data-visita-azione="salta"]'));
   await p.aspetta(() => !p.q('.visita'));
   assert.equal(p.w.LectioApi.inEsempio(), false);
+});
+
+test('Voci del NAS (§16.5): una scheda per voce con "pronta in circa N min", la scelta va nella stima e nella lezione', opz, async () => {
+  const p = await apri();
+  await apriNuova(p);
+  const schede = p.tutti('[data-voce="gratis"]');
+  assert.deepEqual(schede.map((x) => x.getAttribute('data-voce-id')), ['nas:giovanni', 'nas:giovanni_grande', 'nas:supertonic']);
+  await p.aspetta(() => /pronta in circa 28 min/.test(schede[1].textContent));
+  assert.match(schede[0].textContent, /Giovanni.*voce gratis · 0,02 € · pronta in circa 14 min/);
+  assert.match(schede[2].textContent, /Supertonic.*pronta in circa 24 min/);
+  // Ogni voce del NAS ha la sua stima (tempi diversi).
+  const stimate = new Set(p.s.chiamate('POST', '/server/api/lezioni/stima').map((x) => x.corpo.voce));
+  for (const id of ['mistral:voice_482', 'nas:giovanni', 'nas:giovanni_grande', 'nas:supertonic']) assert.ok(stimate.has(id), id);
+  p.clic(schede[1]);
+  await p.aspetta(() => premuto(p.q('[data-voce-id="nas:giovanni_grande"]')));
+  assert.equal(p.q('[data-riep="pronta"]').textContent, 'in circa 28 min');
+  p.clic(p.q('[data-azione="prepara"]'));
+  await p.aspetta(() => p.s.chiamate('POST', '/server/api/lezioni').some((x) => x.percorso === '/server/api/lezioni'));
+  assert.equal(p.s.chiamate('POST', '/server/api/lezioni').find((x) => x.percorso === '/server/api/lezioni').corpo.voce, 'nas:giovanni_grande');
 });

@@ -48,6 +48,10 @@ def _costo(conn: sqlite3.Connection, colonna: str, valore: int) -> float:
     return arrotonda(float(riga["s"]))
 
 
+# Contratto 16.3: "file" = da riscrivere ("file_fermo" = non ci sono riuscito, resta quello del file).
+TITOLO_DA = {"lectio": "lectio", "file": "file", "file_fermo": "file", "utente": "utente"}
+
+
 def materiale(conn: sqlite3.Connection, r: sqlite3.Row, con_testo: bool = False) -> dict:
     uscita = {
         "id": r["id"],
@@ -57,6 +61,7 @@ def materiale(conn: sqlite3.Connection, r: sqlite3.Row, con_testo: bool = False)
         "data": r["data"],
         "origine": r["origine"],
         "nome_file": r["nome_file"],
+        "titolo_da": TITOLO_DA.get(r["titolo_da"], "utente"),
         "caratteri": len(r["testo"] or ""),
         "stato": r["stato"],
         "errore": r["errore"] if r["stato"] == "errore" else None,
@@ -122,6 +127,9 @@ def lezione(conn: sqlite3.Connection, r: sqlite3.Row, completa: bool = False) ->
         "materia_id": r["materia_id"],
         "evento_id": r["evento_id"],
         "argomento": r["argomento"],
+        "tipo": r["tipo"] or "spiegazione",
+        "indicazioni": r["indicazioni"] or "",
+        "materiali": json.loads(r["materiali"] or "[]"),
         "durata_min": r["durata_min"],
         "durata_s": r["durata_s"],
         "voce": r["voce"],

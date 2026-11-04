@@ -72,7 +72,8 @@ class VisitaTest {
         assertEquals(SchermataVisita.MATERIA, aperte.last())
         v.azione(Bersagli.NUOVA_LEZIONE)
         assertEquals(SchermataVisita.NUOVA_LEZIONE, aperte.last())
-        assertEquals(Bersagli.DURATA_E_COSTO, v.corrente.bersaglio)
+        assertEquals(Bersagli.RIEPILOGO, v.corrente.bersaglio)
+        assertEquals("Come la vuoi", v.corrente.titolo)
         v.avanti()
         assertEquals(SchermataVisita.LETTORE, aperte.last())
         assertEquals("8 di 8", v.conteggio)
@@ -122,14 +123,17 @@ class VisitaTest {
         assertEquals(0, v.indice)
     }
 
+    /** Passo 7 (v1.4): il riflettore va sulla barra in basso di Nuova lezione, riepilogo e pulsante insieme. */
     @Test
-    fun ilRiflettoreSuDueBersagliPrendeLUnione() {
+    fun ilPasso7IlluminaLaBarraDelRiepilogo() {
         val (v, _) = nuova()
         v.inizia()
         repeat(6) { if (v.corrente.pratico) v.azione(v.corrente.bersaglio!!) else v.avanti() }
-        assertEquals(Bersagli.DURATA_E_COSTO, v.corrente.bersaglio)
-        v.bersagli[Bersagli.DURATA] = Rect(20f, 300f, 370f, 352f)
-        v.bersagli[Bersagli.PREPARA] = Rect(20f, 760f, 370f, 818f)
-        assertEquals(Rect(20f, 300f, 370f, 818f), v.rettangolo())
+        assertEquals(Bersagli.RIEPILOGO, v.corrente.bersaglio)
+        assertEquals("Scegli materiale, tipo e indicazioni: qui vedi cosa esce e quanto costa.", v.corrente.frase)
+        assertNull("prima che la barra si veda non c'è niente da illuminare", v.rettangolo())
+        v.bersagli[Bersagli.PREPARA] = Rect(16f, 760f, 374f, 814f)
+        v.bersagli[Bersagli.RIEPILOGO] = Rect(0f, 712f, 390f, 844f)
+        assertEquals(Rect(0f, 712f, 390f, 844f), v.rettangolo())
     }
 }

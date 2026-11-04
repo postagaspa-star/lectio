@@ -535,29 +535,37 @@ class RevisioneTest {
         f.delete()
     }
 
-    // --- 17. "Cambia": la stima coi materiali e il caso vuoto ---------------------------------------
+    // --- 17. La stima coi materiali e il caso vuoto (v1.4: caselle sempre visibili) ------------------
 
     @Test
-    fun p17_stimaConIMaterialiENienteListaVuota() {
+    fun p17_senzaMaterialeSpuntatoNienteStimaENientePrepara() {
         server.rispondi("GET /api/materie", """[{"id":1,"nome":"Storia","prof":"Rossi","colore":"ambra"}]""")
         server.rispondi("GET /api/eventi", "[]")
         server.rispondi("GET /api/materie/1/materiale", """[{"id":23,"materia_id":1,"tipo":"appunti","titolo":"Augusto","stato":"pronto"}]""")
+        server.rispondi("GET /api/materie/1/suggeriti", """{"argomento":"Augusto","parole":["augusto"],"suggeriti":[23]}""")
         server.rispondi("GET /api/voci", """[{"id":"mistral:voice_482","nome":"Lorenzo","tipo":"espressiva","disponibile":true}]""")
         server.rispondi("GET /api/impostazioni", """{"tetto_eur":2}""")
         server.rispondi("POST /api/lezioni/stima", Esempi.STIMA)
-        val vm = NuovaLezioneViewModel(SorgenteServer(server.client(), CacheMemoria()), 1, null)
+        val vm = NuovaLezioneViewModel(SorgenteServer(server.client(), CacheMemoria()), 1, null, attesaSuggeritiMs = 0)
         vm.carica()
+        aspetta { vm.stato.value.pronto }
+        Thread.sleep(150)
+        // Argomento vuoto: niente suggeriti, niente spuntato, niente stima.
+        assertTrue(server.richiesteA("POST /api/lezioni/stima").isEmpty())
+        assertTrue(server.richiesteA("GET /api/materie/1/suggeriti").isEmpty())
+        assertEquals("Manca l'argomento", vm.stato.value.manca)
+        vm.argomento("Augusto")
         aspetta { vm.stato.value.stimaEspressiva != null }
-        assertFalse(JsonLectio.parseToJsonElement(server.richiesteA("POST /api/lezioni/stima").last().body.readUtf8()).toString().contains("materiali"))
-        vm.argomento("L'Impero romano")
-        vm.appunto(23) // tolto l'unico appunto, e non ci sono verifiche
-        assertTrue(vm.stato.value.senzaMateriale)
-        assertTrue(vm.stato.value.fraseSenzaMateriale!!.startsWith("Scegli almeno un appunto"))
+        assertTrue(server.richiesteA("POST /api/lezioni/stima").single().body.readUtf8().contains("\"materiali\":[23]"))
+        vm.tocca(23) // tolto l'unico materiale
+        assertEquals("Scegli almeno un materiale", vm.stato.value.manca)
+        assertFalse(vm.stato.value.puoPreparare)
         vm.prepara()
-        Thread.sleep(100)
-        assertTrue("con materiali [] il server userebbe tutto: non si manda", server.richiesteA("POST /api/lezioni").isEmpty())
-        vm.appunto(23)
-        assertFalse(vm.stato.value.senzaMateriale)
+        Thread.sleep(150)
+        assertTrue("con materiali [] il server rifiuta: non si manda", server.richiesteA("POST /api/lezioni").isEmpty())
+        assertEquals("senza materiale non si chiede la stima", 1, server.richiesteA("POST /api/lezioni/stima").size)
+        vm.tocca(23)
+        assertTrue(vm.stato.value.puoPreparare)
     }
 
     @Test
@@ -569,25 +577,29 @@ class RevisioneTest {
             {"id":25,"materia_id":1,"tipo":"verifica","titolo":"Verifica nuova","stato":"in_lettura"},
             {"id":26,"materia_id":1,"tipo":"appunti","titolo":"Rovinati","stato":"errore"},
             {"id":23,"materia_id":1,"tipo":"appunti","titolo":"Augusto","stato":"pronto"},{"id":24,"materia_id":1,"tipo":"libro","titolo":"Libro","stato":"pronto"}]""")
+        server.rispondi("GET /api/materie/1/suggeriti", """{"argomento":"Impero","parole":["impero"],"suggeriti":[23,25,26]}""")
         server.rispondi("GET /api/voci", """[{"id":"mistral:voice_482","nome":"Lorenzo","tipo":"espressiva","disponibile":true}]""")
         server.rispondi("GET /api/impostazioni", """{"tetto_eur":2}""")
         server.rispondi("POST /api/lezioni/stima", Esempi.STIMA)
-        val vm = NuovaLezioneViewModel(SorgenteServer(server.client(), CacheMemoria()), 1, null)
+        val vm = NuovaLezioneViewModel(SorgenteServer(server.client(), CacheMemoria()), 1, null, attesaSuggeritiMs = 0)
         vm.carica()
+        aspetta { vm.stato.value.pronto }
+        vm.argomento("Impero")
         aspetta { vm.stato.value.stimaEspressiva != null }
+        // Solo materiale pronto, anche se il server suggerisse altro.
+        assertTrue(server.richiesteA("POST /api/lezioni/stima").last().body.readUtf8().contains("\"materiali\":[23]"))
         val prima = server.richiesteA("POST /api/lezioni/stima").size
-        vm.appunto(24)
+        vm.tutti()
         aspetta { server.richiesteA("POST /api/lezioni/stima").size > prima }
         val corpo = server.richiesteA("POST /api/lezioni/stima").last().body.readUtf8()
-        // v1.3: l'elenco COMPLETO, solo materiale pronto: verifiche, interrogazioni e appunti accesi.
-        assertTrue(corpo, corpo.contains("\"materiali\":[21,22,23]"))
+        // v1.4: l'elenco COMPLETO degli spuntati, solo materiale pronto, nell'ordine della materia.
+        assertTrue(corpo, corpo.contains("\"materiali\":[21,22,23,24]"))
         // E la lezione parte con lo stesso elenco.
         server.rispondi("POST /api/lezioni", Esempi.LEZIONE, 201)
-        vm.argomento("L'Impero romano")
         vm.prepara()
         aspetta { vm.stato.value.creata != null }
         val crea = server.richiesteA("POST /api/lezioni").single().body.readUtf8()
-        assertTrue(crea, crea.contains("\"materiali\":[21,22,23]"))
+        assertTrue(crea, crea.contains("\"materiali\":[21,22,23,24]"))
     }
 
     // --- Contratto v1.3 (server 1.0.1) ---------------------------------------------------------------
@@ -596,13 +608,17 @@ class RevisioneTest {
     fun v13_unModelloSenzaPrezzoMostraLaFraseDelServer() {
         server.rispondi("GET /api/materie", """[{"id":1,"nome":"Storia","prof":"Rossi","colore":"ambra"}]""")
         server.rispondi("GET /api/eventi", "[]")
-        server.rispondi("GET /api/materie/1/materiale", "[]")
+        server.rispondi("GET /api/materie/1/materiale", """[{"id":23,"materia_id":1,"tipo":"appunti","titolo":"Augusto","stato":"pronto"}]""")
+        server.rispondi("GET /api/materie/1/suggeriti", """{"argomento":"Augusto","suggeriti":[23]}""")
         server.rispondi("GET /api/voci", """[{"id":"mistral:voice_482","nome":"Lorenzo","tipo":"espressiva","disponibile":true}]""")
         server.rispondi("GET /api/impostazioni", """{"tetto_eur":2}""")
         server.rispondi("POST /api/lezioni/stima", """{"errore":"Il modello scelto non ha un prezzo nel listino: avvisa chi cura il server","codice":"fornitore_non_disponibile"}""", 503)
-        val vm = NuovaLezioneViewModel(SorgenteServer(server.client(), CacheMemoria()), 1, null)
+        val vm = NuovaLezioneViewModel(SorgenteServer(server.client(), CacheMemoria()), 1, null, attesaSuggeritiMs = 0)
         vm.carica()
+        aspetta { vm.stato.value.pronto }
+        vm.argomento("Augusto")
         aspetta { vm.stato.value.errore != null }
+        assertFalse(vm.stato.value.puoPreparare)
         assertEquals("Il modello scelto non ha un prezzo nel listino: avvisa chi cura il server", vm.stato.value.errore)
     }
 

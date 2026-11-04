@@ -1,4 +1,4 @@
-# Lectio — contratto delle API (v1.3)
+# Lectio — contratto delle API (v1.4)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (risposte scritte alle domande, materiale solo nella materia) sono nella sezione 15 e
@@ -352,3 +352,103 @@ tastiera); il server la corregge.
 ### 15.3 Materie: creazione e modifica
 Già in sezione 4 (`POST/PATCH/DELETE /api/materie`). In più: `prof` facoltativo (0-40 caratteri), `nome`
 unico senza distinguere maiuscole; 409 `conflitto` "Esiste già una materia con questo nome".
+
+## 16. Nuova lezione e materiale (v1.4, richieste di Andrea del 4/11)
+
+Prototipo approvato: `docs/prototipo/NuovaLezionePc.dc.html`, `NuovaLezioneTel.dc.html`, `MaterialePc.dc.html`.
+
+### 16.1 Tipo di lezione e indicazioni
+`POST /api/lezioni` e `POST /api/lezioni/stima` accettano in più:
+- `"tipo"`: `spiegazione` (predefinito) | `ripasso` | `interrogazione`;
+- `"indicazioni"`: testo libero di Andrea, 0-600 caratteri (spazi in più tolti). Oltre 600 → 422.
+
+La `Lezione` riporta `tipo`, `indicazioni` e `materiali` (elenco degli id scelti; `[]` = tutto il materiale,
+solo per le lezioni vecchie). Com'è fatta (la stessa regola nel server, `misure.struttura`, e nelle app per il
+riepilogo; `arrotonda` = per eccesso a metà, come `Math.round` sui positivi):
+
+| tipo | parti | domande dopo ogni parte | domande alla fine | riepilogo nelle app |
+|---|---|---|---|---|
+| `spiegazione` | `max(3, arrotonda(durata/5))` | sì, una | `{15:4, 20:5, 30:6, 45:8}` | "6 parti, una domanda dopo ognuna e 5 alla fine" |
+| `ripasso` | `max(2, arrotonda(durata/7.5))` | no | `arrotonda(finali_spiegazione × 1,6)` (15→6, 20→8, 30→10, 45→13) | "I punti chiave in breve e 8 domande alla fine" |
+| `interrogazione` | gruppi di domande, `max(2, arrotonda(domande/5))` | — | `arrotonda(durata × 0,6)` domande in tutto (15→9, 20→12, 30→18, 45→27) | "12 domande come le fa il prof, con la risposta giusta dopo ognuna" |
+
+- **Spiegazione**: come prima (parti con una domanda alla fine di ognuna, riepilogo, interrogazione, tre
+  errori da non fare).
+- **Ripasso**: parti brevi e fitte con i punti chiave (niente aggancio lungo, niente domanda per parte), poi le
+  domande alla fine con la risposta completa, poi i tre errori.
+- **Interrogazione**: niente spiegazione. Ogni capitolo è un gruppo di domande su una parte dell'argomento;
+  dopo ogni domanda la risposta che il prof vuole sentire. Alla fine i tre errori. Tutte le domande sono di tipo
+  `interrogazione` (le app si fermano come sempre e chiedono la risposta scritta).
+- **Indicazioni**: vanno nei prompt dentro `<indicazioni>…</indicazioni>`: decidono su cosa insistere, che
+  esempi fare, quanto difficili le domande; non possono cambiare le regole fisse (fatti veri, numero di parti e
+  domande, durata, formato). Se mancano, la lezione segue il materiale e la scheda del prof.
+- Il costo stimato cambia poco con il tipo (dipende soprattutto dalla durata e dal materiale). `POST /api/lezioni/stima`
+  restituisce in più `"struttura": {"tipo", "parti", "domanda_per_parte", "finali", "domande"}`.
+
+### 16.2 Materiale scelto per la lezione
+Le app nuove mandano SEMPRE `materiali` con l'elenco completo dei materiali spuntati (appunti, libro, verifiche,
+interrogazioni). Solo materiale `pronto`; `[]` → 422 "Scegli almeno un appunto o una verifica".
+
+`GET /api/materie/{id}/suggeriti?argomento=<testo>` → materiale che parla dell'argomento:
+```json
+{"argomento": "Mirone e il Discobolo", "parole": ["mirone", "discobolo"], "suggeriti": [10, 11],
+ "punti": {"10": 4, "11": 4, "9": 1}}
+```
+- Solo materiale `pronto`, appunti e verifiche insieme. Parole dell'argomento di almeno 4 lettere, senza accenti
+  e senza parole vuote ("della", "come"…), confrontate per radice (scultura/sculture). Punti per ogni parola:
+  2 se è nel titolo, 1 se è nel testo almeno due volte. Le parole che stanno in più del 60% del materiale della
+  materia (con almeno 4 materiali) non contano, a meno che siano tutte così. Suggerito = punti ≥ 2 (≥ 1 se
+  l'argomento ha una parola sola). Argomento vuoto → `suggeriti: []`.
+- Nelle app: finché Andrea non tocca una casella, le caselle seguono i suggeriti ("Sull'argomento", chiesti di
+  nuovo 400 ms dopo l'ultima lettera scritta). "Tutti" spunta tutto il materiale pronto, "Nessuno" toglie tutto.
+
+### 16.3 Titolo e tipo di un materiale
+`PATCH /api/materiale/{id}` `{"titolo": "Mirone e il Discobolo", "tipo": "appunti"}` (campi facoltativi) →
+`Materiale`. `titolo` 1-120 caratteri (spazi in più tolti); `tipo` come in sezione 6. Se cambia il tipo da o
+verso `verifica`/`interrogazione`, la scheda del prof si rifà (`in_aggiornamento`). 404 se non c'è.
+
+`Materiale` ha in più `"titolo_da": "lectio" | "file" | "utente"`:
+- `file`: titolo preso dal nome del file o predefinito ("Foto 4 novembre"); Lectio lo riscriverà;
+- `lectio`: titolo scritto da Lectio leggendo il materiale (le app scrivono "titolo scritto da Lectio");
+- `utente`: scelto da Andrea (scritto al caricamento o cambiato con PATCH). Lectio non lo tocca più.
+
+Titoli scritti da Lectio: quando un materiale con `titolo_da: file` è `pronto` e ha almeno 200 caratteri, il
+server chiede al modello piccolo (`LECTIO_MODELLO_PIANO`) un titolo di 2-7 parole che dica di cosa parla
+(circa 0,01 centesimi a materiale, nel conto come "Titolo di …"). In modalità prova i titoli restano quelli del
+file: Lectio li riscrive quando arriva la chiave. Se il tetto è finito o la risposta non va, resta quello del file. Al caricamento, un `titolo` uguale al nome del file (senza estensione, `_`/`-` come spazi) vale come
+`file`: le app nuove non mandano più il titolo se Andrea non l'ha scritto.
+
+### 16.4 Il caricamento nelle app
+"Che cos'è" in due famiglie: **Da studiare** (`appunti`, `libro`: Lectio lo spiega e ci fa le domande) e
+**Già corretta dal prof** (`verifica`, `interrogazione`: Lectio impara come chiede e corregge). Foto e file
+partono da `appunti`; i testi incollati da Gemini col modello di verifica restano riconosciuti dal server.
+
+### 16.5 Voci gratis sul NAS (v1.4, scelta di Andrea del 4/11)
+Tre voci senza costi e senza internet, servite dal container `lectio-voci` (nessuna porta verso fuori; il
+server lo raggiunge con `LECTIO_VOCI_URL`, per esempio `http://lectio-voci:8000`):
+
+| id | nome | motore | minuti di lavoro per minuto di lezione |
+|----|------|--------|-----------------------------------------|
+| `nas:giovanni` | Giovanni | Kyutai Pocket TTS, modello italiano | 0,6 |
+| `nas:giovanni_grande` | Giovanni grande | Kyutai Pocket TTS, modello italiano da 24 strati | 1,3 |
+| `nas:supertonic` | Supertonic | Supertonic 3, voce maschile M1 | 1,1 |
+
+In `GET /api/voci` hanno `"tipo": "gratis"`, `"fornitore": "nas"`, `"euro_al_minuto": 0`, `"disponibile"`
+(il servizio risponde?) e in più `"minuti_per_minuto"`. Con le voci del NAS accese, il posto "Isabella non
+ancora attiva" di Azure non compare più. La voce predefinita resta quella delle impostazioni (Lorenzo);
+`voce_predefinita` accetta anche gli id `nas:…`. Senza voce scelta né predefinita usabile: Lorenzo, poi
+`nas:giovanni`, poi la voce di prova, poi Azure.
+
+`POST /api/lezioni/stima` restituisce anche `"minuti_preparazione"`: arrotondato di 2 + durata × minuti per
+minuto (Lorenzo 0,1; Azure 0,15; prova 0,05). Le app lo mostrano come "pronta in circa N min" sulle voci che
+hanno `minuti_per_minuto`. Le voci del NAS non toccano i caratteri gratis di Azure e non costano niente.
+
+Se il servizio non risponde: `stima` e `POST /api/lezioni` con una voce `nas:…` danno 422 `campo: "voce"`
+("Le voci gratis del NAS adesso non rispondono…"); `GET /api/salute` dà `"voce_gratis": {"stato":
+"non_disponibile", "fornitore": "nas"}`. Un pezzo non riuscito si ritenta da solo (2, 4, 8 secondi); se non va
+ancora, la lezione va in errore con la frase del servizio e "Tocca Riprova".
+
+Servizio interno: `GET /salute` → `{"ok": true, "motori": [...]}`; `POST /voce` `{"motore": "giovanni",
+"testo": "..."}` → `audio/wav` (al massimo 4000 caratteri, i segni `[emotion=…]`/`[pace=…]` si tolgono);
+errori `{"errore": "frase"}` con 400 o 500. Una voce alla volta. Licenze: Kyutai Pocket TTS (codice MIT,
+modelli CC-BY 4.0), Supertonic 3 (codice MIT, modello OpenRAIL-M).

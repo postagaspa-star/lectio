@@ -17,7 +17,7 @@ from .origine import Origine
 from .ocr import OcrFinto, OcrMistral
 from .spesa import Cassa, Prezzi
 from .testo_ai import TestoMistral
-from .voci import Catalogo, VoceAzure, VoceMistral, VoceProva
+from .voci import Catalogo, VoceAzure, VoceMistral, VoceNas, VoceProva
 
 
 @dataclass
@@ -58,6 +58,7 @@ def crea_servizi(settings: Settings, transport: httpx.BaseTransport | None = Non
         mistral=voce_mistral,
         azure=azure,
         voce_prova=voce_prova or VoceProva(),
+        nas=VoceNas(settings.voci_url, transport=transport) if settings.voci_url else None,
     )
     ctx = Contesto(settings=settings, cassa=cassa, testo=testo, ocr=ocr, catalogo=catalogo,
                    montatore=montatore or Montatore())

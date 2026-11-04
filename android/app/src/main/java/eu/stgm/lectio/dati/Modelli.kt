@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * I dati del server di Lectio, campo per campo come in docs/contratto-api.md (v1.0).
+ * I dati del server di Lectio, campo per campo come in docs/contratto-api.md (v1.4).
  * Tutto facoltativo dove il contratto può mandare null o niente: un campo in più o
  * in meno non deve mai far cadere una schermata.
  */
@@ -167,6 +167,17 @@ data class Materiale(
     val testo: String? = null,
     /** v1.3: una frase da mostrare sotto il titolo ("Ho letto solo le prime 70 pagine…"). */
     val avviso: String? = null,
+    /** v1.4 §16.3: chi ha scritto il titolo: `lectio` | `file` | `utente` (null dai server vecchi). */
+    @SerialName("titolo_da") val titoloDa: String? = null,
+)
+
+/** v1.4 §16.2: GET /api/materie/{id}/suggeriti?argomento=… */
+@Serializable
+data class Suggeriti(
+    val argomento: String = "",
+    val parole: List<String> = emptyList(),
+    val suggeriti: List<Long> = emptyList(),
+    val punti: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
@@ -216,6 +227,8 @@ data class Voce(
     val fornitore: String? = null,
     @SerialName("euro_al_minuto") val euroAlMinuto: Double = 0.0,
     val disponibile: Boolean = true,
+    /** Le voci gratis del NAS: minuti di lavoro per ogni minuto di lezione (null dai server vecchi). */
+    @SerialName("minuti_per_minuto") val minutiPerMinuto: Double? = null,
 )
 
 @Serializable
@@ -223,8 +236,12 @@ data class RichiestaStima(
     @SerialName("materia_id") val materiaId: Long,
     @SerialName("durata_min") val durataMin: Int,
     val voce: String,
-    /** Come in POST /api/lezioni: solo se Andrea ha toccato "Cambia" (null = tutto il materiale; [] → 422). */
+    /** v1.4 §16.2: l'elenco completo del materiale spuntato (solo `pronto`; [] → 422). null = non si manda. */
     val materiali: List<Long>? = null,
+    /** v1.4 §16.1: `spiegazione` | `ripasso` | `interrogazione`. */
+    val tipo: String = "spiegazione",
+    /** v1.4 §16.1: le indicazioni di Andrea (0-600 caratteri, spazi in più tolti). */
+    val indicazioni: String = "",
 )
 
 @Serializable
@@ -242,6 +259,8 @@ data class Stima(
     @SerialName("si_azzera_il") val siAzzeraIl: String? = null,
     /** v1.3: la parte di [spesaMeseEur] che è lavoro ancora in corso (lezioni in coda, letture, schede). */
     @SerialName("impegnato_eur") val impegnatoEur: Double = 0.0,
+    /** Quanti minuti servono al server per preparare la lezione (null dai server vecchi). */
+    @SerialName("minuti_preparazione") val minutiPreparazione: Int? = null,
 )
 
 @Serializable
@@ -381,6 +400,12 @@ data class Lezione(
     val testo: List<TestoCapitolo> = emptyList(),
     /** v1.2 §15.4: true = alle domande si può saltare (anche col play degli auricolari). */
     @SerialName("domande_saltabili") val domandeSaltabili: Boolean = false,
+    /** v1.4 §16.1: `spiegazione` | `ripasso` | `interrogazione`. */
+    val tipo: String = "spiegazione",
+    /** v1.4 §16.1: le indicazioni scritte creando la lezione. */
+    val indicazioni: String? = null,
+    /** v1.4 §16.1: gli id del materiale scelto ([] = tutto, solo per le lezioni vecchie). */
+    val materiali: List<Long> = emptyList(),
 ) {
     val pronta: Boolean get() = stato == "pronta"
     val inLavoro: Boolean get() = stato == "in_coda" || stato == "in_preparazione"
@@ -397,14 +422,18 @@ data class NuovaLezione(
     @SerialName("evento_id") val eventoId: Long?,
     val argomento: String,
     /**
-     * Dalla v1.1 (§15.1) si manda solo se Andrea ha toccato "Cambia": null = non si
-     * manda e la lezione usa tutto il materiale della materia.
+     * v1.4 §16.2: le app nuove mandano SEMPRE l'elenco completo del materiale spuntato
+     * (solo `pronto`). null = non si manda (solo per chiamate vecchie e prove).
      */
     val materiali: List<Long>? = null,
     @SerialName("durata_min") val durataMin: Int,
     val voce: String,
     /** v1.2 §15.4: "Obbligatorie" (false) o "Si possono saltare" (true). */
     @SerialName("domande_saltabili") val domandeSaltabili: Boolean = false,
+    /** v1.4 §16.1: `spiegazione` | `ripasso` | `interrogazione`. */
+    val tipo: String = "spiegazione",
+    /** v1.4 §16.1: le indicazioni di Andrea, già senza spazi in più. */
+    val indicazioni: String = "",
 )
 
 /**

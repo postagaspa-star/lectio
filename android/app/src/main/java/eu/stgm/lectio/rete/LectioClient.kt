@@ -27,6 +27,7 @@ import eu.stgm.lectio.dati.Salute
 import eu.stgm.lectio.dati.SchedaProf
 import eu.stgm.lectio.dati.Spesa
 import eu.stgm.lectio.dati.Stima
+import eu.stgm.lectio.dati.Suggeriti
 import eu.stgm.lectio.dati.TestoGemini
 import eu.stgm.lectio.dati.Versioni
 import eu.stgm.lectio.dati.Voce
@@ -102,7 +103,7 @@ object SceltaIndirizzo {
 data class FileDaCaricare(val file: File, val nome: String, val tipoMime: String)
 
 /**
- * Il client delle API di Lectio (docs/contratto-api.md, v1.0). Una finestra sul
+ * Il client delle API di Lectio (docs/contratto-api.md, v1.4). Una finestra sul
  * server: niente logica qui, solo richieste e traduzione degli esiti in frasi.
  *
  * [configurazione] si rilegge a ogni chiamata: dopo un nuovo abbinamento il
@@ -214,6 +215,14 @@ class LectioClient(
         if (risposta.codice == 401) gestisciNonAutorizzato(conf, base)
         return interpreta(risposta.codice, risposta.corpo, Materiale.serializer())
     }
+
+    /** v1.4 §16.3: PATCH con i soli campi cambiati (`titolo`, `tipo`). */
+    suspend fun modificaMateriale(id: Long, cambi: JsonObject): Esito<Materiale> =
+        chiama("PATCH", "/api/materiale/$id", cambi.toString(), Materiale.serializer())
+
+    /** v1.4 §16.2: il materiale che parla dell'argomento. */
+    suspend fun suggeriti(materiaId: Long, argomento: String): Esito<Suggeriti> =
+        chiama("GET", "/api/materie/$materiaId/suggeriti?argomento=${perIndirizzo(argomento)}", null, Suggeriti.serializer())
 
     suspend fun eliminaMateriale(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/materiale/$id", null)
     suspend fun riprovaMateriale(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/materiale/$id/riprova", CORPO_VUOTO)
@@ -577,6 +586,9 @@ class LectioClient(
                     else -> fallimento(risposta.codice, risposta.corpo)
                 }
             }
+
+        /** Un testo dentro un indirizzo (`?argomento=`): spazi come %20, accenti in UTF-8. */
+        fun perIndirizzo(testo: String): String = java.net.URLEncoder.encode(testo, "UTF-8").replace("+", "%20")
 
         /** Il corpo di un PATCH con un solo campo. */
         fun campo(nome: String, valore: String): JsonObject = buildJsonObject { put(nome, valore) }

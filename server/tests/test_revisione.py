@@ -330,7 +330,7 @@ def test_7_migrazione_segna_i_dati_della_prova(tmp_path):
     with db.aperta(percorso) as conn:
         assert [r[0] for r in conn.execute("SELECT da_prova FROM materiali ORDER BY id")] == [1, 0]
         assert conn.execute("SELECT da_prova FROM schede").fetchone()[0] == 1
-        assert conn.execute("SELECT MAX(versione) FROM versione_schema").fetchone()[0] == 2
+        assert conn.execute("SELECT MAX(versione) FROM versione_schema").fetchone()[0] == len(db.MIGRAZIONI)
 
 
 # --- 8. Word e ODT costruiti apposta -----------------------------------------------------------------

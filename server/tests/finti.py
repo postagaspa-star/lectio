@@ -2,8 +2,8 @@
 
 - VoceFinta: al posto di espeak-ng, un WAV fatto in Python (durata proporzionale al testo).
 - MontatoreFinto: al posto di ffmpeg, unisce i WAV con il modulo `wave` (stessi conti).
-- ServerFinto: risponde come Mistral (chat, voce, OCR) e Azure (elenco voci, voce), dentro
-  un httpx.MockTransport; conta le chiamate e può fallire a comando."""
+- ServerFinto: risponde come Mistral (chat, voce, OCR), Azure (elenco voci, voce) e le voci del
+  NAS (/salute, /voce), dentro un httpx.MockTransport; conta le chiamate e può fallire a comando."""
 
 import base64
 import io
@@ -113,7 +113,11 @@ class ServerFinto:
                            "commento": "Giusto il senato. Manca chi governava al posto suo.",
                            "mancava": ["il ruolo di Seiano"]}
         self.ocr_pagine = None
+        self.titolo_forzato = None
+        self.ultimo_prompt = ""
         self.azure_quota_finita = False
+        self.voci_spente = False  # le voci del NAS non rispondono
+        self.voci_rotte = 0  # quante risposte 500 dare prima di quelle buone
 
     def conta(self, pezzo: str) -> int:
         return sum(1 for percorso, _ in self.chiamate if pezzo in percorso)
@@ -152,6 +156,20 @@ class ServerFinto:
                  "Gender": "Female", "Locale": "it-IT"},
                 {"ShortName": "en-US-AvaNeural", "DisplayName": "Ava", "Gender": "Female", "Locale": "en-US"},
             ])
+        if percorso == "/salute":  # le voci del NAS
+            if self.voci_spente:
+                raise httpx.ConnectError("spento", request=richiesta)
+            return httpx.Response(200, json={"ok": True, "motori": ["giovanni", "giovanni_grande", "supertonic"]})
+        if percorso == "/voce":
+            if self.voci_spente:
+                raise httpx.ConnectError("spento", request=richiesta)
+            if dati.get("motore") not in ("giovanni", "giovanni_grande", "supertonic"):
+                return httpx.Response(400, json={"errore": "Questa voce non c'è."})
+            if self.voci_rotte > 0:
+                self.voci_rotte -= 1
+                return httpx.Response(500, json={"errore": "La voce Giovanni non è riuscita a leggere un pezzo."})
+            return httpx.Response(200, content=wav_veloce(len(dati["testo"]) * SECONDI_PER_CARATTERE),
+                                  headers={"Content-Type": "audio/wav"})
         if percorso.endswith("/cognitiveservices/v1"):
             if self.azure_quota_finita:
                 return httpx.Response(403, text="Quota exceeded: free tier characters for this month")
@@ -175,7 +193,33 @@ class ServerFinto:
             testo, self.chat_forzata = self.chat_forzata, None
             return self._risposta_chat(testo, dati)
         primo = dati["messages"][1]["content"] if len(dati["messages"]) > 1 else ""
-        if "Prepara il PIANO" in primo:
+        self.ultimo_prompt = primo
+        if "Prepara il PIANO di un RIPASSO" in primo:
+            m = re.search(r'esattamente (\d+) parti in "blocchi" e (\d+) domande', primo)
+            n, q = int(m.group(1)), int(m.group(2))
+            ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
+            oggetto = {
+                "titolo": "Ripasso di Augusto",
+                "minuti_di_materiale": 12,
+                "blocchi": [{"titolo": f"Punti chiave {k}", "punti": [f"punto {k}"], "fonti": ids[:2]}
+                            for k in range(1, n + 1)],
+                "interrogazione": [{"testo": f"Domanda di ripasso {i}?", "tipo": "aperta", "fonti": ids[:1]}
+                                   for i in range(1, q + 1)],
+                "errori_da_evitare": ["Confondere Augusto con Cesare", "Dimenticare le date", "Non citare il senato"],
+            }
+        elif "Prepara il PIANO di una INTERROGAZIONE" in primo:
+            m = re.search(r'gruppi in "blocchi", con ([\d, ]+) domande in "domande"', primo)
+            gruppi = [int(x) for x in m.group(1).split(",")]
+            ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
+            oggetto = {
+                "titolo": "Interrogazione su Augusto",
+                "minuti_di_materiale": 12,
+                "blocchi": [{"titolo": f"Gruppo {k}", "punti": [f"punto {k}"], "fonti": ids[:2],
+                             "domande": [{"testo": f"Domanda {k}.{i}?", "tipo": "aperta", "fonti": ids[:1]}
+                                         for i in range(1, g + 1)]} for k, g in enumerate(gruppi, start=1)],
+                "errori_da_evitare": ["Confondere Augusto con Cesare", "Dimenticare le date", "Non citare il senato"],
+            }
+        elif "Prepara il PIANO" in primo:
             m = re.search(r"esattamente (\d+) blocchi e (\d+) domande", primo)
             n, q = int(m.group(1)), int(m.group(2))
             ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
@@ -198,6 +242,17 @@ class ServerFinto:
                        "risposta": "Perché a Roma la parola re ricordava la tirannia."}
         elif "APERTURA" in primo:
             oggetto = {"paragrafi": [{"testo": "Oggi vediamo come Augusto cambiò Roma senza dirlo."}]}
+        elif "PARTE FINALE dell'interrogazione" in primo:
+            oggetto = {"errori": ["Non confondere Augusto e Cesare.", "Dai sempre le date.", "Cita il senato."],
+                       "chiusura": "Rifai le domande sbagliate."}
+        elif "Scrivi il GRUPPO" in primo:
+            q = int(re.search(r"le (\d+) domande del gruppo", primo).group(1))
+            parole = int(re.search(r"circa (\d+) parole", primo).group(1))
+            oggetto = {"introduzione": "Adesso domande su Augusto.",
+                       "domande": [{"testo": f"Domanda del gruppo {i}?", "risposta": _parole(parole, "risposta")}
+                                   for i in range(1, q + 1)]}
+        elif "Scrivi il titolo di questo materiale" in primo:
+            oggetto = self.titolo_forzato or {"titolo": "Augusto e il principato"}
         elif "PARTE FINALE" in primo:
             q = int(re.search(r"le (\d+) domande dell'interrogazione", primo).group(1))
             oggetto = {"riepilogo": ["Ricapitoliamo: Augusto tenne il potere vero."],
@@ -205,6 +260,11 @@ class ServerFinto:
                                    for i in range(1, q + 1)],
                        "errori": ["Non confondere Augusto e Cesare.", "Dai sempre le date.", "Cita il senato."],
                        "chiusura": "Per oggi è tutto."}
+        elif "Scrivi la PARTE" in primo:
+            parole = int(re.search(r"circa (\d+) parole", primo).group(1))
+            oggetto = {"paragrafi": [{"tipo": "spiegazione", "testo": _parole(parole // 2)},
+                                     {"tipo": "definizione", "testo": "Il principato è il governo del primo cittadino."},
+                                     {"tipo": "esempio", "testo": _parole(parole // 2, "esempio")}]}
         elif "Aggiorna la scheda" in primo:
             oggetto = self.scheda_forzata or {
                 "argomenti": [{"nome": "Principato", "volte": 3, "esempio": "Che cos'è il principato?"}],

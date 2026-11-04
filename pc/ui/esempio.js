@@ -33,14 +33,14 @@
       { id: 4, nome: 'Inglese', prof: 'Neri', colore: 'verde', conteggi: { verifiche: 2, interrogazioni: 0, appunti: 1, lezioni: 1 }, centratura: { previste_uscite: 3, uscite_totali: 6, percentuale: 50 } },
       { id: 5, nome: 'Matematica', prof: 'Russo', colore: 'blu', conteggi: { verifiche: 1, interrogazioni: 0, appunti: 2, lezioni: 0 }, centratura: null },
       { id: 3, nome: 'Scienze umane', prof: 'Verdi', colore: 'viola', conteggi: { verifiche: 2, interrogazioni: 1, appunti: 1, lezioni: 0 }, centratura: null },
-      { id: 1, nome: 'Storia', prof: 'Rossi', colore: 'ambra', conteggi: { verifiche: 4, interrogazioni: 1, appunti: 3, lezioni: 2 }, centratura: { previste_uscite: 10, uscite_totali: 16, percentuale: 63 } },
+      { id: 1, nome: 'Storia', prof: 'Rossi', colore: 'ambra', conteggi: { verifiche: 2, interrogazioni: 1, appunti: 6, lezioni: 2 }, centratura: { previste_uscite: 10, uscite_totali: 16, percentuale: 63 } },
     ];
   }
 
   function schede() {
     return {
       1: {
-        materia_id: 1, aggiornata_il: '2026-10-24T18:10:00+02:00', basata_su: { verifiche: 4, interrogazioni: 1, esiti: 2 },
+        materia_id: 1, aggiornata_il: '2026-10-24T18:10:00+02:00', basata_su: { verifiche: 2, interrogazioni: 1, esiti: 2 },
         argomenti: [
           { nome: 'Cause e conseguenze', volte: 4, esempio: 'Perché cadde la Repubblica?' },
           { nome: 'Date chiave', volte: 3, esempio: 'In che anno morì Augusto?' },
@@ -64,19 +64,69 @@
     };
   }
 
+  /** Un materiale d'esempio (il testo letto resta qui dentro: nell'elenco non si manda, come nel server). */
+  function mat(id, materia, tipo, titolo, data, origine, nomeFile, titoloDa, testo) {
+    return {
+      id, materia_id: materia, tipo, titolo, data, origine, nome_file: nomeFile, titolo_da: titoloDa, caratteri: testo.length, stato: 'pronto', errore: null,
+      avviso: null, costo_eur: origine === 'foto' ? 0.004 : 0, creato_il: data + 'T17:00:00+02:00', testo,
+    };
+  }
+
   function materiale() {
     return {
       1: [
-        { id: 10, materia_id: 1, tipo: 'appunti', titolo: 'Appunti: Tiberio e Caligola', data: '2026-10-24', origine: 'scritto', nome_file: null, caratteri: 4210, stato: 'pronto', errore: null, costo_eur: 0, creato_il: '2026-10-24T17:00:00+02:00' },
-        { id: 9, materia_id: 1, tipo: 'appunti', titolo: 'Appunti: Augusto e il principato', data: '2026-10-22', origine: 'file', nome_file: 'augusto.docx', caratteri: 5320, stato: 'pronto', errore: null, costo_eur: 0, creato_il: '2026-10-22T17:00:00+02:00' },
-        { id: 8, materia_id: 1, tipo: 'interrogazione', titolo: 'Interrogazione su Augusto', data: '2026-10-20', origine: 'scritto', nome_file: null, caratteri: 1210, stato: 'pronto', errore: null, costo_eur: 0, creato_il: '2026-10-20T15:00:00+02:00' },
-        { id: 7, materia_id: 1, tipo: 'verifica', titolo: 'Verifica sulla Repubblica', data: '2026-10-12', origine: 'file', nome_file: 'verifica.txt', caratteri: 5321, stato: 'pronto', errore: null, costo_eur: 0, creato_il: '2026-10-13T16:00:00+02:00' },
+        mat(15, 1, 'appunti', 'Nerone e l\'incendio di Roma', '2026-10-26', 'scritto', null, 'utente',
+          'Nerone diventa imperatore a 16 anni, nel 54 dopo Cristo. All\'inizio governa bene, guidato da Seneca.\nNel 64 un incendio distrugge gran parte di Roma: Nerone accusa i cristiani.\nPoi costruisce la Domus Aurea. Nel 68 il senato lo dichiara nemico pubblico e Nerone si uccide.'),
+        mat(14, 1, 'appunti', 'Caligola e Claudio', '2026-10-25', 'foto', 'IMG_20261025_1712.jpg', 'lectio',
+          'Caligola sale al trono nel 37: all\'inizio è amato, poi governa da padrone assoluto dell\'impero e umilia il senato. I pretoriani lo uccidono nel 41.\nClaudio, suo zio, sembra debole ma organizza bene l\'impero: crea uffici con i liberti e conquista la Britannia nel 43.\nNel principato di Augusto queste cose non sarebbero successe: Augusto teneva buoni i senatori.'),
+        mat(13, 1, 'appunti', 'Tiberio, Seiano e i processi', '2026-10-24', 'foto', 'IMG_20261024_1650.jpg', 'lectio',
+          'Tiberio è il figlio adottivo di Augusto. Governa con attenzione ai conti dell\'impero.\nI processi per lesa maestà riempiono Roma di paura.\nDal 26 vive a Capri e lascia Roma a Seiano, prefetto del pretorio. Nel 31 scopre la congiura e Seiano viene ucciso.\nAlla morte di Augusto l\'impero era in pace; con Tiberio il senato perde potere.'),
+        mat(12, 1, 'libro', 'Libro, capitolo 9: la dinastia giulio-claudia', '2026-10-23', 'file', 'storia-capitolo-9.pdf', 'lectio',
+          'Capitolo 9. L\'impero dei Giulio-Claudi.\nCon Augusto nasce il principato: le istituzioni della Repubblica restano, ma il potere vero è del princeps. Augusto riorganizza l\'esercito e le province.\nDopo Augusto regnano Tiberio, Caligola, Claudio e Nerone. Con la morte di Nerone, nel 68, finisce la dinastia e l\'impero entra in un anno di guerra civile.'),
+        mat(11, 1, 'appunti', 'Augusto e il principato', '2026-10-22', 'file', 'augusto.docx', 'lectio',
+          'Nel 27 avanti Cristo Ottaviano riceve dal senato il nome di Augusto.\nNon si fa chiamare re: si presenta come princeps, il primo cittadino.\nTiene in piedi le istituzioni della Repubblica, ma comanda l\'esercito e sceglie i governatori. Il prof Rossi chiede sempre la differenza tra principato e monarchia.'),
+        mat(10, 1, 'appunti', 'La crisi della Repubblica', '2026-10-08', 'foto', 'IMG_20261008_1530.jpg', 'lectio',
+          'I Gracchi vogliono dare terre ai poveri e vengono uccisi.\nMario apre l\'esercito ai nullatenenti; Silla marcia su Roma.\nCesare, Pompeo e Crasso fanno il primo triumvirato. Cesare viene ucciso nel 44 avanti Cristo.'),
+        mat(8, 1, 'interrogazione', 'Interrogazione su Augusto', '2026-10-20', 'scritto', null, 'utente',
+          'COSA MI HA CHIESTO:\nChe differenza c\'è tra principato e monarchia? Perché Augusto non si fa chiamare re?\nCOSA HO RISPOSTO:\nHo confuso il senato con i comizi.\nCOSA HA DETTO IL PROF:\nVuole le date precise: il 27 avanti Cristo.'),
+        mat(7, 1, 'verifica', 'Verifica sulla Repubblica', '2026-10-12', 'file', 'verifica-repubblica.txt', 'lectio',
+          'MATERIA: Storia | PROF: Rossi | DATA: 12/10 | TIPO: scritta | VOTO: 7\n## Domanda 1 (punti: 2)\nTESTO: Perché cadde la Repubblica?\nMIA RISPOSTA: Per le guerre civili.\nCORREZIONI DEL PROF: Manca il perché: i generali avevano eserciti personali.\nPUNTI PRESI: 1'),
+        mat(6, 1, 'verifica', 'Verifica sui Gracchi e Mario', '2026-09-28', 'file', 'verifica-gracchi.txt', 'lectio',
+          'MATERIA: Storia | PROF: Rossi | DATA: 28/09 | TIPO: scritta | VOTO: 6,5\n## Domanda 1 (punti: 2)\nTESTO: Che cosa volevano i Gracchi?\nMIA RISPOSTA: Dare le terre ai poveri.\nCORREZIONI DEL PROF: Giusto, ma quali terre? L\'agro pubblico.\nPUNTI PRESI: 1,5'),
       ],
       2: [
-        { id: 20, materia_id: 2, tipo: 'verifica', titolo: 'Verifica sulle fonti', data: '2026-10-05', origine: 'file', nome_file: 'fonti.pdf', caratteri: 3900, stato: 'pronto', errore: null, costo_eur: 0, creato_il: '2026-10-06T16:00:00+02:00' },
+        mat(20, 2, 'verifica', 'Verifica sulle fonti', '2026-10-05', 'file', 'fonti.pdf', 'lectio', 'MATERIA: Diritto | PROF: Bianchi | DATA: 05/10 | TIPO: scritta\n## Domanda 1\nTESTO: Che cos\'è una fonte del diritto?'),
       ],
     };
   }
+
+  // --- Suggeriti (contratto §16.2), in piccolo: parole dell'argomento nel titolo (2 punti) o due volte nel testo (1)
+
+  const VUOTE = ['della', 'delle', 'dello', 'degli', 'come', 'sulla', 'sulle', 'nella', 'nelle', 'dalla', 'dalle', 'tutta', 'tutto', 'tutti', 'anche', 'sono', 'questo', 'questa', 'quale', 'quali', 'cosa', 'dopo', 'prima', 'verso', 'senza', 'sopra', 'sotto', 'contro', 'tra', 'fra'];
+  const senzaAccenti = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const radice = (w) => (w.length > 4 ? w.replace(/[aeiou]+$/, '') : w);
+  const parole = (t) => senzaAccenti(t).split(/[^a-z]+/).filter((w) => w.length >= 4 && !VUOTE.includes(w));
+
+  function suggerisci(lista, argomento) {
+    const chiave = Array.from(new Set(parole(argomento)));
+    const punti = {};
+    const sugg = [];
+    if (!chiave.length) return { argomento: argomento || '', parole: [], suggeriti: [], punti };
+    for (const x of lista.filter((y) => y.stato === 'pronto')) {
+      const titolo = parole(x.titolo).map(radice);
+      const testo = parole(x.testo).map(radice);
+      let p = 0;
+      for (const w of chiave.map(radice)) {
+        if (titolo.includes(w)) p += 2;
+        else if (testo.filter((y) => y === w).length >= 2) p += 1;
+      }
+      if (p) punti[String(x.id)] = p;
+      if (p >= (chiave.length === 1 ? 1 : 2)) sugg.push(x.id);
+    }
+    return { argomento, parole: chiave, suggeriti: sugg, punti };
+  }
+
+  const senzaTesto = (x) => { const c = copia(x); delete c.testo; return c; };
 
   function eventi() {
     return [
@@ -142,7 +192,7 @@
     return [
       l12,
       Object.assign({
-        id: 10, materia_id: 2, evento_id: 7, argomento: 'Le fonti del diritto', durata_min: 20, durata_s: 1150, voce: 'azure:it-IT-IsabellaMultilingualNeural', stato: 'pronta', domande_saltabili: true,
+        id: 10, materia_id: 2, evento_id: 7, argomento: 'Le fonti del diritto', durata_min: 20, durata_s: 1150, voce: 'nas:giovanni', stato: 'pronta', domande_saltabili: true,
         avanzamento: { fase: null, fatto: 0, totale: 0, frase: null }, costo_eur: 0.02, creata_il: '2026-10-25T17:00:00+02:00', pronta_il: '2026-10-25T17:06:00+02:00', errore: null, nota: 'Gli appunti bastavano per circa 12 minuti: ho aggiunto esempi e domande.',
         ascolto: { posizione_s: 667, finita: false, aggiornato_il: '2026-10-26T08:10:00+01:00' }, audio: { byte: 9200000, sha256: 'b'.repeat(64) },
       }, g10, { testo: testoDi(g10.capitoli) }),
@@ -161,7 +211,10 @@
 
   const VOCI = [
     { id: 'mistral:voice_482', nome: 'Lorenzo', tipo: 'espressiva', fornitore: 'mistral', euro_al_minuto: 0.0126, disponibile: true },
-    { id: 'azure:it-IT-IsabellaMultilingualNeural', nome: 'Isabella', tipo: 'gratis', fornitore: 'azure', euro_al_minuto: 0, disponibile: true },
+    // §16.5: le voci gratis del NAS, più lente (minuti di lavoro per minuto di lezione).
+    { id: 'nas:giovanni', nome: 'Giovanni', tipo: 'gratis', fornitore: 'nas', euro_al_minuto: 0, disponibile: true, minuti_per_minuto: 0.6 },
+    { id: 'nas:giovanni_grande', nome: 'Giovanni grande', tipo: 'gratis', fornitore: 'nas', euro_al_minuto: 0, disponibile: true, minuti_per_minuto: 1.3 },
+    { id: 'nas:supertonic', nome: 'Supertonic', tipo: 'gratis', fornitore: 'nas', euro_al_minuto: 0, disponibile: true, minuti_per_minuto: 1.1 },
   ];
 
   const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -220,7 +273,7 @@
       const fasi = [['in_coda', null, 0, 0], ['in_preparazione', 'lettura', 0, 0], ['in_preparazione', 'scrittura', 0, 0], ['in_preparazione', 'voce', 3, 7], ['in_preparazione', 'voce', 6, 7], ['in_preparazione', 'montaggio', 0, 0]];
       const i = Math.floor(passati / 2.5);
       if (i >= fasi.length) {
-        Object.assign(l, lezioni()[0], { id: l.id, materia_id: l.materia_id, evento_id: l.evento_id, argomento: l.argomento, durata_min: l.durata_min, stato: 'pronta', ascolto: { posizione_s: 0, finita: false, aggiornato_il: new Date().toISOString() } });
+        Object.assign(l, lezioni()[0], { id: l.id, materia_id: l.materia_id, evento_id: l.evento_id, argomento: l.argomento, durata_min: l.durata_min, tipo: l.tipo, indicazioni: l.indicazioni, materiali: l.materiali, stato: 'pronta', ascolto: { posizione_s: 0, finita: false, aggiornato_il: new Date().toISOString() } });
         delete l._t0;
         return;
       }
@@ -231,6 +284,13 @@
     const spesa = () => {
       const p = Math.round(s.spesa.speso_eur / s.spesa.tetto_eur * 100);
       return Object.assign(copia(s.spesa), { percentuale: p });
+    };
+    /** Le regole del server su materiali e indicazioni (§15.5, §16.1): null se va bene, altrimenti [stato, errore]. */
+    const controllaLezione = (corpo) => {
+      if (Array.isArray(corpo.materiali) && !corpo.materiali.length) return [422, { errore: 'Scegli almeno un appunto o una verifica', codice: 'non_valido' }];
+      if (String(corpo.indicazioni || '').trim().length > 600) return [422, { errore: 'Le indicazioni possono avere al massimo 600 caratteri.', codice: 'non_valido' }];
+      if (corpo.tipo != null && !['spiegazione', 'ripasso', 'interrogazione'].includes(corpo.tipo)) return [422, { errore: 'Tipo di lezione sconosciuto.', codice: 'non_valido' }];
+      return null;
     };
     const stima = (corpo) => {
       const d = Number(corpo.durata_min) || 20;
@@ -247,6 +307,7 @@
         spesa_mese_eur: s.spesa.speso_eur, tetto_eur: s.impostazioni.tetto_eur, dopo_eur: dopo, consentita,
         motivo: consentita ? null : 'Sforerebbe il tetto di ' + String(s.impostazioni.tetto_eur).replace('.', ',') + ' €: usa la voce gratis',
         voce_gratis_caratteri_rimasti: 412000, si_azzera_il: s.spesa.si_azzera_il,
+        minuti_preparazione: Math.floor(2 + d * (voce.minuti_per_minuto != null ? voce.minuti_per_minuto : 0.1) + 0.5),
       };
     };
     const daRipassare = (materiaId) => copia(s.ripassare.filter((x) => {
@@ -335,18 +396,40 @@
       if ((m = /^\/server\/api\/materie\/(\d+)\/materiale$/.exec(p))) {
         const lista = s.materiale[m[1]] || (s.materiale[m[1]] = []);
         if (metodo === 'POST') {
-          const nuovo = { id: s.prossimoId++, materia_id: Number(m[1]), tipo: corpo.tipo || 'appunti', titolo: corpo.titolo || 'Appunti', data: corpo.data || s.oggi, origine: 'scritto', nome_file: null, caratteri: String(corpo.testo || '').length, stato: 'pronto', errore: null, costo_eur: 0, creato_il: new Date().toISOString() };
+          // §16.3: un titolo scritto da Andrea vale "utente"; senza titolo (o uguale al nome del file) vale "file".
+          const nomeFile = corpo.nome_file || null;
+          const daFile = nomeFile ? String(nomeFile).replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() : null;
+          const scritto = String(corpo.titolo || '').replace(/\s+/g, ' ').trim();
+          const titolo = scritto || daFile || (corpo.tipo === 'interrogazione' ? 'Interrogazione' : 'Appunti');
+          const titoloDa = scritto && scritto !== daFile ? 'utente' : 'file';
+          const nuovo = mat(s.prossimoId++, Number(m[1]), corpo.tipo || 'appunti', titolo.slice(0, 120), corpo.data || s.oggi, corpo.origine || (nomeFile ? 'file' : 'scritto'), nomeFile, titoloDa, String(corpo.testo || ''));
+          nuovo.creato_il = new Date().toISOString();
           lista.unshift(nuovo);
-          return [201, copia(nuovo)];
+          return [201, senzaTesto(nuovo)];
         }
-        return [200, copia(lista)];
+        return [200, lista.map(senzaTesto)];
       }
+      if ((m = /^\/server\/api\/materie\/(\d+)\/suggeriti$/.exec(p))) return [200, suggerisci(s.materiale[m[1]] || [], qs.get('argomento') || '')];
       if ((m = /^\/server\/api\/materiale\/(\d+)$/.exec(p))) {
         const tutti = Object.values(s.materiale).flat();
         const x = tutti.find((y) => y.id === Number(m[1]));
         if (!x) return [404, { errore: 'Questo materiale non c\'è più.', codice: 'non_trovato' }];
         if (metodo === 'DELETE') { s.materiale[x.materia_id] = s.materiale[x.materia_id].filter((y) => y !== x); return [200, { ok: true }]; }
-        return [200, Object.assign(copia(x), { testo: 'Testo d\'esempio letto dal server per "' + x.titolo + '".\n\nMATERIA: Storia | PROF: Rossi | DATA: 12/10 | TIPO: scritta | VOTO: 7\n## Domanda 1 (punti: 2)\nTESTO: Perché cadde la Repubblica?' })];
+        if (metodo === 'PATCH') {
+          // §16.3: titolo 1-120 caratteri (spazi in più tolti), tipo tra quelli del contratto; il titolo diventa di Andrea.
+          if (corpo.titolo != null) {
+            const t = String(corpo.titolo).replace(/\s+/g, ' ').trim();
+            if (!t || t.length > 120) return [422, { errore: 'Il titolo deve avere da 1 a 120 caratteri.', codice: 'non_valido', campo: 'titolo' }];
+            x.titolo = t;
+            x.titolo_da = 'utente';
+          }
+          if (corpo.tipo != null) {
+            if (!['verifica', 'interrogazione', 'appunti', 'libro', 'altro'].includes(corpo.tipo)) return [422, { errore: 'Tipo di materiale sconosciuto.', codice: 'non_valido', campo: 'tipo' }];
+            x.tipo = corpo.tipo;
+          }
+          return [200, senzaTesto(x)];
+        }
+        return [200, Object.assign(copia(x), { testo: x.testo || 'Testo d\'esempio letto dal server per "' + x.titolo + '".' })];
       }
       if (p === '/server/api/eventi' && metodo === 'GET') return [200, copia(s.eventi)];
       if ((m = /^\/server\/api\/materie\/(\d+)\/eventi$/.exec(p)) && metodo === 'POST') {
@@ -370,7 +453,7 @@
         return [200, copia(e)];
       }
       if (p === '/server/api/voci') return [200, copia(VOCI)];
-      if (p === '/server/api/lezioni/stima') return [200, stima(corpo || {})];
+      if (p === '/server/api/lezioni/stima') return controllaLezione(corpo || {}) || [200, stima(corpo || {})];
       if (p === '/server/api/spesa') return [200, spesa()];
       if (p === '/server/api/impostazioni') {
         if (metodo === 'PATCH') Object.assign(s.impostazioni, corpo);
@@ -384,11 +467,14 @@
         return [200, s.lezioni.filter((l) => !id || l.materia_id === id).map(listaLezione)];
       }
       if (p === '/server/api/lezioni' && metodo === 'POST') {
+        const no = controllaLezione(corpo || {});
+        if (no) return no;
         const st = stima(corpo || {});
         if (!st.consentita) return [402, { errore: st.motivo, codice: 'tetto_raggiunto' }];
         const l = {
           id: s.prossimoId++, materia_id: Number(corpo.materia_id), evento_id: corpo.evento_id || null, argomento: corpo.argomento || 'Lezione', durata_min: Number(corpo.durata_min) || 20, durata_s: null,
-          voce: corpo.voce, domande_saltabili: corpo.domande_saltabili != null ? !!corpo.domande_saltabili : !!s.impostazioni.domande_saltabili, stato: 'in_coda', avanzamento: { fase: null, fatto: 0, totale: 0, frase: null }, costo_eur: 0, creata_il: new Date().toISOString(), pronta_il: null, errore: null, nota: null,
+          voce: corpo.voce, domande_saltabili: corpo.domande_saltabili != null ? !!corpo.domande_saltabili : !!s.impostazioni.domande_saltabili,
+          tipo: corpo.tipo || 'spiegazione', indicazioni: String(corpo.indicazioni || '').replace(/[ \t]+/g, ' ').trim(), materiali: Array.isArray(corpo.materiali) ? corpo.materiali.slice() : [], stato: 'in_coda', avanzamento: { fase: null, fatto: 0, totale: 0, frase: null }, costo_eur: 0, creata_il: new Date().toISOString(), pronta_il: null, errore: null, nota: null,
           ascolto: { posizione_s: 0, finita: false, aggiornato_il: null }, audio: null, _t0: Date.now(),
         };
         s.lezioni.unshift(l);

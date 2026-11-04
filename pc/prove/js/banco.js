@@ -73,7 +73,13 @@ function server(opzioni) {
     if (p.startsWith('/locale/carica')) {
       const q = new URLSearchParams(p.split('?')[1] || '');
       const materia = Number(q.get('materia_id'));
-      const nuovo = { id: 900 + s.log.length, materia_id: materia, tipo: q.get('tipo') || 'verifica', titolo: q.get('titolo') || q.get('nome'), data: q.get('data') || null, origine: 'file', nome_file: q.get('nome'), caratteri: 0, stato: 'in_lettura', errore: null, costo_eur: 0, creato_il: new Date().toISOString() };
+      // Come il server (§16.3): senza titolo vale quello del nome del file ("file"), quello scritto da Andrea è "utente".
+      const nome = q.get('nome') || '';
+      const nuovo = {
+        id: 900 + s.log.length, materia_id: materia, tipo: q.get('tipo') || 'appunti', titolo: q.get('titolo') || nome.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '),
+        titolo_da: q.get('titolo') ? 'utente' : 'file', data: q.get('data') || null, origine: /\.(jpe?g|png|webp)$/i.test(nome) ? 'foto' : 'file', nome_file: nome,
+        caratteri: 0, stato: 'in_lettura', errore: null, costo_eur: 0, creato_il: new Date().toISOString(),
+      };
       (s.esempio.stato.materiale[materia] = s.esempio.stato.materiale[materia] || []).unshift(nuovo);
       return [201, nuovo];
     }

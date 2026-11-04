@@ -262,32 +262,44 @@ test('10. "Chiudi la lezione" (anche Esc) dalla scheda della domanda: punto all\
   await p.aspetta(() => !p.q('#domanda-velo') && p.A.lettore.id === null);
 });
 
-// --- 14. "Cambia": solo materiale pronto, stima coerente, mai vuoto ---------------------------------------
+// --- 14. Solo materiale pronto, stima coerente, mai vuoto (v1.4: caselle al posto di "Cambia") ----------------------
 
-test('14. Cambia: si manda solo materiale già letto, la stima riceve la scelta, con niente scelto si blocca', opz, async () => {
+test('14. si sceglie solo materiale già letto: in lettura spento ("Lo sto leggendo"), in errore non compare; con niente scelto si blocca', opz, async () => {
   const p = await apri({}, (s) => {
     s.esempio.stato.materiale[5] = [
-      { id: 501, materia_id: 5, tipo: 'appunti', titolo: 'Equazioni', data: '2026-10-20', stato: 'pronto' },
-      { id: 502, materia_id: 5, tipo: 'appunti', titolo: 'Delta', data: '2026-10-21', stato: 'pronto' },
-      { id: 503, materia_id: 5, tipo: 'appunti', titolo: 'Ancora in lettura', data: '2026-10-27', stato: 'in_lettura' },
+      { id: 501, materia_id: 5, tipo: 'appunti', titolo: 'Equazioni', data: '2026-10-20', origine: 'file', stato: 'pronto' },
+      { id: 502, materia_id: 5, tipo: 'appunti', titolo: 'Delta', data: '2026-10-21', origine: 'foto', stato: 'pronto' },
+      { id: 503, materia_id: 5, tipo: 'appunti', titolo: 'Ancora in lettura', data: '2026-10-27', origine: 'foto', stato: 'in_lettura' },
+      { id: 504, materia_id: 5, tipo: 'verifica', titolo: 'Non letta', data: '2026-10-27', origine: 'file', stato: 'errore', errore: 'Non riesco a leggerlo.' },
     ];
   });
+  const prepara = () => p.q('[data-azione="prepara"]');
+  const spuntati = () => p.tutti('.nl-mat[aria-checked="true"]').map((b) => Number(b.dataset.scelta));
+  const ultimaStima = () => p.s.chiamate('POST', '/server/api/lezioni/stima').pop();
   p.A.nuovaLezione(5);
-  await p.aspetta(() => p.pulsante('Cambia') && /Prepara la lezione ·/.test(p.q('[data-azione="prepara"]').textContent));
-  assert.match(p.q('.riga-usero').textContent, /2 appunti di Matematica/, 'quello in lettura non conta');
-  p.clic(p.pulsante('Cambia'));
-  await p.aspetta(() => p.pulsante('Equazioni'));
-  assert.equal(p.pulsante('Ancora in lettura'), undefined);
-  p.clic(p.pulsante('Equazioni'));
-  await p.aspetta(() => p.s.chiamate('POST', '/server/api/lezioni/stima').some((x) => Array.isArray(x.corpo.materiali)));
-  assert.deepEqual(p.s.chiamate('POST', '/server/api/lezioni/stima').filter((x) => x.corpo.materiali).pop().corpo.materiali, [502]);
-  p.clic(p.pulsante('Delta'));
-  await p.aspetta(() => p.q('[data-azione="prepara"]').disabled && /Scegli almeno un appunto o una verifica/.test(p.q('.finestra').textContent));
+  // L'argomento viene dalla verifica in arrivo ("Equazioni di secondo grado"): suggerito solo "Equazioni".
+  await p.aspetta(() => p.q('[data-scelta="503"]') && /Prepara la lezione ·/.test(prepara().textContent));
+  assert.deepEqual(spuntati(), [501]);
+  assert.equal(p.q('[data-scelta="503"]').disabled, true);
+  assert.match(p.q('[data-scelta="503"]').textContent, /Lo sto leggendo/);
+  assert.equal(p.q('[data-scelta="504"]'), null, 'in errore non compare');
+  assert.equal(p.q('[data-conta="materiale"]').textContent, '1 di 2 scelti');
+  assert.match(p.q('[data-gruppo="prof"]').textContent, /Nessuna ancora/);
+  // Toccare quello in lettura non fa niente.
+  p.clic(p.q('[data-scelta="503"]'));
+  assert.deepEqual(spuntati(), [501]);
+  // Tutti = tutto il materiale pronto.
+  p.clic(p.q('[data-modo="tutti"]'));
+  await p.aspetta(() => ultimaStima().corpo.materiali.join() === '501,502');
+  p.clic(p.q('[data-scelta="501"]'));
+  await p.aspetta(() => ultimaStima().corpo.materiali.join() === '502');
+  p.clic(p.q('[data-scelta="502"]'));
+  assert.equal(prepara().disabled, true);
+  await B.dorme(40);
   assert.equal(p.s.chiamate('POST', '/server/api/lezioni/stima').filter((x) => x.corpo.materiali && !x.corpo.materiali.length).length, 0);
-  p.clic(p.pulsante('Delta'));
-  await p.aspetta(() => !p.q('[data-azione="prepara"]').disabled);
-  p.scrivi(p.q('#nl-argomento'), 'Equazioni di secondo grado');
-  p.clic(p.q('[data-azione="prepara"]'));
+  p.clic(p.q('[data-scelta="502"]'));
+  await p.aspetta(() => !prepara().disabled);
+  p.clic(prepara());
   await p.aspetta(() => p.s.chiamate('POST', '/server/api/lezioni').some((x) => x.percorso === '/server/api/lezioni'));
   assert.deepEqual(p.s.chiamate('POST', '/server/api/lezioni').find((x) => x.percorso === '/server/api/lezioni').corpo.materiali, [502]);
 });

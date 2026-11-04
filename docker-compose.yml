@@ -1,8 +1,11 @@
 # Lectio sul NAS (Docker Compose, progetto "lectio"). Cartella sul NAS: /volume1/docker/Lectio-NAS
 #
-# Due container:
+# Tre container:
 #   lectio            -> il server: legge il materiale, prepara le lezioni (testo Mistral, voce
-#                        Mistral o Azure), monta l'MP3 con ffmpeg, tiene i conti
+#                        Mistral, del NAS o Azure), monta l'MP3 con ffmpeg, tiene i conti
+#   lectio-voci       -> le voci gratis sul NAS (Giovanni, Giovanni grande, Supertonic): nessuna
+#                        porta verso fuori, lo chiama solo lectio. I modelli (circa 0,9 GB) si
+#                        scaricano la prima volta in ./voci-cache e poi restano lì.
 #   lectio-tailscale  -> indirizzo https fisso e pubblico (Tailscale Funnel, come Sol e Pactum):
 #                        telefono e PC funzionano installando solo l'app. Ogni richiesta chiede
 #                        comunque il codice del dispositivo, e l'abbinamento si blocca dopo 10
@@ -34,6 +37,7 @@ services:
       LECTIO_DATI: /data
       LECTIO_DB: /data/lectio.db
       LECTIO_APK_DIR: /apk
+      LECTIO_VOCI_URL: http://lectio-voci:8000
     volumes:
       - lectio-data:/data
       - ./server/apk:/apk
@@ -42,6 +46,25 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+
+  lectio-voci:
+    build:
+      context: ./voci
+      dockerfile: Dockerfile
+    image: lectio-voci:1.0.0
+    container_name: lectio-voci
+    restart: unless-stopped
+    # Niente "ports": si raggiunge solo dalla rete interna, come http://lectio-voci:8000.
+    volumes:
+      - ./voci-cache:/cache
+    # Il NAS ha altre app: le voci lavorano con precedenza bassa (le altre passano davanti) e lasciano
+    # la memoria oltre 2,5 GB.
+    mem_limit: 2560m
+    logging:
+      driver: json-file
+      options:
+        max-size: "2m"
+        max-file: "2"
 
   lectio-tailscale:
     # Versione fissata (la stessa che gira già sul NAS per Sol): si aggiorna a mano, non da sola.

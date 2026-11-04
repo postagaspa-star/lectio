@@ -35,13 +35,11 @@ object Bersagli {
     const val AGGIUNGI = "aggiungi"
     const val TESTO_GEMINI = "testo-gemini"
     const val NUOVA_LEZIONE = "nuova-lezione"
-    const val DURATA = "durata"
     const val PREPARA = "prepara"
+    /** Il passo 7: la barra in basso di Nuova lezione (riepilogo + pulsante, aspetto.md §12). */
+    const val RIEPILOGO = "riepilogo"
     /** Il passo 8: scrivi la risposta e premi Invia (aspetto.md §12, v1.1). */
     const val SENTI_RISPOSTA = "invia-risposta"
-
-    /** Durata e costo: il binario e il pulsante insieme. */
-    const val DURATA_E_COSTO = "durata+prepara"
 }
 
 /**
@@ -59,7 +57,7 @@ class Visita {
         PassoVisita(Bersagli.AGGIUNGI, "Aggiungi una verifica", "Tocca Aggiungi per caricare una verifica corretta.", true, SchermataVisita.MATERIA),
         PassoVisita(Bersagli.TESTO_GEMINI, "Testo per Gemini", "Copialo, dallo a Gemini con la foto, poi manda qui il file.", false, SchermataVisita.FOGLIO_AGGIUNGI),
         PassoVisita(Bersagli.NUOVA_LEZIONE, "Nuova lezione", "Tocca Nuova lezione per prepararne una.", true, SchermataVisita.MATERIA),
-        PassoVisita(Bersagli.DURATA_E_COSTO, "Durata e costo", "Scegli quanto dura. Il costo lo vedi prima.", false, SchermataVisita.NUOVA_LEZIONE),
+        PassoVisita(Bersagli.RIEPILOGO, "Come la vuoi", "Scegli materiale, tipo e indicazioni: qui vedi cosa esce e quanto costa.", false, SchermataVisita.NUOVA_LEZIONE),
         PassoVisita(Bersagli.SENTI_RISPOSTA, "La domanda", "Scrivi la tua risposta e premi Invia: te la correggo.", true, SchermataVisita.LETTORE),
         PassoVisita(null, "Ecco fatto", "Adesso Lectio lavora con le tue lezioni vere.", false, SchermataVisita.LETTORE),
     )

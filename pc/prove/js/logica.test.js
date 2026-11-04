@@ -329,14 +329,6 @@ test('file: formati letti, HEIC e file troppo grandi rifiutati con la frase', ()
   assert.match(L.controllaFile('foto.heic', 1000), /HEIC/);
   assert.match(L.controllaFile('video.mp4', 1000), /non lo leggo/);
   assert.match(L.controllaFile('grande.pdf', 21 * 1024 * 1024), /20 MB/);
-  assert.equal(L.titoloDaFile('verifica_storia-12.pdf'), 'verifica storia 12');
-});
-
-test('"Userò": verifiche e interrogazioni sempre, appunti solo quelli accesi', () => {
-  const mat = [{ id: 1, tipo: 'verifica' }, { id: 2, tipo: 'verifica' }, { id: 3, tipo: 'interrogazione' }, { id: 4, tipo: 'appunti' }, { id: 5, tipo: 'appunti' }, { id: 6, tipo: 'appunti', stato: 'errore' }];
-  assert.equal(L.frasiUsero(mat, 'Storia'), '2 verifiche, 1 interrogazione e 2 appunti di Storia');
-  assert.equal(L.frasiUsero(mat, 'Storia', [4]), '2 verifiche, 1 interrogazione e 1 appunto di Storia');
-  assert.equal(L.frasiUsero([], 'Storia'), 'Ancora niente materiale di Storia');
 });
 
 test('materie: primo colore libero, sottotitolo, "Basata su"', () => {
@@ -368,13 +360,81 @@ test('domanda aperta: un punto tra inizio_s e inizio_risposta_s cade dentro la d
   assert.equal(L.domandaAperta([D, D2], 930).id, 34);
 });
 
-test('materiali: null finché non si tocca Cambia; poi solo pronti (verifiche e interrogazioni sempre, appunti accesi)', () => {
+test('materiale spuntato: in automatico i suggeriti (tutto se il server non sa suggerire), poi la scelta di Andrea; solo pronti', () => {
   const m = [{ id: 1, tipo: 'verifica', stato: 'pronto' }, { id: 2, tipo: 'verifica', stato: 'in_lettura' }, { id: 3, tipo: 'appunti', stato: 'pronto' },
-    { id: 4, tipo: 'appunti', stato: 'pronto' }, { id: 5, tipo: 'appunti', stato: 'in_lettura' }, { id: 6, tipo: 'interrogazione' }];
-  assert.equal(L.materialiScelti(m, null), null);
-  assert.deepEqual(L.materialiScelti(m, [3, 5]), [1, 3, 6]);
-  assert.deepEqual(L.materialiScelti([{ id: 3, tipo: 'appunti', stato: 'pronto' }], []), []);
-  assert.equal(L.frasiUsero(m, 'Storia'), '1 verifica, 1 interrogazione e 2 appunti di Storia');
+    { id: 4, tipo: 'appunti', stato: 'pronto' }, { id: 5, tipo: 'appunti', stato: 'in_lettura' }, { id: 6, tipo: 'interrogazione' }, { id: 7, tipo: 'appunti', stato: 'errore' }];
+  assert.deepEqual(L.materialiSpuntati(m, true, [4, 2, 1], []), [1, 4], 'suggeriti, ma solo quelli pronti, nell\'ordine dell\'elenco');
+  assert.deepEqual(L.materialiSpuntati(m, true, null, []), [1, 3, 4, 6], 'il server non sa suggerire: tutto il pronto');
+  assert.deepEqual(L.materialiSpuntati(m, true, [], [3]), [], 'argomento vuoto: niente');
+  assert.deepEqual(L.materialiSpuntati(m, false, [4], [3, 5, 7]), [3], 'la scelta di Andrea vale sui suggeriti; in lettura e in errore no');
+  const g = L.gruppiMateriale(m);
+  assert.deepEqual(g.studio.map((x) => x.id), [3, 4, 5], 'in errore non compare');
+  assert.deepEqual(g.prof.map((x) => x.id), [1, 2, 6]);
+  assert.deepEqual(L.filtraPerTitolo([{ titolo: 'Città e università' }, { titolo: 'Augusto' }], 'CITTA').map((x) => x.titolo), ['Città e università']);
+  assert.equal(L.sottoMateriale({ tipo: 'appunti', origine: 'foto', data: '2026-11-04' }), 'Appunti · foto · 4 novembre');
+  assert.equal(L.sottoMateriale({ tipo: 'verifica', origine: 'file', data: '2026-10-12' }), 'Verifica · file · 12 ottobre');
+});
+
+test('struttura della lezione in parole (contratto §16.1), per i tre tipi e le quattro durate', () => {
+  assert.equal(L.struttura('spiegazione', 15), '3 parti, una domanda dopo ognuna e 4 alla fine');
+  assert.equal(L.struttura('spiegazione', 20), '4 parti, una domanda dopo ognuna e 5 alla fine');
+  assert.equal(L.struttura('spiegazione', 30), '6 parti, una domanda dopo ognuna e 6 alla fine');
+  assert.equal(L.struttura('spiegazione', 45), '9 parti, una domanda dopo ognuna e 8 alla fine');
+  assert.deepEqual([15, 20, 30, 45].map((d) => L.struttura('ripasso', d)),
+    ['I punti chiave in breve e 6 domande alla fine', 'I punti chiave in breve e 8 domande alla fine', 'I punti chiave in breve e 10 domande alla fine', 'I punti chiave in breve e 13 domande alla fine']);
+  assert.deepEqual([15, 20, 30, 45].map((d) => L.struttura('interrogazione', d).split(' ')[0]), ['9', '12', '18', '27']);
+  assert.equal(L.struttura('interrogazione', 20), '12 domande come le fa il prof, con la risposta giusta dopo ognuna');
+  // Fuori tabella: 3 + durata/10 domande alla fine.
+  assert.equal(L.finaliSpiegazione(60), 9);
+  assert.equal(L.struttura('spiegazione', 60), '12 parti, una domanda dopo ognuna e 9 alla fine');
+  assert.equal(L.titoloLezione('ripasso', 30), 'Ripasso di 30 minuti');
+  assert.equal(L.titoloLezione(undefined, 20), 'Spiegazione di 20 minuti');
+});
+
+test('spunti: aggiungono la frase in fondo e la tolgono; mai una frase a metà oltre i 600 caratteri', () => {
+  const s1 = L.SPUNTI[1].frase;
+  assert.equal(s1, 'Insisti su date e nomi.');
+  let r = L.alternaSpunto('', s1);
+  assert.deepEqual(r, { testo: 'Insisti su date e nomi.', ok: true });
+  r = L.alternaSpunto('Parla di Seiano.  ', s1);
+  assert.equal(r.testo, 'Parla di Seiano. Insisti su date e nomi.');
+  r = L.alternaSpunto(r.testo, s1);
+  assert.equal(r.testo, 'Parla di Seiano.');
+  r = L.alternaSpunto('Prima. ' + s1 + ' Dopo.', s1);
+  assert.equal(r.testo, 'Prima. Dopo.');
+  r = L.alternaSpunto('x'.repeat(590), s1);
+  assert.equal(r.ok, false);
+  assert.equal(r.testo.length, 590);
+  assert.equal(L.SPUNTI.length, 6);
+  assert.ok(L.SPUNTI.every((x) => !/!/.test(x.frase + x.etichetta)));
+});
+
+test('riepilogo: materiale, indicazioni, per', () => {
+  assert.equal(L.riepilogoMateriale([]), 'Scegli almeno un materiale');
+  assert.equal(L.riepilogoMateriale(['Mirone e il Discobolo']), 'Mirone e il Discobolo');
+  assert.equal(L.riepilogoMateriale(['A', 'B']), '2 materiali: A e B');
+  assert.equal(L.riepilogoMateriale(['A', 'B', 'C']), '3 materiali: A, B e un altro');
+  assert.equal(L.riepilogoMateriale(['A', 'B', 'C', 'D', 'E']), '5 materiali: A, B e altri 3');
+  assert.equal(L.riepilogoIndicazioni('   '), 'Nessuna: segue il materiale e la scheda del prof');
+  assert.equal(L.riepilogoIndicazioni('a'.repeat(200)), 'a'.repeat(140) + '…');
+  assert.equal(L.riepilogoPer(null, false), 'Nessuna data · domande obbligatorie');
+  assert.equal(L.riepilogoPer({ tipo: 'orale', data: '2026-11-10' }, true), 'L\'interrogazione di martedì 10 novembre · domande che si possono saltare');
+  assert.equal(L.etichettaEvento({ tipo: 'scritta', data: '2026-10-29' }), 'Verifica di giovedì 29 ottobre');
+});
+
+test('un materiale: famiglia del tipo, nota sotto il titolo, solo i campi cambiati', () => {
+  assert.equal(L.famigliaDi('libro').nome, 'Da studiare');
+  assert.equal(L.famigliaDi('interrogazione').nome, 'Già corretta dal prof');
+  assert.equal(L.famigliaDi('altro').nome, 'Da studiare');
+  assert.equal(L.notaTitolo({ titolo_da: 'lectio', origine: 'foto', nome_file: 'IMG_1.jpg' }), 'Dalla foto IMG_1.jpg · titolo scritto da Lectio leggendo la foto');
+  assert.equal(L.notaTitolo({ titolo_da: 'lectio', origine: 'file', nome_file: 'cap9.pdf' }), 'Dal file cap9.pdf · titolo scritto da Lectio leggendo il file');
+  assert.equal(L.notaTitolo({ titolo_da: 'file', origine: 'file', nome_file: 'cap9.pdf' }), 'Dal file cap9.pdf');
+  assert.equal(L.notaTitolo({ titolo_da: 'utente', origine: 'file', nome_file: 'cap9.pdf' }), null);
+  assert.equal(L.notaTitolo({ titolo: 'vecchio' }), null, 'un server vecchio senza titolo_da: niente nota');
+  const x = { titolo: 'Caligola e Claudio', tipo: 'appunti' };
+  assert.deepEqual(L.campiCambiati(x, { titolo: ' Caligola  e Claudio ', tipo: 'appunti' }), {});
+  assert.deepEqual(L.campiCambiati(x, { titolo: 'Caligola e Claudio', tipo: 'libro' }), { tipo: 'libro' });
+  assert.deepEqual(L.campiCambiati(x, { titolo: 'Caligola, Claudio ', tipo: 'appunti' }), { titolo: 'Caligola, Claudio' });
 });
 
 test('scheda del prof: esempio mai null, volte tenute; limiti del server con la frase del campo', () => {

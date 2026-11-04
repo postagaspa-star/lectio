@@ -86,8 +86,6 @@ import eu.stgm.lectio.ui.altre.ModificaSchedaScreen
 import eu.stgm.lectio.ui.altre.ModificaSchedaViewModel
 import eu.stgm.lectio.ui.altre.ProssimeScreen
 import eu.stgm.lectio.ui.altre.ProssimeViewModel
-import eu.stgm.lectio.ui.altre.TestoMaterialeScreen
-import eu.stgm.lectio.ui.altre.TestoMaterialeViewModel
 import eu.stgm.lectio.ui.comuni.BarraSchede
 import eu.stgm.lectio.ui.gemini.GeminiScreen
 import eu.stgm.lectio.ui.gemini.GeminiViewModel
@@ -107,6 +105,8 @@ import eu.stgm.lectio.ui.lezioni.LezioniScreen
 import eu.stgm.lectio.ui.lezioni.LezioniViewModel
 import eu.stgm.lectio.ui.materiale.AggiuntaViewModel
 import eu.stgm.lectio.ui.materiale.FoglioAggiungi
+import eu.stgm.lectio.ui.materiale.MaterialeScreen
+import eu.stgm.lectio.ui.materiale.MaterialeViewModel
 import eu.stgm.lectio.ui.materiale.PassoAggiunta
 import eu.stgm.lectio.ui.materiale.PreparatoreFile
 import eu.stgm.lectio.ui.materiale.RichiestaAggiunta
@@ -334,7 +334,8 @@ private fun App(
             is Arrivo.Condivisione -> aggiuntaVera.apri(RichiestaAggiunta(
                 materiaId = null,
                 passo = PassoAggiunta.FILE,
-                tipo = TipoMateriale.VERIFICA,
+                // "Che cos'è" parte da Appunti; un testo di Gemini lo riconosce il foglio (contratto §16.4).
+                tipo = TipoMateriale.APPUNTI,
                 file = a.condiviso.file.map { (u, tipo) -> preparatore.leggi(Uri.parse(u), tipo) },
                 testo = a.condiviso.testo,
                 oggetto = a.condiviso.oggetto,
@@ -501,7 +502,7 @@ private fun Pagine(
                 AzioniMateria(
                     indietro = indietro,
                     modificaScheda = { vai(nav.apri(Pagina.ModificaScheda(p.id))) },
-                    aggiungi = { tipo -> aggiungi(RichiestaAggiunta(p.id, if (tipo != null) PassoAggiunta.SCEGLI else PassoAggiunta.SCEGLI, tipo ?: TipoMateriale.VERIFICA)) },
+                    aggiungi = { tipo -> aggiungi(RichiestaAggiunta(p.id, PassoAggiunta.SCEGLI, tipo ?: TipoMateriale.APPUNTI, tipoChiesto = tipo)) },
                     apriMateriale = { vai(nav.apri(Pagina.TestoMateriale(it))) },
                     nuovaLezione = { e -> nuovaLezioneDa(p.id, e) },
                     apriLezione = { l -> if (l.pronta) apriLettore(l.id) else vai(nav.apri(Pagina.Preparazione(l.id))) },
@@ -515,8 +516,8 @@ private fun Pagine(
             ModificaSchedaScreen(vm, indietro)
         }
         is Pagina.TestoMateriale -> {
-            val vm: TestoMaterialeViewModel = viewModel(key = "materiale-${p.id}-$chiave") { TestoMaterialeViewModel(sorgente, p.id) }
-            TestoMaterialeScreen(vm, indietro, offline)
+            val vm: MaterialeViewModel = viewModel(key = "materiale-${p.id}-$chiave") { MaterialeViewModel(sorgente, p.id) }
+            MaterialeScreen(vm, indietro, esempio, offline)
         }
         is Pagina.NuovaLezione -> {
             val vm: NuovaLezioneViewModel = viewModel(key = "nuova-${p.materiaId}-${p.eventoId}-$chiave") { NuovaLezioneViewModel(sorgente, p.materiaId, p.eventoId) }
@@ -553,7 +554,7 @@ private fun Pagine(
         }
         is Pagina.ComeAndata -> {
             val vm: ComeAndataViewModel = viewModel(key = "esito-${p.eventoId}-$chiave") { ComeAndataViewModel(sorgente, p.eventoId) }
-            ComeAndataScreen(vm, indietro, onCaricaVerifica = { m -> aggiungi(RichiestaAggiunta(m, PassoAggiunta.SCEGLI, TipoMateriale.VERIFICA)) }, offline)
+            ComeAndataScreen(vm, indietro, onCaricaVerifica = { m -> aggiungi(RichiestaAggiunta(m, PassoAggiunta.SCEGLI, TipoMateriale.VERIFICA, tipoChiesto = TipoMateriale.VERIFICA)) }, offline)
         }
         Pagina.Prossime -> {
             val vm: ProssimeViewModel = viewModel(key = "prossime-$chiave") { ProssimeViewModel(sorgente) }

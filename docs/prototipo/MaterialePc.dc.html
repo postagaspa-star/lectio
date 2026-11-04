@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Lectio PC — Un materiale (proposta)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2F3CB0;text-decoration:none}a:hover{color:#1F2A8A}
+</style>
+</helmet>
+<div style="min-height: 820px; background: #DCDAD4; color: #1A1A1F; font-family: Figtree, system-ui, sans-serif; box-sizing: border-box; padding: 40px 24px; display: flex; justify-content: center; align-items: flex-start">
+
+<div style="width: 100%; max-width: 640px; background: #F5F4F0; border-radius: 26px; padding: 26px; box-sizing: border-box; box-shadow: 0 20px 60px rgba(20,20,30,.25); display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; align-items: center; gap: 12px">
+<span style="display: flex; align-items: center; gap: 8px; background: #FBF1DE; color: #8A5506; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700"><span style="width: 8px; height: 8px; border-radius: 999px; background: #C27C0E"></span>Storia dell'Arte</span>
+<div style="flex-grow: 1"></div>
+<a href="NuovaLezionePc.dc.html" aria-label="Chiudi" style="width: 44px; height: 44px; border-radius: 999px; background: #ECEAE4; display: flex; align-items: center; justify-content: center">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A1A1F" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+</div>
+
+<label style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">TITOLO</span>
+<input value="{{ titolo }}" onInput="{{ scriviTitolo }}" style="height: 52px; border-radius: 14px; border: 2px solid #ECEAE4; background: #FFFFFF; padding: 0 14px; font-family: inherit; font-size: 18px; font-weight: 700; color: #1A1A1F; outline: none">
+<span style="font-size: 13px; font-weight: 600; color: #5E5E68">Dalla foto WhatsApp Image 2026 11 04 at 4.47.11 PM · titolo scritto da me leggendo la foto</span>
+</label>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">CHE COS'È</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="{{ stileStudio }}">
+<span style="font-size: 16px; font-weight: 800">Da studiare</span>
+<span style="font-size: 13px; font-weight: 500; color: #5E5E68; line-height: 1.35">Lectio lo spiega e ci fa le domande</span>
+<div style="display: flex; gap: 6px; margin-top: 4px">
+<button onClick="{{ appunti }}" style="{{ stileAppunti }}">Appunti</button>
+<button onClick="{{ libro }}" style="{{ stileLibro }}">Libro</button>
+</div>
+</div>
+<div style="{{ stileProf }}">
+<span style="font-size: 16px; font-weight: 800">Già corretta dal prof</span>
+<span style="font-size: 13px; font-weight: 500; color: #5E5E68; line-height: 1.35">Lectio impara come chiede e corregge</span>
+<div style="display: flex; gap: 6px; margin-top: 4px">
+<button onClick="{{ verifica }}" style="{{ stileVerifica }}">Verifica</button>
+<button onClick="{{ interrogazione }}" style="{{ stileInterrogazione }}">Interrogazione</button>
+</div>
+</div>
+</div>
+</div>
+
+<div style="background: #FFFFFF; border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #5E5E68">COSA HO LETTO · 1.976 CARATTERI</span>
+<span style="font-size: 15px; font-weight: 500; line-height: 1.5; color: #1A1A1F">Mirone di Eleutere → Discobolo, 2 versioni, 460-450 a.C. Ipotesi A: guerriero... B: atleta rispettoso degli dei...</span>
+</div>
+
+<div style="display: flex; align-items: center; gap: 12px">
+<button onClick="{{ salva }}" style="height: 50px; padding: 0 24px; border-radius: 16px; border: none; background: #3D4ED8; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 700; box-shadow: 0 8px 20px rgba(61,78,216,.28); cursor: pointer">{{ etichettaSalva }}</button>
+<div style="flex-grow: 1"></div>
+<button style="height: 44px; padding: 0 12px; border: none; background: none; color: #B42318; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">Elimina</button>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const tipo = s.tipo || "appunti";
+const titolo = s.titolo ?? "Mirone e il Discobolo";
+const studio = tipo === "appunti" || tipo === "libro";
+const gruppo = "display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 18px; box-sizing: border-box; ";
+const gOn = gruppo + "border: 2px solid #3D4ED8; background: #FFFFFF;";
+const gOff = gruppo + "border: 2px solid #ECEAE4; background: #FAFAF8;";
+const pill = "height: 38px; padding: 0 14px; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; ";
+const on = pill + "border: 2px solid #3D4ED8; background: #ECEEFE; color: #2F3CB0;";
+const off = pill + "border: 2px solid transparent; background: #F5F4F0; color: #1A1A1F;";
+return {
+titolo: titolo,
+scriviTitolo: (e) => this.setState({ titolo: e.target.value, salvato: false }),
+stileStudio: studio ? gOn : gOff,
+stileProf: studio ? gOff : gOn,
+stileAppunti: tipo === "appunti" ? on : off,
+stileLibro: tipo === "libro" ? on : off,
+stileVerifica: tipo === "verifica" ? on : off,
+stileInterrogazione: tipo === "interrogazione" ? on : off,
+appunti: () => this.setState({ tipo: "appunti", salvato: false }),
+libro: () => this.setState({ tipo: "libro", salvato: false }),
+verifica: () => this.setState({ tipo: "verifica", salvato: false }),
+interrogazione: () => this.setState({ tipo: "interrogazione", salvato: false }),
+salva: () => this.setState({ salvato: true }),
+etichettaSalva: s.salvato ? "Salvato" : "Salva"
+};
+}
+}
+</script>
+</body>
+</html>

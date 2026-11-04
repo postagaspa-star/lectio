@@ -119,12 +119,19 @@ class ContrattoTest {
     fun vociStimeSpesa() = runBlocking {
         server.rispondi("GET /api/voci", """[{"id": "mistral:voice_482", "nome": "Lorenzo", "tipo": "espressiva", "fornitore": "mistral", "euro_al_minuto": 0.0126, "disponibile": true},
  {"id": "azure:it-IT-IsabellaMultilingualNeural", "nome": "Isabella", "tipo": "gratis", "fornitore": "azure", "euro_al_minuto": 0, "disponibile": true}]""")
-        ok(client.voci()) { assertEquals(2, it.size); assertEquals(0.0126, it[0].euroAlMinuto, 0.0) }
+        ok(client.voci()) { assertEquals(2, it.size); assertEquals(0.0126, it[0].euroAlMinuto, 0.0); assertNull(it[1].minutiPerMinuto) }
         server.rispondi("POST /api/lezioni/stima", Esempi.STIMA)
         ok(client.stima(RichiestaStima(1, 20, "mistral:voice_482"))) {
             assertEquals(0.25, it.costoEur, 0.0)
             assertEquals(412000L, it.voceGratisCaratteriRimasti)
+            assertNull("i server vecchi non lo mandano", it.minutiPreparazione)
         }
+        // Le voci gratis del NAS: più d'una, ognuna col suo tempo di lavoro; la stima dice i minuti.
+        server.rispondi("GET /api/voci", """[{"id":"nas:giovanni","nome":"Giovanni","tipo":"gratis","fornitore":"nas","euro_al_minuto":0,"disponibile":true,"minuti_per_minuto":0.5},
+ {"id":"nas:supertonic","nome":"Supertonic","tipo":"gratis","fornitore":"nas","euro_al_minuto":0,"disponibile":true,"minuti_per_minuto":1.2,"altro":"x"}]""")
+        ok(client.voci()) { assertEquals(listOf(0.5, 1.2), it.map { v -> v.minutiPerMinuto }) }
+        server.rispondi("POST /api/lezioni/stima", Esempi.STIMA.replace("}", ", \"minuti_preparazione\": 12}"))
+        ok(client.stima(RichiestaStima(1, 20, "nas:giovanni"))) { assertEquals(12, it.minutiPreparazione) }
         server.rispondi("GET /api/spesa", """{"mese":"2026-10","speso_eur":0.80,"tetto_eur":2.00,"percentuale":40,"si_azzera_il":"2026-11-01","voce_gratis":{"caratteri_usati":88000,"caratteri_mese":500000},"voci":[{"quando":"2026-10-27T10:00:00+01:00","cosa":"voce","fornitore":"mistral","quantita":18300,"unita":"caratteri","costo_eur":0.23,"lezione_id":12}]}""")
         ok(client.spesa()) { assertEquals(500000L, it.voceGratis?.caratteriMese); assertEquals(12L, it.voci[0].lezioneId) }
     }
@@ -163,6 +170,53 @@ class ContrattoTest {
         val corpo2 = JsonLectio.parseToJsonElement(server.richiesteA("POST /api/lezioni")[1].body.readUtf8()).jsonObject
         assertEquals("[7,9]", corpo2["materiali"].toString())
         assertFalse(corpo2.containsKey("evento_id"))
+    }
+
+    /** Contratto v1.4 §16: tipo, indicazioni, materiali scelti, suggeriti, PATCH del materiale. */
+    @Test
+    fun nuovaLezioneV14() = runBlocking {
+        // Lezione: tipo, indicazioni e materiali usati; da un server vecchio i valori di base.
+        server.rispondi("GET /api/lezioni", "[${Esempi.LEZIONE.replace("\"domande_saltabili\": false}", "\"domande_saltabili\": false, \"tipo\": \"ripasso\", \"indicazioni\": \"Insisti su Seiano.\", \"materiali\": [21, 23]}")}, ${Esempi.LEZIONE}]")
+        ok(client.lezioni()) {
+            assertEquals("ripasso", it[0].tipo)
+            assertEquals("Insisti su Seiano.", it[0].indicazioni)
+            assertEquals(listOf(21L, 23L), it[0].materiali)
+            assertEquals("spiegazione", it[1].tipo)
+            assertNull(it[1].indicazioni)
+            assertTrue(it[1].materiali.isEmpty())
+        }
+
+        // Stima e creazione mandano sempre tipo e indicazioni (e materiali, se ci sono).
+        server.rispondi("POST /api/lezioni/stima", Esempi.STIMA)
+        ok(client.stima(RichiestaStima(1, 20, "mistral:voice_482", listOf(21L), "interrogazione", "Più difficili."))) {}
+        val stima = JsonLectio.parseToJsonElement(server.richiesteA("POST /api/lezioni/stima").single().body.readUtf8()).jsonObject
+        assertEquals("[21]", stima["materiali"].toString())
+        assertEquals("interrogazione", stima["tipo"]!!.jsonPrimitive.content)
+        assertEquals("Più difficili.", stima["indicazioni"]!!.jsonPrimitive.content)
+        server.rispondi("POST /api/lezioni", Esempi.LEZIONE, 201)
+        ok(client.creaLezione(NuovaLezione(1, null, "Augusto", listOf(21L), 20, "mistral:voice_482", tipo = "ripasso"))) {}
+        val crea = JsonLectio.parseToJsonElement(server.richiesteA("POST /api/lezioni").single().body.readUtf8()).jsonObject
+        assertEquals("ripasso", crea["tipo"]!!.jsonPrimitive.content)
+        assertEquals("", crea["indicazioni"]!!.jsonPrimitive.content)
+
+        // Suggeriti: l'argomento va nell'indirizzo, con gli spazi e gli apostrofi codificati.
+        server.rispondi("GET /api/materie/1/suggeriti", """{"argomento":"L'Impero romano","parole":["impero","romano"],"suggeriti":[21,23],"punti":{"21":3,"23":2}}""")
+        ok(client.suggeriti(1, "L'Impero romano")) {
+            assertEquals(listOf(21L, 23L), it.suggeriti)
+            assertEquals(3, it.punti["21"])
+        }
+        assertEquals("/api/materie/1/suggeriti?argomento=L%27Impero%20romano", server.richiesteA("GET /api/materie/1/suggeriti").single().path)
+
+        // Materiale: chi ha scritto il titolo, e il PATCH con i soli campi cambiati.
+        server.rispondi("GET /api/materiale/7", """{"id":7,"materia_id":1,"tipo":"appunti","titolo":"Foto 4 novembre","stato":"pronto","titolo_da":"lectio","campo_nuovo":1}""")
+        ok(client.materialeDettaglio(7)) { assertEquals("lectio", it.titoloDa) }
+        server.rispondi("PATCH /api/materiale/7", """{"id":7,"materia_id":1,"tipo":"verifica","titolo":"Foto 4 novembre","stato":"pronto","titolo_da":"lectio"}""")
+        ok(client.modificaMateriale(7, kotlinx.serialization.json.buildJsonObject { put("tipo", kotlinx.serialization.json.JsonPrimitive("verifica")) })) {
+            assertEquals("verifica", it.tipo)
+        }
+        val patch = server.richiesteA("PATCH /api/materiale/7").single()
+        assertEquals("""{"tipo":"verifica"}""", patch.body.readUtf8())
+        assertTrue(patch.getHeader("Content-Type")!!.startsWith("application/json"))
     }
 
     @Test

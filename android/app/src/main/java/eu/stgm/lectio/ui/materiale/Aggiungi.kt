@@ -90,7 +90,13 @@ enum class PassoAggiunta { SCEGLI, FILE, APPUNTI, INTERROGAZIONE, FOTO }
 data class RichiestaAggiunta(
     val materiaId: Long? = null,
     val passo: PassoAggiunta = PassoAggiunta.SCEGLI,
-    val tipo: TipoMateriale = TipoMateriale.VERIFICA,
+    /** "Che cos'è": file e foto partono da Appunti (contratto §16.4). */
+    val tipo: TipoMateriale = TipoMateriale.APPUNTI,
+    /**
+     * Il tipo chiesto da chi apre il foglio ("Aggiungi una verifica", "Carica la verifica
+     * corretta"): file e foto partono da quello invece che da Appunti.
+     */
+    val tipoChiesto: TipoMateriale? = null,
     val file: List<FileScelto> = emptyList(),
     /** Testo condiviso da un'altra app (Gemini): diventa un file .txt. */
     val testo: String? = null,
@@ -171,9 +177,33 @@ class AggiuntaViewModel(
     }
 
     fun apri(r: RichiestaAggiunta) {
-        _stato.value = StatoAggiunta(aperto = true, richiesta = r, campi = CampiAggiunta(data = dataIniziale(r.passo)))
+        // Un testo di Gemini condiviso parte già come verifica o interrogazione.
+        val tipo = Condivisione.tipoDaGemini(r.testo) ?: r.tipo
+        _stato.value = StatoAggiunta(aperto = true, richiesta = r.copy(tipo = tipo), campi = CampiAggiunta(data = dataIniziale(r.passo)))
         ricorda()
         caricaMaterie()
+        rilevaTipoDaiFile()
+    }
+
+    /** Il tipo da cui partono file e foto: quello chiesto da chi ha aperto il foglio, altrimenti Appunti. */
+    fun tipoPerFile(r: RichiestaAggiunta = _stato.value.richiesta): TipoMateriale = r.tipoChiesto ?: TipoMateriale.APPUNTI
+
+    /** File e foto scelti: si aggiungono e, se uno è un testo di Gemini, "Che cos'è" lo dice. */
+    fun scelti(passo: PassoAggiunta, file: List<FileScelto>, aggiungi: Boolean) {
+        val r = _stato.value.richiesta
+        cambia(r.copy(passo = passo, file = if (aggiungi) r.file + file else file, tipo = tipoPerFile(r)))
+        rilevaTipoDaiFile()
+    }
+
+    /** Legge l'inizio dei file di testo: la riga MATERIA/TIPO di Gemini dice se è una verifica. */
+    private fun rilevaTipoDaiFile() {
+        val p = preparatore ?: return
+        val file = _stato.value.richiesta.file
+        if (file.none { it.genere == eu.stgm.lectio.logica.GenereFile.TESTO || it.genere == eu.stgm.lectio.logica.GenereFile.MARKDOWN }) return
+        viewModelScope.launch {
+            val trovato = file.firstNotNullOfOrNull { Condivisione.tipoDaGemini(p.inizio(it)) } ?: return@launch
+            aggiorna { s -> if (s.richiesta.file == file) s.copy(richiesta = s.richiesta.copy(tipo = trovato)) else s }
+        }
     }
 
     private fun caricaMaterie() {
@@ -287,22 +317,19 @@ fun FoglioAggiungi(
 
     val sceltaFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty() && preparatore != null) {
-            val adesso = vm.stato.value.richiesta
-            vm.cambia(adesso.copy(passo = PassoAggiunta.FILE, file = uris.map { preparatore.leggi(it) }, tipo = TipoMateriale.VERIFICA))
+            vm.scelti(PassoAggiunta.FILE, uris.map { preparatore.leggi(it) }, aggiungi = false)
         }
     }
     val sceltaFoto = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
         if (uris.isNotEmpty() && preparatore != null) {
-            val adesso = vm.stato.value.richiesta
-            vm.cambia(adesso.copy(passo = PassoAggiunta.FOTO, file = adesso.file + uris.map { preparatore.leggi(it) }, tipo = TipoMateriale.VERIFICA))
+            vm.scelti(PassoAggiunta.FOTO, uris.map { preparatore.leggi(it) }, aggiungi = true)
         }
     }
     val scatto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         // La foto in corso viene dal ViewModel: c'è anche se nel frattempo l'app è stata ricreata.
         val uri = vm.stato.value.campi.fotoInCorso?.let(Uri::parse)
         if (ok && uri != null && preparatore != null) {
-            val adesso = vm.stato.value.richiesta
-            vm.cambia(adesso.copy(passo = PassoAggiunta.FOTO, file = adesso.file + preparatore.leggi(uri, "image/jpeg"), tipo = TipoMateriale.VERIFICA))
+            vm.scelti(PassoAggiunta.FOTO, listOf(preparatore.leggi(uri, "image/jpeg")), aggiungi = true)
         }
         vm.campi { it.copy(fotoInCorso = null) }
     }
@@ -341,7 +368,7 @@ fun FoglioAggiungi(
                     Riga()
                     RigaScelta(Icone.Interrogazione, "Interrogazione orale", null) { vm.cambia(r.copy(passo = PassoAggiunta.INTERROGAZIONE, tipo = TipoMateriale.INTERROGAZIONE)) }
                     Riga()
-                    RigaScelta(Icone.Foto, "Foto", "circa ${Formati.cent(Costi.COSTO_FOTO_EUR)} a foto") { vm.cambia(r.copy(passo = PassoAggiunta.FOTO, tipo = TipoMateriale.VERIFICA)) }
+                    RigaScelta(Icone.Foto, "Foto", "circa ${Formati.cent(Costi.COSTO_FOTO_EUR)} a foto") { vm.cambia(r.copy(passo = PassoAggiunta.FOTO, tipo = vm.tipoPerFile(r))) }
                 }
             }
             PassoAggiunta.FILE -> ModuloFile(s, vm, senzaRete)
@@ -393,14 +420,10 @@ private fun RigaScelta(icona: ImageVector, titolo: String, sotto: String?, onCli
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** "Che cos'è" nel foglio (contratto §16.4): le due famiglie, una sotto l'altra. */
 @Composable
 private fun SceltaTipo(scelto: TipoMateriale, onScegli: (TipoMateriale) -> Unit) {
-    CampoConEtichetta("Tipo") {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TipoMateriale.SCELTE.forEach { t -> PillolaScelta(t.etichetta, t == scelto, { onScegli(t) }) }
-        }
-    }
+    SceltaCheCosE(scelto, onScegli)
 }
 
 @Composable
@@ -414,8 +437,10 @@ private fun ModuloFile(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Boole
     }
     SceltaTipo(r.tipo) { vm.cambia(r.copy(tipo = it)) }
     if (r.file.size <= 1) {
+        // Facoltativo: se resta vuoto non si manda e il titolo lo scrive Lectio (contratto §16.3).
+        val cosa = if (r.passo == PassoAggiunta.FOTO) "la foto" else "il file"
         CampoConEtichetta("Titolo") {
-            Campo(s.campi.titolo, { t -> vm.campi { it.copy(titolo = t.take(120)) } }, segnaposto = "Lo prendo dal file", tastiera = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+            Campo(s.campi.titolo, { t -> vm.campi { it.copy(titolo = t.take(120)) } }, segnaposto = "Lo scrive Lectio leggendo $cosa", tastiera = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
         }
     }
     // Senza data scelta il server la prende dal file (la riga DATA del testo di Gemini).

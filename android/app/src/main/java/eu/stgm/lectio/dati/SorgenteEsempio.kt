@@ -1,5 +1,7 @@
 package eu.stgm.lectio.dati
 
+import eu.stgm.lectio.logica.Costi
+
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.FileDaCaricare
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,7 +110,7 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
 
     private val lezioneDiritto = Lezione(
         id = 9, materiaId = 2, eventoId = 7, argomento = "Le fonti del diritto", durataMin = 20, durataS = 1190.0,
-        voce = "azure:it-IT-IsabellaMultilingualNeural", stato = "pronta", costoEur = 0.02, creataIl = adessoIso,
+        voce = "nas:giovanni", stato = "pronta", costoEur = 0.02, creataIl = adessoIso,
         ascolto = Ascolto(690.0, false, adessoIso),
         capitoli = listOf(
             Capitolo(1, "Che cos'è una fonte", 0.0, 300.0),
@@ -150,13 +152,28 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         ),
     )
 
+    /** Il materiale di Storia: appunti, foto, libro, una verifica e un'interrogazione (contratto §16). */
     private val materiale = mutableListOf(
-        Materiale(21, 1, "verifica", "Verifica corretta", giorno(-16), "file", "verifica.txt", 5321, "pronto", creatoIl = adessoIso,
-            testo = "MATERIA: Storia | PROF: Rossi | DATA: ${giorno(-16)} | TIPO: scritta | VOTO: 7\n## Domanda 1 (punti: 2)\nTESTO: Perché Augusto non si fece chiamare re?"),
-        Materiale(22, 1, "interrogazione", "Interrogazione", giorno(-8), "scritto", null, 812, "pronto", creatoIl = adessoIso,
-            testo = "Mi ha chiesto chi era Seiano. Ho risposto che era il capo dei pretoriani."),
-        Materiale(23, 1, "appunti", "Appunti: Augusto e il principato", giorno(-6), "scritto", null, 2410, "pronto", creatoIl = adessoIso,
-            testo = "Augusto: princeps, non re. Pax augusta. Riforme dell'esercito."),
+        Materiale(21, 1, "verifica", "Verifica sull'età di Augusto", giorno(-16), "file", "verifica.txt", 5321, "pronto", creatoIl = adessoIso,
+            titoloDa = "lectio",
+            testo = "MATERIA: Storia | PROF: Rossi | DATA: ${giorno(-16)} | TIPO: scritta | VOTO: 7\n## Domanda 1 (punti: 2)\n" +
+                "TESTO: Perché Augusto non si fece chiamare re?\n## Domanda 2 (punti: 3)\nTESTO: Come cambia l'impero romano con Augusto?\n" +
+                "MIA RISPOSTA: L'impero romano diventa più stabile.\nCORREZIONI DEL PROF: Mancano le riforme dell'esercito."),
+        Materiale(22, 1, "interrogazione", "Interrogazione su Tiberio", giorno(-8), "scritto", null, 812, "pronto", creatoIl = adessoIso,
+            titoloDa = "utente", testo = "Mi ha chiesto chi era Seiano. Ho risposto che era il capo dei pretoriani."),
+        Materiale(23, 1, "appunti", "Augusto e il principato", giorno(-6), "scritto", null, 2410, "pronto", creatoIl = adessoIso,
+            titoloDa = "utente",
+            testo = "Augusto: princeps, non re. Nasce l'impero romano. Pax augusta. Riforme dell'esercito. L'impero romano si allarga fino al Danubio."),
+        Materiale(24, 1, "appunti", "L'Impero romano dopo Augusto", giorno(-4), "foto", "IMG_20261024_1712.jpg", 1976, "pronto", creatoIl = adessoIso,
+            titoloDa = "lectio",
+            testo = "Tiberio, figlio adottivo di Augusto, governa con prudenza ma si fida poco del senato.\n\n" +
+                "Seiano, capo dei pretoriani, prende sempre più potere finché Tiberio lo fa arrestare.\n\n" +
+                "Caligola regna quattro anni; Claudio conquista la Britannia; Nerone chiude la dinastia giulio-claudia.\n\n" +
+                "Nel 69 d.C., l'anno dei quattro imperatori, vince Vespasiano: con lui comincia la dinastia flavia e si costruisce il Colosseo."),
+        Materiale(25, 1, "libro", "Libro, capitolo 5", giorno(-12), "file", "storia_capitolo_5.pdf", 18_400, "pronto", creatoIl = adessoIso,
+            titoloDa = "file", testo = "La crisi della repubblica: i Gracchi, Mario e Silla, Cesare."),
+        Materiale(26, 1, "appunti", "Le guerre puniche", giorno(-20), "foto", "IMG_20261008_0930.jpg", 1340, "pronto", creatoIl = adessoIso,
+            titoloDa = "lectio", testo = "Roma contro Cartagine: tre guerre per il Mediterraneo."),
     )
 
     private var spesoMese = 0.80
@@ -167,7 +184,7 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
     // --- Sorgente -----------------------------------------------------------------------------
 
     override suspend fun salute(): Esito<Salute> = Esito.Ok(
-        Salute(true, "1.0.0", false, StatoServizio("pronto", "mistral"), StatoServizio("pronta", "mistral"), StatoServizio("pronta", "azure")),
+        Salute(true, "1.0.0", false, StatoServizio("pronto", "mistral"), StatoServizio("pronta", "mistral"), StatoServizio("pronta", "nas")),
     )
 
     override suspend fun oggi(): Lettura<Oggi> {
@@ -238,8 +255,10 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         materiale.firstOrNull { it.id == id }?.let { Esito.Ok(it) } ?: Esito.Errore("Non trovo più questo materiale.")
 
     override suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?): Esito<Materiale> {
-        val m = Materiale(prossimoId++, materiaId, tipo, titolo?.takeIf { it.isNotBlank() } ?: file.nome.substringBeforeLast('.'),
-            data ?: oggi.toString(), "file", file.nome, 1200, "pronto", creatoIl = adessoIso, testo = "Testo di esempio.")
+        val scritto = titolo?.takeIf { it.isNotBlank() }
+        val m = Materiale(prossimoId++, materiaId, tipo, scritto ?: file.nome.substringBeforeLast('.'),
+            data ?: oggi.toString(), "file", file.nome, 1200, "pronto", creatoIl = adessoIso, testo = "Testo di esempio.",
+            titoloDa = if (scritto != null) "utente" else "file")
         materiale += m
         return Esito.Ok(m)
     }
@@ -257,6 +276,25 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
     }
 
     override suspend fun riprovaMateriale(id: Long): Esito<Unit> = Esito.Ok(Unit)
+
+    override suspend fun modificaMateriale(id: Long, cambi: JsonObject): Esito<Materiale> {
+        val i = materiale.indexOfFirst { it.id == id }
+        if (i < 0) return Esito.Errore("Non trovo più questo materiale.")
+        val m = materiale[i]
+        val titolo = cambi["titolo"]?.jsonPrimitive?.contentOrNull?.split(Regex("\\s+"))?.joinToString(" ")?.trim()
+        if (titolo != null && titolo.isEmpty()) return Esito.Errore("Il titolo non può essere vuoto.", "non_valido", 422)
+        materiale[i] = m.copy(
+            titolo = titolo ?: m.titolo,
+            titoloDa = if (titolo != null) "utente" else m.titoloDa,
+            tipo = cambi["tipo"]?.jsonPrimitive?.contentOrNull ?: m.tipo,
+        )
+        return Esito.Ok(materiale[i].copy(testo = null))
+    }
+
+    override suspend fun suggeriti(materiaId: Long, argomento: String): Esito<Suggeriti> {
+        val ids = eu.stgm.lectio.logica.ParoleArgomento.suggeriti(argomento, materiale.filter { it.materiaId == materiaId })
+        return Esito.Ok(Suggeriti(argomento, eu.stgm.lectio.logica.ParoleArgomento.parole(argomento), ids))
+    }
 
     override suspend fun eventi(): Lettura<List<Evento>> = Lettura(eventi.sortedBy { it.data })
 
@@ -287,12 +325,7 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         return Esito.Ok(RisultatoEsito(previste, totale, if (totale == 0) 0 else previste * 100 / totale))
     }
 
-    override suspend fun voci(): Esito<List<Voce>> = Esito.Ok(
-        listOf(
-            Voce("mistral:voice_482", "Lorenzo", "espressiva", "mistral", 0.0126, true),
-            Voce("azure:it-IT-IsabellaMultilingualNeural", "Isabella", "gratis", "azure", 0.0, true),
-        ),
-    )
+    override suspend fun voci(): Esito<List<Voce>> = Esito.Ok(VOCI)
 
     /** Le cifre del prototipo (NuovaLezione.dc.html): voce espressiva e solo testo per durata. */
     override suspend fun stima(richiesta: RichiestaStima): Esito<Stima> {
@@ -305,13 +338,16 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         }
         val espressiva = richiesta.voce.startsWith("mistral")
         val costo = if (espressiva) totale else testo
+        // Le voci del NAS lavorano più piano della voce di Mistral (contratto: minuti_preparazione).
+        val minuti = Costi.prontaIn(VOCI.firstOrNull { it.id == richiesta.voce }, richiesta.durataMin)
+            ?: kotlin.math.floor(2 + richiesta.durataMin * 0.15 + 0.5).toInt()
         val dopo = spesoMese + costo
         val caratteri = (richiesta.durataMin * 145 * 6.3).toInt()
         return Esito.Ok(
             Stima(
                 caratteri, testo, if (espressiva) totale - testo else 0.0, costo, spesoMese, tetto, arrotonda(dopo),
                 dopo <= tetto, if (dopo <= tetto) null else "Sforerebbe il tetto di 2 €: usa la voce gratis",
-                412_000, primoDelMese,
+                412_000, primoDelMese, minutiPreparazione = minuti,
             ),
         )
     }
@@ -329,8 +365,10 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         lezioni.firstOrNull { it.id == id }?.let { Lettura(it) } ?: Lettura(null, "Non trovo più questa lezione.")
 
     override suspend fun creaLezione(nuova: NuovaLezione): Esito<Lezione> {
+        if (nuova.materiali?.isEmpty() == true) return Esito.Errore("Scegli almeno un appunto o una verifica", "non_valido", 422)
         val l = Lezione(prossimoId++, nuova.materiaId, nuova.eventoId, nuova.argomento, nuova.durataMin, null, nuova.voce, "in_preparazione",
-            Avanzamento("lettura", 0, 0, "Leggo il materiale"), 0.0, adessoIso, domandeSaltabili = nuova.domandeSaltabili)
+            Avanzamento("lettura", 0, 0, "Leggo il materiale"), 0.0, adessoIso, domandeSaltabili = nuova.domandeSaltabili,
+            tipo = nuova.tipo, indicazioni = nuova.indicazioni.ifBlank { null }, materiali = nuova.materiali.orEmpty())
         lezioni.add(0, l)
         return Esito.Ok(l)
     }
@@ -423,6 +461,14 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
     fun materiaBreve(id: Long): MateriaBreve? = materie.firstOrNull { it.id == id }?.let(::breve)
 
     companion object {
+        /** Le voci d'esempio: Lorenzo (Mistral) e le tre voci gratis del NAS. */
+        val VOCI = listOf(
+            Voce("mistral:voice_482", "Lorenzo", "espressiva", "mistral", 0.0126, true),
+            Voce("nas:giovanni", "Giovanni", "gratis", "nas", 0.0, true, 0.6),
+            Voce("nas:giovanni_grande", "Giovanni grande", "gratis", "nas", 0.0, true, 1.3),
+            Voce("nas:supertonic", "Supertonic", "gratis", "nas", 0.0, true, 1.1),
+        )
+
         const val LEZIONE_STORIA = 12L
         const val MATERIA_STORIA = 1L
 

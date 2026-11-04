@@ -10,6 +10,7 @@ import pytest
 
 from aiuti import VERIFICA_GEMINI, aggiungi_testo, crea_materia, lezione_pronta
 from app import abbina, db
+from app.config import VERSIONE
 
 pagamento = pytest.mark.pagamento
 
@@ -95,7 +96,7 @@ def test_revoca_dispositivo(client, auth):
 def test_versione_con_impronta_dei_file(client, app):
     v = client.get("/api/versione").json()
     annunciate = json.loads(Path(app.state.settings.versioni_path).read_text(encoding="utf-8"))
-    assert v["server"] == "1.0.1" and v["android"]["codice"] == annunciate["android"]["codice"] and v["android"]["sha256"] is None
+    assert v["server"] == VERSIONE and v["android"]["codice"] == annunciate["android"]["codice"] and v["android"]["sha256"] is None
     cartella = Path(app.state.settings.apk_dir)
     cartella.mkdir(parents=True, exist_ok=True)
     (cartella / "lectio.apk").write_bytes(b"apk finto")
@@ -111,7 +112,7 @@ def test_versione_con_impronta_dei_file(client, app):
 
 def test_salute_ridotta_e_completa_in_prova(client, auth):
     ridotta = client.get("/api/salute").json()
-    assert set(ridotta) == {"ok", "versione", "server_id"} and ridotta["versione"] == "1.0.1"
+    assert set(ridotta) == {"ok", "versione", "server_id"} and ridotta["versione"] == VERSIONE
     s = client.get("/api/salute", headers=auth).json()
     assert s["modalita_prova"] is True
     assert s["testo"] == {"stato": "prova", "fornitore": "prova"}

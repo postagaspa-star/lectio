@@ -171,34 +171,83 @@ quella materia lo usa da sola. Nella creazione di una lezione non si carica nien
 
 Righe grandi con icona: **File** (scegli PDF, Word, testo), **Appunti** (scrivi o incolla), **Interrogazione
 orale** (cosa ti ha chiesto, cosa hai risposto, cosa ha detto), **Foto** (con sotto, tenue, "circa 0,4 cent a
-foto"). In alto una riga accento tenue: **Testo per Gemini** → apre Per Gemini. Dopo la scelta: tipo
-(verifica corretta / interrogazione / appunti / libro), titolo, data → **Aggiungi**. Mentre il server legge il
-file: riga con segnaposto che pulsa; poi il titolo; se c'è un errore, la frase del server e **Riprova**.
+foto"). In alto una riga accento tenue: **Testo per Gemini** → apre Per Gemini. Dopo la scelta di un file o di
+una foto: **Che cos'è** (le due famiglie della sezione 5.1, partenza su **Appunti**), titolo facoltativo
+(segnaposto "Lo scrive Lectio leggendo il file"), data → **Aggiungi**. Mentre il server legge il file: riga con
+segnaposto che pulsa; poi il titolo; se c'è un errore, la frase del server e **Riprova**.
 
 **Condividi da altre app (telefono):** Lectio compare in "Condividi" per testo, PDF, Word e immagini; si apre
-direttamente il foglio con "In quale materia?" e il tipo già su "Verifica corretta".
+direttamente il foglio con "In quale materia?" e "Che cos'è" su **Appunti**.
 
-## 6. Nuova lezione
+### 5.1 Un materiale: titolo e che cos'è (v1.4)
 
-Prototipo `NuovaLezione.dc.html`. Pagina (telefono) o finestra larga (PC):
-- Titolo "Nuova lezione" e pallino + materia.
-- **Argomento** (campo, 16 px): "L'Impero romano da Augusto a Nerone".
-- **Per** (pillola): la prossima verifica della materia, già scelta se c'è; "Nessuna" possibile.
-- **Userò**: una riga sola "4 verifiche e 3 appunti di Storia" con pulsante testo **Cambia** (apre le
-  pillole spuntabili degli appunti; le verifiche si usano sempre). Niente caricamenti qui.
-- **Durata**: binario a segmenti **15 · 20 · 30 · 45 min** (minimo 15, predefinita dalle impostazioni).
-- **Domande**: binario a due segmenti **Obbligatorie · Si possono saltare** (predefinito dalle impostazioni,
-  di base Obbligatorie). Si può cambiare anche dopo, dal menu del lettore.
-- **Voce**: due schede affiancate: **Lorenzo** "voce espressiva" con il costo di questa durata, e **Voce
-  gratis** "Isabella" con "0 €" e i caratteri gratis rimasti nel mese. Se la voce espressiva sforerebbe il
-  tetto, la sua scheda è spenta con la frase "Sforerebbe il tetto di 2 €" e si sceglie la gratis.
-- Riga **Questo mese 0,80 € → dopo questa 1,05 € di 2 €** con barra a due toni (speso / questa lezione).
-- Pulsante pieno in basso: **Prepara la lezione · 0,25 €** (con voce gratis: "· 0,02 €", il solo testo).
-- Dopo il tocco: la stessa pagina diventa **In preparazione**: quattro fasi con spunta (Leggo il materiale,
-  Scrivo la lezione, Registro la voce · n di m, Monto l'audio), barra, "Puoi uscire: ti avviso io". Fine:
-  spunta grande che compare + **Ascolta** (peak-end, niente feste). Errore: frase del server + **Riprova**.
-- Modalità prova (server senza chiavi): pillola "Prova" in alto e costi a 0 con la frase "Voce di prova,
-  robotica: serve la chiave Mistral per quella vera".
+Prototipo `MaterialePc.dc.html` (finestra di 640 px sul PC, pagina sul telefono). Si apre toccando una riga del
+materiale nella materia.
+- In alto la pillola della materia e la X tonda (44 px, `#ECEAE4`).
+- **TITOLO** (etichetta 12/700 maiuscola, spaziata 0,08 em): campo 52 px, testo 18/700, bordo 2 px `#ECEAE4`,
+  raggio 14. Sotto, 13/600 tenue: "Dalla foto <nome file> · titolo scritto da Lectio leggendo la foto" se
+  `titolo_da` è `lectio`; "Dal file <nome file>" se è `file`; niente se è `utente`.
+- **CHE COS'È**: due schede affiancate (sul telefono una sotto l'altra), raggio 18, padding 14/16:
+  **Da studiare** "Lectio lo spiega e ci fa le domande" con le pillole **Appunti** · **Libro**; **Già corretta
+  dal prof** "Lectio impara come chiede e corregge" con **Verifica** · **Interrogazione**. La famiglia scelta ha
+  bordo 2 px accento e fondo bianco, l'altra bordo `#ECEAE4` e fondo `#FAFAF8`. Pillola scelta: bordo 2 px
+  accento, fondo accento tenue, testo `#2F3CB0`.
+- **COSA HO LETTO · 1.976 CARATTERI**: riquadro bianco raggio 18 con l'inizio del testo letto (15/500, interlinea
+  1,5) e "Mostra tutto".
+- In basso **Salva** (pieno accento; dopo il salvataggio "Salvato" per 2 s) e a destra **Elimina** (testo rosso
+  errore, con conferma). Salva manda `PATCH /api/materiale/{id}` con i soli campi cambiati.
+
+## 6. Nuova lezione (v1.4)
+
+Prototipi `NuovaLezionePc.dc.html` (PC) e `NuovaLezioneTel.dc.html` (telefono). Principio: quattro decisioni
+numerate dall'alto in basso, e a fianco (PC) o in fondo (telefono) un riepilogo vivo che dice in parole cosa
+uscirà e quanto costa, con il pulsante. Le scelte si vedono tutte, niente "Cambia" che nasconde.
+
+Intestazione: X tonda, "Nuova lezione" (PC 30/800, telefono 26/800), pillola della materia.
+
+Sezioni (numero in un tondo accento tenue 28 px, titolo 18/800):
+1. **Su cosa** — ARGOMENTO (campo 52 px, 17/600). PER: pillole "Nessuna data" e la prossima verifica o
+   interrogazione della materia ("Interrogazione di lunedì 10 novembre"), già scelta se c'è.
+2. **Da quale materiale** — a destra del titolo "8 di 15 scelti" (14/700 tenue). Pillole **Sull'argomento**
+   (predefinita) · **Tutti** · **Nessuno**, campo **Cerca nel materiale** (filtra per titolo). Due gruppi con
+   etichetta maiuscola 12/700: **APPUNTI E LIBRO** e **VERIFICHE E INTERROGAZIONI DEL PROF** (se vuoto: "Nessuna
+   ancora", tenue). Righe (PC in due colonne, telefono una): casella 22 px raggio 7 (spuntata = accento con
+   spunta bianca), titolo 15/700 su una riga con i puntini, sotto "Appunti · foto · 4 novembre" 13/500 tenue, a
+   destra la pillola tenue "argomento" se è tra i suggeriti. Riga scelta: bordo 2 px `#A9B1F5`, fondo `#F6F7FF`
+   (scuro: bordo `#3B4290`, fondo `#1E2140`). Materiale ancora da leggere: riga spenta con "Lo sto leggendo",
+   non si spunta. In errore: non compare.
+   Finché Andrea non tocca una casella valgono i suggeriti del server (`GET /api/materie/{id}/suggeriti`,
+   400 ms dopo l'ultima lettera dell'argomento); appena ne tocca una, le caselle restano come le ha messe lui
+   finché non preme di nuovo **Sull'argomento**.
+3. **Come la vuoi** — tre schede tipo (PC affiancate, telefono binario a tre segmenti con la frase sotto):
+   **Spiegazione** "Te lo spiego dall'inizio, con domande lungo la strada"; **Ripasso** "Più veloce: i punti
+   chiave e tante domande alla fine"; **Interrogazione** (telefono "Interroga") "Ti interrogo come il prof, poi
+   ti dico la risposta giusta". LE TUE INDICAZIONI: area di testo (4 righe, 15/500) con contatore "n / 600" e
+   segnaposto "Per esempio: insisti su quello che il prof chiede sempre" (vale per ogni materia). Sotto, spunti a
+   pillola che aggiungono o tolgono una frase dal testo ("+ Spiegalo da zero" → "✓ Spiegalo da zero"): Spiegalo
+   da zero, Insisti su date e nomi, Confronta gli autori, Descrivi bene le opere, Domande più difficili, Tanti
+   esempi (telefono: Da zero, Date e nomi, Confronta, Descrivi le opere, Più difficili, Esempi). Frasi:
+   "Spiegalo partendo da zero, come se non l'avessi mai studiato." · "Insisti su date e nomi." · "Confronta gli
+   autori tra loro: cosa cambia da uno all'altro." · "Descrivi bene le opere, come se le avessi davanti." ·
+   "Fammi domande più difficili di quelle del prof." · "Usa tanti esempi concreti."
+   DURATA: binario 15 · 20 · 30 · 45 min. DOMANDE: binario **Obbligatorie** · **Si possono saltare**.
+4. **Voce** — una scheda per voce di `GET /api/voci` (nome, "voce espressiva"/"voce gratis", costo di questa
+   durata). Una voce non disponibile è spenta, bordo tratteggiato, "Non ancora attiva".
+
+**Riepilogo** (PC: colonna destra larga 380 px che resta ferma scorrendo; telefono: barra fissa in basso):
+- etichetta "LA TUA LEZIONE", titolo "<Tipo> di 20 minuti" (24/800);
+- struttura in parole dal contratto 16.1 ("6 parti, una domanda dopo ognuna e 5 alla fine");
+- righe SU (argomento) · MATERIALE ("Mirone e il Discobolo" / "3 materiali: A, B e altri 1") · INDICAZIONI
+  (prime 140 lettere o "Nessuna: segue il materiale e la scheda del prof") · PER (+ "domande obbligatorie" o
+  "che si possono saltare"). Cosa manca in ambra `#8A5506` 700: "Manca l'argomento", "Scegli almeno un
+  materiale";
+- barra del mese a due toni e "dopo questa 0,32 € di 2 €";
+- pulsante **Prepara la lezione · 0,27 €** (56 px, raggio 16). Spento (`#ECEAE4`, testo `#74747D`) se manca
+  l'argomento o il materiale o se la stima non lo consente (sotto, la frase del server).
+Telefono: la barra in basso mostra "Spiegazione · 20 min · 3 materiali", "mese: 0,32 € di 2 €" e il pulsante.
+
+Dopo il tocco: come prima, **In preparazione** con le fasi; errore → frase del server + **Riprova**.
+Modalità prova: pillola "Prova" e costi a 0 con la frase sulla voce robotica.
 
 ## 7. Lettore
 
@@ -299,7 +348,7 @@ Passi (telefono):
 5. **Testo per Gemini** (riga accento nel foglio): "Copialo, dallo a Gemini con la foto, poi manda qui il
    file." Avanti.
 6. **Nuova lezione** (tocca il pulsante): pratico.
-7. **Durata e costo** (binario + pulsante): "Scegli quanto dura. Il costo lo vedi prima." Avanti.
+7. **Come la vuoi** (riepilogo + pulsante): "Scegli materiale, tipo e indicazioni: qui vedi cosa esce e quanto costa." Avanti.
 8. **La domanda** (lettore d'esempio fermo alla domanda): "Scrivi la tua risposta e premi Invia: te la
    correggo." Pratico: si va avanti dopo aver toccato Invia (anche con una parola sola; correzione finta).
 9. Fine: il velo si scioglie, "Ecco fatto", pulsante **Inizia**.

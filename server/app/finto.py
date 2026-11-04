@@ -119,8 +119,27 @@ class TestoFinto:
             })
         vere = _domande_vere(brani)
         tutte_frasi = [f for b in brani for f in frasi(b["testo"])] or [f"{argomento} è l'argomento di oggi."]
+        tipo = d.get("tipo") or "spiegazione"
+        if tipo == "interrogazione":
+            # Le domande divise nei gruppi chiesti: prima quelle vere delle verifiche, poi dalle frasi.
+            contatore = 0
+            for k, quante in enumerate(d.get("gruppi") or [], start=1):
+                domande = []
+                for _ in range(int(quante)):
+                    if contatore < len(vere):
+                        testo = vere[contatore]
+                    else:
+                        frase = tutte_frasi[contatore % len(tutte_frasi)].rstrip(".")
+                        testo = f"Spiega questo punto: {frase[:100].lower()}."
+                    domande.append({"testo": testo, "tipo": "aperta", "fonti": []})
+                    contatore += 1
+                if k <= len(blocchi):
+                    blocchi[k - 1]["domande"] = domande
+        elif tipo == "ripasso":
+            for b in blocchi:
+                b.pop("domanda", None)
         interrogazione = []
-        for i in range(int(d["n_interrogazione"])):
+        for i in range(0 if tipo == "interrogazione" else int(d["n_interrogazione"])):
             if i < len(vere):
                 interrogazione.append({"testo": vere[i], "tipo": "aperta", "fonti": []})
             else:
@@ -154,10 +173,17 @@ class TestoFinto:
         lettura = d["lettura"]
         prof = (lettura["materia"].get("prof") or "").strip()
         titoli = ", poi ".join(b["titolo"].lower() for b in piano["blocchi"][:3])
+        tipo = piano.get("tipo") or "spiegazione"
+        come = (f" come la farebbe il prof {prof}." if prof else ".")
+        if tipo == "ripasso":
+            seguito = "Prima i punti chiave, poi tante domande alla fine" + come
+        elif tipo == "interrogazione":
+            seguito = "Oggi niente spiegazione: ti interrogo" + come
+        else:
+            seguito = "Dopo ogni parte c'è una domanda, alla fine un'interrogazione" + come
         return {"paragrafi": [{"testo": (
             f"Questa è una lezione di prova, con un testo finto. Oggi vediamo {lettura['argomento']}. "
-            f"Partiamo da {titoli}. Dopo ogni parte c'è una domanda, alla fine un'interrogazione"
-            + (f" come la farebbe il prof {prof}." if prof else ".")
+            f"Partiamo da {titoli}. {seguito}"
         )}]}
 
     def _blocco(self, d: dict) -> dict:
@@ -180,10 +206,36 @@ class TestoFinto:
         if attuale:
             paragrafi.append({"tipo": "esempio", "testo": " ".join(attuale)})
         risposta = tutte[0] if tutte else f"La risposta sta in {blocco['titolo'].lower()}."
-        return {"paragrafi": paragrafi, "domanda": blocco["domanda"]["testo"], "risposta": risposta}
+        domanda = (blocco.get("domanda") or {}).get("testo") or f"Che cosa ricordi di {blocco['titolo'].lower()}?"
+        return {"paragrafi": paragrafi, "domanda": domanda, "risposta": risposta}
+
+    def _parte(self, d: dict) -> dict:
+        """Ripasso: solo i punti chiave, senza domanda."""
+        uscita = self._blocco(d)
+        return {"paragrafi": [p for p in uscita["paragrafi"] if p["tipo"] != "aggancio"] or uscita["paragrafi"]}
+
+    def _gruppo(self, d: dict) -> dict:
+        """Interrogazione: le domande del gruppo, con la risposta presa dal materiale."""
+        piano = d["piano"]
+        blocco = piano["blocchi"][int(d["k"]) - 1]
+        tutte = [f for b in d.get("brani") or [] for f in frasi(b["testo"])] or list(blocco.get("punti") or [])
+        domande = []
+        for i, q in enumerate(blocco.get("domande") or []):
+            risposta = " ".join(tutte[i * 2:i * 2 + 2]) if tutte else f"La risposta sta in {blocco['titolo'].lower()}."
+            domande.append({"testo": q["testo"], "risposta": risposta or tutte[0]})
+        return {"introduzione": f"Adesso qualche domanda su {blocco['titolo'].lower()}.", "domande": domande}
+
+    def _titolo(self, d: dict) -> dict:
+        prima = next(iter(frasi(d.get("testo") or "")), "Materiale")
+        return {"titolo": _titolo_da(prima, "Materiale")}
 
     def _finale(self, d: dict) -> dict:
         piano = d["piano"]
+        if (piano.get("tipo") or "spiegazione") == "interrogazione":
+            errori = [f"Errore da evitare: {e.rstrip('.').lower()}. Fai il contrario e sei a posto."
+                      for e in piano.get("errori_da_evitare") or []][:3]
+            return {"errori": errori or ["Rispondi sempre partendo dalla definizione."],
+                    "chiusura": "Per oggi è tutto. Rifai le domande che hai sbagliato prima della verifica."}
         tutte = [f for b in d.get("brani") or [] for f in frasi(b["testo"])]
         riepilogo = "Ricapitoliamo. " + " ".join(f"Abbiamo visto {b['titolo'].lower()}." for b in piano["blocchi"])
         domande = []

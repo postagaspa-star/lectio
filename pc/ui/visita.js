@@ -75,8 +75,8 @@
       prepara: async () => { A.chiudiTuttiIVeli(); await vaiA('#materia/' + STORIA, '[data-visita="nuova-lezione"]'); },
     },
     {
-      titolo: 'Durata e costo', frase: 'Scegli quanto dura. Il costo lo vedi prima.', leggi: true,
-      bersaglio: ['[data-visita="durata"]', '[data-visita="prepara"]'],
+      titolo: 'Come la vuoi', frase: 'Scegli materiale, tipo e indicazioni: qui vedi cosa esce e quanto costa.', leggi: true,
+      bersaglio: ['[data-visita="riepilogo"]'],
       prepara: async () => {
         if (!S.velo.some((v) => v.tipo === 'nuova-lezione')) {
           A.chiudiTuttiIVeli();
@@ -84,7 +84,9 @@
           await vaiA('#materia/' + STORIA, '[data-visita="nuova-lezione"]');
           A.nuovaLezione(STORIA);
         }
-        await aspetta(() => document.querySelector('[data-visita="prepara"]') && document.querySelector('[data-costo="espressiva"]') && !/…/.test(document.querySelector('[data-costo="espressiva"]').textContent), 3000);
+        // Il riepilogo col costo (con la finestra stretta sta sotto le sezioni: si porta in vista).
+        const r = await aspetta(() => { const b = document.querySelector('[data-visita="prepara"]'); return b && /€/.test(b.textContent) ? document.querySelector('[data-visita="riepilogo"]') : null; }, 3000);
+        if (r) r.scrollIntoView({ block: 'nearest' });
       },
     },
     {

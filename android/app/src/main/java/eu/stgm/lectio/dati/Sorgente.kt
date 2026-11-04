@@ -41,6 +41,10 @@ interface Sorgente {
     suspend fun caricaTesto(materiaId: Long, scritto: MaterialeScritto): Esito<Materiale>
     suspend fun eliminaMateriale(id: Long): Esito<Unit>
     suspend fun riprovaMateriale(id: Long): Esito<Unit>
+    /** v1.4 §16.3: titolo e tipo di un materiale (solo i campi cambiati). */
+    suspend fun modificaMateriale(id: Long, cambi: JsonObject): Esito<Materiale>
+    /** v1.4 §16.2: il materiale che parla dell'argomento. */
+    suspend fun suggeriti(materiaId: Long, argomento: String): Esito<Suggeriti>
 
     suspend fun eventi(): Lettura<List<Evento>>
     suspend fun creaEvento(materiaId: Long, nuovo: NuovoEvento): Esito<Evento>
@@ -116,6 +120,8 @@ class SorgenteServer(
     override suspend fun caricaTesto(materiaId: Long, scritto: MaterialeScritto) = segna(client.caricaTesto(materiaId, scritto))
     override suspend fun eliminaMateriale(id: Long) = segna(client.eliminaMateriale(id))
     override suspend fun riprovaMateriale(id: Long) = segna(client.riprovaMateriale(id))
+    override suspend fun modificaMateriale(id: Long, cambi: JsonObject) = segna(client.modificaMateriale(id, cambi))
+    override suspend fun suggeriti(materiaId: Long, argomento: String) = segna(client.suggeriti(materiaId, argomento))
 
     override suspend fun eventi() =
         segna(leggiConCache(cache, "eventi", ListSerializer(Evento.serializer())) { client.eventi() })

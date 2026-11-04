@@ -100,6 +100,29 @@ class CostiEFormatiTest {
         assertNull(senzaAzure.gratis)
     }
 
+    /** Più voci gratis (NAS): vale la preferita se attiva; "pronta in circa N min" = 2 + durata × minuti_per_minuto. */
+    @Test
+    fun vociGratisDelNas() {
+        val elenco = listOf(
+            Voce("mistral:voice_482", "Lorenzo", "espressiva", "mistral", 0.0126, true),
+            Voce("nas:giovanni", "Giovanni", "gratis", "nas", 0.0, true, 0.5),
+            Voce("nas:giovanni_grande", "Giovanni grande", "gratis", "nas", 0.0, true, 1.5),
+            Voce("nas:supertonic", "Supertonic", "gratis", "nas", 0.0, false, 1.2),
+        )
+        assertEquals("nas:giovanni", Costi.voci(elenco).gratis?.id)
+        val grande = Costi.voci(elenco, "nas:giovanni_grande")
+        assertEquals("nas:giovanni_grande", grande.gratis?.id)
+        assertEquals("mistral:voice_482", grande.espressiva?.id)
+        assertEquals(TipoVoce.GRATIS, Costi.voceIniziale(grande, "nas:giovanni_grande"))
+        assertEquals("una voce spenta non vale", "nas:giovanni", Costi.voci(elenco, "nas:supertonic").gratis?.id)
+        assertEquals(12, Costi.prontaIn(elenco[1], 20))
+        assertEquals(10, Costi.prontaIn(elenco[1], 15)) // 9,5 → 10
+        assertEquals(32, Costi.prontaIn(elenco[2], 20))
+        assertEquals(56, Costi.prontaIn(elenco[3], 45))
+        assertNull(Costi.prontaIn(elenco[0], 20))
+        assertNull(Costi.prontaIn(null, 20))
+    }
+
     @Test
     fun avvisoAll80PerCento() {
         assertFalse(Costi.avviso(1.59, 2.0))

@@ -12,6 +12,7 @@ from ..db import get_conn
 from ..errori import ErroreApi, non_valido
 from ..schemi import ImpostazioniPatch
 from ..servizi import Servizi, servizi
+from ..voci import VOCI_NAS
 
 router = APIRouter(dependencies=[Depends(richiede_token)])
 
@@ -141,7 +142,7 @@ def cambia(corpo: ImpostazioniPatch, conn: sqlite3.Connection = Depends(get_conn
         v = cambi["voce_predefinita"].strip()
         prefisso, _, nome = v.partition(":")
         if not ((prefisso == "mistral" and nome) or (prefisso == "azure" and nome.startswith("it-IT-"))
-                or v == "prova:espeak"):
+                or (prefisso == "nas" and nome in {m for m, _, _ in VOCI_NAS}) or v == "prova:espeak"):
             raise non_valido("La voce predefinita non va bene.", campo="voce_predefinita")
         cambi["voce_predefinita"] = v
     if "nome" in cambi:

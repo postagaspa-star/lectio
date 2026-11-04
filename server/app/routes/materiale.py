@@ -17,19 +17,20 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
-from .. import clock, db, forme, lettura
+from .. import clock, db, forme, lettura, titoli
 from .. import scheda as schede
 from ..auth import richiede_token
 from ..config import MASSIMO_BYTE_FILE, MASSIMO_CARATTERI
 from ..db import get_conn
 from ..errori import FRASI_CAMPI, ErroreApi, conflitto, non_trovato, non_valido, tetto
-from ..schemi import MaterialeTestoIn
+from ..schemi import MaterialePatch, MaterialeTestoIn
 from ..servizi import Servizi, servizi
 from .materie import trova_materia
 
 router = APIRouter(dependencies=[Depends(richiede_token)])
 
 TIPI = ("verifica", "interrogazione", "appunti", "libro", "altro")
+DEL_PROF = ("verifica", "interrogazione")
 TROPPO_GRANDE = "Il file è troppo grande: il massimo è 20 MB."
 TROPPO_TESTO = "C'è troppo testo (più di 200.000 caratteri): dividilo in parti più piccole."
 
@@ -53,7 +54,8 @@ def _stima_ocr(conn: sqlite3.Connection, s: Servizi, pagine: int) -> None:
 
 
 def _valori(tipo, titolo, data_testo, testo: str | None, nome_file: str | None, origine: str):
-    """Tipo, titolo e data, con i valori predefiniti (anche dalla testata dei testi di Gemini)."""
+    """Tipo, titolo e data, con i valori predefiniti (anche dalla testata dei testi di Gemini).
+    Il titolo esce con chi l'ha scelto (contratto 16.3): "utente" o "file" (da riscrivere)."""
     testata = lettura.testata_gemini(testo) if testo else None
     if tipo is None:
         tipo = (lettura.tipo_da_gemini(testata) if testata else None) or "appunti"
@@ -63,16 +65,23 @@ def _valori(tipo, titolo, data_testo, testo: str | None, nome_file: str | None, 
     elif testata:
         giorno = lettura.data_da_testo(testata.data)
     giorno = giorno or clock.oggi()
-    titolo = " ".join((titolo or "").split()) or lettura.titolo_predefinito(testo, nome_file, origine, tipo, giorno)
-    return tipo, titolo[:120], giorno.isoformat()
+    scelto = " ".join((titolo or "").split())
+    if scelto:
+        titolo_da = "file" if titoli.titolo_automatico(scelto, nome_file) else "utente"
+    else:
+        # "Verifica 12 ottobre" dalla testata di Gemini va già bene; gli altri titoli li scrive Lectio.
+        titolo_da = "utente" if testata else "file"
+    titolo = scelto or lettura.titolo_predefinito(testo, nome_file, origine, tipo, giorno)
+    return tipo, titolo[:120], giorno.isoformat(), titolo_da
 
 
 def _inserisci(conn: sqlite3.Connection, materia_id: int, tipo: str, titolo: str, data: str, origine: str,
-               nome_file: str | None, formato: str | None, pagine: int | None, testo: str, stato: str) -> int:
+               nome_file: str | None, formato: str | None, pagine: int | None, testo: str, stato: str,
+               titolo_da: str = "utente") -> int:
     cur = conn.execute(
         "INSERT INTO materiali (materia_id, tipo, titolo, data, origine, nome_file, formato, pagine, testo, stato,"
-        " creato_il) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (materia_id, tipo, titolo, data, origine, nome_file, formato, pagine, testo, stato, clock.adesso()),
+        " creato_il, titolo_da) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (materia_id, tipo, titolo, data, origine, nome_file, formato, pagine, testo, stato, clock.adesso(), titolo_da),
     )
     return cur.lastrowid
 
@@ -117,9 +126,10 @@ async def aggiungi(materia_id: int, request: Request, conn: sqlite3.Connection =
         raise non_valido("Il testo non può essere vuoto.", campo="testo")
     if len(testo) > MASSIMO_CARATTERI:
         raise ErroreApi(413, TROPPO_TESTO)
-    tipo, titolo, data = _valori(corpo.tipo, corpo.titolo, corpo.data, testo, None, "scritto")
+    tipo, titolo, data, titolo_da = _valori(corpo.tipo, corpo.titolo, corpo.data, testo, None, "scritto")
     with db.transazione(conn):
-        nuovo = _inserisci(conn, materia_id, tipo, titolo, data, "scritto", None, None, None, testo, "pronto")
+        nuovo = _inserisci(conn, materia_id, tipo, titolo, data, "scritto", None, None, None, testo, "pronto",
+                           titolo_da)
         if tipo in ("verifica", "interrogazione"):
             schede.segna_da_aggiornare(conn, materia_id)
     s.lavoro.sveglia("sfondo")
@@ -175,10 +185,11 @@ async def _da_file(materia_id: int, request: Request, conn: sqlite3.Connection, 
         # PDF misto o scansionato, o foto: all'OCR vanno solo le pagine vuote (e non più del necessario).
         _stima_ocr(conn, s, len(letto.pagine_ocr))
         stato, pagine = "in_lettura", letto.pagine
-    tipo, titolo, data = _valori(tipo, titolo, data, letto.testo or _primo_testo(letto), nome_file, origine)
+    tipo, titolo, data, titolo_da = _valori(tipo, titolo, data, letto.testo or _primo_testo(letto), nome_file,
+                                            origine)
     with db.transazione(conn):
         nuovo = _inserisci(conn, materia_id, tipo, titolo, data, origine, nome_file, est, pagine,
-                           letto.testo if stato == "pronto" else "", stato)
+                           letto.testo if stato == "pronto" else "", stato, titolo_da)
         conn.execute("UPDATE materiali SET pagine_ocr = ?, avviso = ? WHERE id = ?",
                      (json.dumps(letto.pagine_ocr) if letto.pagine_ocr else None, letto.avviso, nuovo))
         relativo = Path("materiale") / str(materia_id) / f"{nuovo}.{est}"
@@ -199,6 +210,36 @@ def elenco(materia_id: int, conn: sqlite3.Connection = Depends(get_conn)):
         "SELECT * FROM materiali WHERE materia_id = ? ORDER BY creato_il DESC, id DESC", (materia_id,))]
 
 
+@router.get("/materie/{materia_id}/suggeriti")
+def suggeriti(materia_id: int, argomento: str = "", conn: sqlite3.Connection = Depends(get_conn)):
+    """Contratto 16.2: il materiale che parla dell'argomento (gratis, senza AI)."""
+    trova_materia(conn, materia_id)
+    argomento = " ".join(argomento.split())[:200]
+    righe = [dict(r) for r in conn.execute(
+        "SELECT id, titolo, testo FROM materiali WHERE materia_id = ? AND stato = 'pronto' ORDER BY creato_il DESC, id DESC",
+        (materia_id,))]
+    return titoli.suggeriti(argomento, righe)
+
+
+@router.patch("/materiale/{materiale_id}")
+def cambia(materiale_id: int, corpo: MaterialePatch, conn: sqlite3.Connection = Depends(get_conn),
+           s: Servizi = Depends(servizi)):
+    """Contratto 16.3: titolo e tipo. Un titolo scritto qui è di Andrea: Lectio non lo tocca più."""
+    with db.transazione(conn):
+        r = trova_materiale(conn, materiale_id)
+        if corpo.titolo is not None and corpo.titolo != r["titolo"]:
+            conn.execute("UPDATE materiali SET titolo = ?, titolo_da = 'utente' WHERE id = ?",
+                         (corpo.titolo, materiale_id))
+        elif corpo.titolo is not None and r["titolo_da"] != "utente":
+            conn.execute("UPDATE materiali SET titolo_da = 'utente' WHERE id = ?", (materiale_id,))
+        if corpo.tipo is not None and corpo.tipo != r["tipo"]:
+            conn.execute("UPDATE materiali SET tipo = ? WHERE id = ?", (corpo.tipo, materiale_id))
+            if r["stato"] == "pronto" and (corpo.tipo in DEL_PROF or r["tipo"] in DEL_PROF):
+                schede.segna_da_aggiornare(conn, r["materia_id"])
+    s.lavoro.sveglia("sfondo")
+    return forme.materiale(conn, trova_materiale(conn, materiale_id))
+
+
 @router.get("/materiale/{materiale_id}")
 def uno(materiale_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     return forme.materiale(conn, trova_materiale(conn, materiale_id), con_testo=True)
@@ -209,7 +250,12 @@ def cancella(materiale_id: int, conn: sqlite3.Connection = Depends(get_conn), s:
     r = trova_materiale(conn, materiale_id)
     # Le lezioni ristrette a questo materiale lo tengono nell'elenco: se non resta niente, la
     # preparazione si ferma con una frase chiara invece di allargarsi a tutto il materiale.
-    conn.execute("DELETE FROM materiali WHERE id = ?", (materiale_id,))
+    with db.transazione(conn):
+        conn.execute("DELETE FROM materiali WHERE id = ?", (materiale_id,))
+        # Una verifica o un'interrogazione in meno: la scheda del prof si rifà senza.
+        if r["stato"] == "pronto" and r["tipo"] in DEL_PROF:
+            schede.segna_da_aggiornare(conn, r["materia_id"])
+    s.lavoro.sveglia("sfondo")
     if r["percorso"]:
         try:
             (Path(s.settings.dati_dir) / r["percorso"]).unlink()

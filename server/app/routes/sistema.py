@@ -99,13 +99,20 @@ def salute(
     st = s.settings
     prova = st.modalita_prova
     voce_prova_ok = s.catalogo.voce_prova.disponibile()
+    nas = s.catalogo.nas
+    nas_ok = nas.disponibile() if nas is not None else False
     mancano = []
     if not st.mistral_key:
         mancano.append("la chiave Mistral")
-    if not st.azure_key:
-        mancano.append("la chiave Azure")
-    if not st.azure_regione:
-        mancano.append("la regione Azure")
+    if nas is not None:
+        # Con le voci gratis del NAS, Azure non serve più.
+        if not nas_ok:
+            mancano.append("le voci gratis del NAS (non rispondono)")
+    else:
+        if not st.azure_key:
+            mancano.append("la chiave Azure")
+        if not st.azure_regione:
+            mancano.append("la regione Azure")
     # Frasi che finiscono a schermo: niente nomi di programmi o di file.
     if not s.ctx.montatore.disponibile():
         mancano.append("il programma che monta l'audio")
@@ -120,7 +127,10 @@ def salute(
     else:
         testo = {"stato": "pronto", "fornitore": "mistral"}
         espressiva = {"stato": "pronta", "fornitore": "mistral"}
-    gratis = {"stato": "pronta" if st.azure_pronta else "non_disponibile", "fornitore": "azure"}
+    if nas is not None:
+        gratis = {"stato": "pronta" if nas_ok else "non_disponibile", "fornitore": "nas"}
+    else:
+        gratis = {"stato": "pronta" if st.azure_pronta else "non_disponibile", "fornitore": "azure"}
     in_lavoro = conn.execute(
         "SELECT COUNT(*) FROM lezioni WHERE stato IN ('in_coda', 'in_preparazione')").fetchone()[0]
     return {

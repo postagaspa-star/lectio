@@ -14,7 +14,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from . import clock, db, lettura
+from . import ai, clock, db, lettura, prompt, titoli
 from . import scheda as schede
 from .ai import RispostaNonUsabile
 from .audio import ErroreMontaggio
@@ -114,6 +114,11 @@ class Lavoro:
                 "SELECT id FROM materiali WHERE stato = 'in_lettura' ORDER BY id")]
             lavori += [(("scheda", r["materia_id"]), lambda mid: schede.aggiorna(self.ctx, mid), r["materia_id"])
                        for r in conn.execute("SELECT materia_id FROM schede WHERE da_aggiornare > 0 ORDER BY materia_id")]
+            # Contratto 16.3: i titoli presi dal nome del file li riscrive Lectio (solo con la chiave vera).
+            if self.ctx.testo.a_pagamento:
+                lavori += [(("titolo", r["id"]), self.scrivi_titolo, r["id"]) for r in conn.execute(
+                    "SELECT id FROM materiali WHERE stato = 'pronto' AND titolo_da = 'file' AND da_prova = 0"
+                    " AND length(testo) >= ? ORDER BY id", (titoli.TITOLO_MINIMO_CARATTERI,))]
         for chiave, fare, argomento in lavori:
             if self._fallimenti.get(chiave, 0) >= FALLIMENTI_MASSIMI:
                 continue
@@ -129,6 +134,34 @@ class Lavoro:
             self._fallimenti.pop(chiave, None)
             return FATTO
         return VUOTO
+
+    def scrivi_titolo(self, materiale_id: int) -> None:
+        """Un titolo che dica di cosa parla il materiale, al posto del nome del file. Se il tetto è
+        finito o la risposta non va, resta il nome del file (e non si riprova più)."""
+        with db.aperta(self.db_path) as conn:
+            m = conn.execute(
+                "SELECT m.*, ma.nome AS materia_nome FROM materiali m JOIN materie ma ON ma.id = m.materia_id"
+                " WHERE m.id = ? AND m.stato = 'pronto' AND m.titolo_da = 'file'", (materiale_id,)).fetchone()
+        if m is None:
+            return
+        try:
+            oggetto = ai.chiedi_json(
+                cassa=self.ctx.cassa, fornitore=self.ctx.testo, compito="titolo",
+                messaggi=prompt.messaggi_titolo(m["materia_nome"], m["tipo"], m["testo"]),
+                modello=self.ctx.settings.modello_piano, valida=titoli.valida_titolo, max_token=80,
+                cosa=f"Titolo di «{m['titolo'][:60]}»", dati={"testo": m["testo"][:3000], "tipo": m["tipo"]},
+                materia_id=m["materia_id"], materiale_id=m["id"],
+            )
+        except (TettoRaggiunto, RispostaNonUsabile):
+            with db.aperta(self.db_path) as conn:
+                conn.execute("UPDATE materiali SET titolo_da = 'file_fermo' WHERE id = ? AND titolo_da = 'file'",
+                             (materiale_id,))
+            return
+        titolo = titoli.pulisci_titolo(oggetto["titolo"])[:120]
+        with db.aperta(self.db_path) as conn:
+            # Se nel frattempo Andrea l'ha rinominato, vince il suo.
+            conn.execute("UPDATE materiali SET titolo = ?, titolo_da = 'lectio' WHERE id = ? AND titolo_da = 'file'",
+                         (titolo, materiale_id))
 
     def libera(self, tipo: str, ident: int) -> None:
         """Riprova a mano: l'elemento torna a essere provato dal giro in sottofondo."""

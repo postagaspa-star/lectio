@@ -13,7 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -27,8 +29,11 @@ import eu.stgm.lectio.dati.Stima
 import eu.stgm.lectio.logica.GenereFile
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.ui.Conferma
-import eu.stgm.lectio.ui.altre.TestoMaterialeScreen
-import eu.stgm.lectio.ui.altre.TestoMaterialeViewModel
+import eu.stgm.lectio.dati.Voce
+import eu.stgm.lectio.logica.Indicazioni
+import eu.stgm.lectio.logica.TipoLezione
+import eu.stgm.lectio.ui.materiale.MaterialeScreen
+import eu.stgm.lectio.ui.materiale.MaterialeViewModel
 import eu.stgm.lectio.ui.materiale.FileScelto
 import eu.stgm.lectio.ui.materiale.PassoAggiunta
 import eu.stgm.lectio.dati.SorgenteEsempio
@@ -197,7 +202,7 @@ class FotografoTest {
 
     @Test
     fun nuovaLezione() {
-        val vm = NuovaLezioneViewModel(esempio, 1, 3)
+        val vm = NuovaLezioneViewModel(esempio, 1, 3, oggi = { oggi })
         mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
         compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
         chiaroEScuro("07_nuova_lezione")
@@ -381,9 +386,9 @@ class FotografoTest {
         chiaroEScuro("22_preparazione_annullata")
     }
 
-    /** Testo letto a paragrafi (punto 19) e avviso del server sul materiale (contratto v1.3). */
+    /** Un materiale (aspetto.md §5.1): titolo, che cos'è, cosa ho letto; avviso del server (contratto v1.3). */
     @Test
-    fun testoMateriale() {
+    fun materiale() {
         val testo = (1..12).joinToString("\n\n") { n ->
             "Paragrafo $n. Augusto governò come princeps, primo tra i cittadini, lasciando in piedi le forme della repubblica: " +
                 "il senato si riuniva ancora e i consoli venivano eletti ogni anno, ma le decisioni importanti passavano da lui."
@@ -394,10 +399,21 @@ class FotografoTest {
                 return Esito.Ok(m.copy(tipo = "libro", titolo = "Libro di storia, capitoli 3 e 4", testo = testo, avviso = "Ho letto solo le prime 70 pagine: il resto supera il limite"))
             }
         }
-        val vm = TestoMaterialeViewModel(sorgente, 23)
-        mostra { TestoMaterialeScreen(vm, {}, senzaRete = false) }
-        compose.waitUntil(10_000) { vm.materiale.value != null }
-        chiaroEScuro("23_testo_materiale")
+        val vm = MaterialeViewModel(sorgente, 25)
+        mostra { MaterialeScreen(vm, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.materiale != null && vm.stato.value.materia != null }
+        chiaroEScuro("23_materiale_libro")
+    }
+
+    /** La foto con il titolo scritto da Lectio, e "Mostra tutto" aperto. */
+    @Test
+    @Config(qualifiers = "it-rIT-w390dp-h1400dp-xxhdpi")
+    fun materialeFoto() {
+        val vm = MaterialeViewModel(esempio, 24)
+        mostra { MaterialeScreen(vm, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.materiale != null && vm.stato.value.materia != null }
+        compose.onNodeWithText("Mostra tutto").performClick()
+        chiaroEScuro("31_materiale_foto")
     }
 
     /** La riga del mese con il lavoro in corso (contratto v1.3, impegnato_eur). */
@@ -409,12 +425,84 @@ class FotografoTest {
                 return Esito.Ok(s.copy(spesaMeseEur = s.spesaMeseEur + 0.25, impegnatoEur = 0.25, dopoEur = s.dopoEur + 0.25))
             }
         }
-        val vm = NuovaLezioneViewModel(sorgente, 1, 3)
+        val vm = NuovaLezioneViewModel(sorgente, 1, 3, oggi = { oggi })
         mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
         compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
-        // La riga del mese sta sotto il pulsante fisso: si scorre fino in fondo.
-        compose.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+        // La riga del mese sta nel riepilogo, in fondo: si scorre fino alla fine.
+        repeat(6) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() } }
         chiaroEScuro("24_nuova_lezione_lavoro_in_corso")
+    }
+
+    /** Tutta la pagina in una foto, per confrontarla col prototipo. */
+    @Test
+    @Config(qualifiers = "it-rIT-w390dp-h2600dp-xxhdpi")
+    fun nuovaLezioneIntera() {
+        val vm = NuovaLezioneViewModel(esempio, 1, 3, oggi = { oggi })
+        mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
+        chiaroEScuro("26_nuova_lezione_intera")
+    }
+
+    /** Un telefono stretto (360 dp). */
+    @Test
+    @Config(qualifiers = "it-rIT-w360dp-h780dp-xxhdpi")
+    fun nuovaLezioneStretta() {
+        val vm = NuovaLezioneViewModel(esempio, 1, 3, oggi = { oggi })
+        mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
+        chiaroEScuro("27_nuova_lezione_360")
+    }
+
+    @Test
+    @Config(qualifiers = "it-rIT-w360dp-h2700dp-xxhdpi")
+    fun nuovaLezioneStrettaIntera() {
+        val vm = NuovaLezioneViewModel(esempio, 1, 3, oggi = { oggi })
+        mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
+        chiaroEScuro("28_nuova_lezione_360_intera")
+    }
+
+    /**
+     * Le scelte fatte a mano: un materiale in lettura ("Lo sto leggendo"), una voce gratis
+     * del NAS scelta e una non ancora attiva (tratteggiata), Interroga con due spunti, 30 minuti.
+     */
+    @Test
+    @Config(qualifiers = "it-rIT-w390dp-h2600dp-xxhdpi")
+    fun nuovaLezioneAMano() {
+        val sorgente = object : Sorgente by esempio {
+            override suspend fun materiale(materiaId: Long): Lettura<List<Materiale>> {
+                val l = this@FotografoTest.esempio.materiale(materiaId)
+                val nuova = Materiale(99, 1, "appunti", "Foto del quaderno", oggi.toString(), "foto", "IMG_20261028_1630.jpg", stato = "in_lettura")
+                return l.copy(dato = listOf(nuova) + l.dato.orEmpty())
+            }
+
+            override suspend fun voci(): Esito<List<Voce>> =
+                Esito.Ok((this@FotografoTest.esempio.voci() as Esito.Ok<List<Voce>>).dato.map { if (it.id == "nas:supertonic") it.copy(disponibile = false) else it })
+        }
+        val vm = NuovaLezioneViewModel(sorgente, 1, 3, oggi = { oggi })
+        mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
+        compose.runOnIdle {
+            vm.tocca(22)
+            vm.tipo(TipoLezione.INTERROGAZIONE)
+            vm.spunto(Indicazioni.SPUNTI[1].frase)
+            vm.spunto(Indicazioni.SPUNTI[4].frase)
+            vm.durata(30)
+            vm.voce(SorgenteEsempio.VOCI.first { it.id == "nas:giovanni_grande" })
+        }
+        compose.waitUntil(10_000) { vm.stato.value.stimaGratis?.minutiPreparazione == 47 }
+        chiaroEScuro("29_nuova_lezione_a_mano")
+    }
+
+    /** Niente spuntato: Prepara spento, la barra dice cosa manca. */
+    @Test
+    fun nuovaLezioneSenzaMateriale() {
+        val vm = NuovaLezioneViewModel(esempio, 1, 3, oggi = { oggi })
+        mostra { NuovaLezioneScreen(vm, {}, {}, esempio = false, senzaRete = false) }
+        compose.waitUntil(10_000) { vm.stato.value.stimaEspressiva != null }
+        compose.runOnIdle { vm.nessuno() }
+        repeat(2) { compose.onNode(hasScrollAction()).performTouchInput { swipeUp() } }
+        chiaroEScuro("30_nuova_lezione_senza_materiale")
     }
 }
 

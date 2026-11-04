@@ -97,7 +97,11 @@
     for (const [k, v] of Object.entries(campi || {})) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
     if (esempio) {
       // In esempio il file non va da nessuna parte: diventa una riga finta della materia.
-      return daEsempio('POST', '/server/api/materie/' + campi.materia_id + '/materiale', { tipo: campi.tipo, titolo: campi.titolo, data: campi.data, testo: 'x'.repeat(Math.min(5000, byte ? byte.byteLength : 0)) });
+      const foto = /\.(jpe?g|png|webp)$/i.test(campi.nome || '');
+      return daEsempio('POST', '/server/api/materie/' + campi.materia_id + '/materiale', {
+        tipo: campi.tipo, titolo: campi.titolo, data: campi.data, nome_file: campi.nome || null, origine: foto ? 'foto' : 'file',
+        testo: 'x'.repeat(Math.min(5000, byte ? byte.byteLength : 0)),
+      });
     }
     return chiama('POST', '/locale/carica?' + q.toString(), undefined, { byte });
   }

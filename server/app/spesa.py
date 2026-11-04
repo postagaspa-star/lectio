@@ -367,9 +367,10 @@ class Cassa:
     # ------------------------------------------------------------------ stime
 
     def stima_testo_lezione(self, durata_min: int, caratteri_appunti: int, caratteri_verifiche: int,
-                            modello_piano: str, modello_scrittura: str) -> float:
-        blocchi = misure.n_blocchi(durata_min)
-        domande = misure.n_interrogazione(durata_min)
+                            modello_piano: str, modello_scrittura: str, tipo: str | None = None) -> float:
+        struttura = misure.struttura(tipo, durata_min)
+        blocchi = struttura["parti"]
+        domande = struttura["domande"] if struttura["tipo"] == "interrogazione" else struttura["finali"]
         t = misure.CARATTERI_PER_TOKEN
         appunti = min(caratteri_appunti, CARATTERI_APPUNTI_LETTI)
         scelta = 0.0
@@ -386,13 +387,13 @@ class Cassa:
 
     def stima_lezione(self, conn: sqlite3.Connection, *, durata_min: int, tipo_voce: str, caratteri_appunti: int,
                       caratteri_verifiche: int, prova: bool, modello_piano: str, modello_scrittura: str,
-                      modello_voce: str, modello_ocr: str) -> dict:
+                      modello_voce: str, modello_ocr: str, tipo: str | None = None) -> dict:
         """La stima di una lezione nuova. `spesa_mese_eur` comprende anche quello che resta da
         spendere per il lavoro già in corso (altre lezioni in coda, foto da leggere): così due
         lezioni messe in coda insieme non passano entrambe la stima. Tutto per eccesso."""
         caratteri = misure.caratteri_stimati(durata_min)
         costo_testo = 0.0 if prova else arrotonda_su(self.stima_testo_lezione(
-            durata_min, caratteri_appunti, caratteri_verifiche, modello_piano, modello_scrittura))
+            durata_min, caratteri_appunti, caratteri_verifiche, modello_piano, modello_scrittura, tipo))
         if tipo_voce == "espressiva":
             costo_voce = arrotonda_su(self.prezzi.costo_voce(modello_voce, caratteri))
         elif tipo_voce == "gratis":

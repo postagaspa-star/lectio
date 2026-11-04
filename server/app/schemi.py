@@ -1,6 +1,7 @@
 """I corpi delle richieste. Campi in più vengono ignorati (le app più nuove possono
 mandarne); i tipi sbagliati diventano un 422 in italiano (errori.py)."""
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
@@ -10,12 +11,25 @@ from . import clock
 Colore = Literal["ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva"]
 TipoMateriale = Literal["verifica", "interrogazione", "appunti", "libro", "altro"]
 TipoEvento = Literal["scritta", "orale"]
+TipoLezione = Literal["spiegazione", "ripasso", "interrogazione"]
+INDICAZIONI_MASSIME = 600
 TipoDomanda = Literal["aperta", "definizione", "date", "esercizio", "vero_falso", "scelta_multipla", "collegamento",
                       "traduzione", "altro"]
 
 
 class Corpo(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
+
+def _indicazioni(v):
+    """Spazi in più tolti (gli a capo restano, al massimo una riga vuota), poi al massimo 600 caratteri."""
+    if v is None:
+        return v
+    righe = [" ".join(r.split()) for r in str(v).splitlines()]
+    testo = re.sub(r"\n{3,}", "\n\n", "\n".join(righe)).strip()
+    if len(testo) > INDICAZIONI_MASSIME:
+        raise ValueError("indicazioni troppo lunghe")
+    return testo
 
 
 def _data(v):
@@ -112,6 +126,7 @@ class StimaIn(Corpo):
     durata_min: StrictInt = Field(ge=15, le=60)
     voce: str | None = Field(default=None, max_length=120)
     materiali: list[StrictInt] | None = Field(default=None, max_length=500)
+    tipo: TipoLezione | None = None
 
 
 class LezioneIn(Corpo):
@@ -123,6 +138,26 @@ class LezioneIn(Corpo):
     durata_min: StrictInt | None = Field(default=None, ge=15, le=60)
     voce: str | None = Field(default=None, max_length=120)
     domande_saltabili: StrictBool | None = None
+    # Contratto 16.1: com'è fatta la lezione e le indicazioni libere di Andrea.
+    tipo: TipoLezione | None = None
+    indicazioni: str | None = Field(default=None, max_length=4000)
+
+    _i = field_validator("indicazioni")(classmethod(lambda cls, v: _indicazioni(v)))
+
+
+class MaterialePatch(Corpo):
+    titolo: str | None = Field(default=None, max_length=400)
+    tipo: TipoMateriale | None = None
+
+    @field_validator("titolo")
+    @classmethod
+    def _titolo(cls, v):
+        if v is None:
+            return v
+        v = " ".join(v.split())
+        if not v or len(v) > 120:
+            raise ValueError("titolo non valido")
+        return v
 
 
 class LezionePatch(Corpo):

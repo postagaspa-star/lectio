@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.0.1"
+VERSIONE = "1.1.0"
 
 CARTELLA_APP = Path(__file__).resolve().parent
 VERSIONI_PATH_DEFAULT = str(CARTELLA_APP / "versioni.json")
@@ -57,6 +57,8 @@ class Settings:
     tailscale_host: str = "lectio-tailscale"
     # L'indirizzo https per usare Lectio fuori casa (Tailscale Funnel), da dare alle app.
     indirizzo_fuori_casa: str | None = None
+    # Il servizio delle voci gratis sul NAS (contratto 16.5), per esempio http://lectio-voci:8000.
+    voci_url: str | None = None
 
     @property
     def modalita_prova(self) -> bool:
@@ -96,6 +98,7 @@ def carica_settings() -> Settings:
         sottofondo=(e("LECTIO_SOTTOFONDO") or "1").strip().lower() not in ("0", "no", "false"),
         tailscale_host=_vuoto_a_none(e("LECTIO_TAILSCALE_HOST")) or "lectio-tailscale",
         indirizzo_fuori_casa=(_vuoto_a_none(e("LECTIO_INDIRIZZO_FUORI_CASA")) or "").rstrip("/") or None,
+        voci_url=(_vuoto_a_none(e("LECTIO_VOCI_URL")) or "").rstrip("/") or None,
     )
 
 
@@ -109,7 +112,7 @@ def riassunto_config(s: Settings) -> str:
         f"db={s.db_path} dati={s.dati_dir} mistral={stato(s.mistral_key)} azure={stato(s.azure_key)}"
         f" regione={s.azure_regione or 'assente'} prova={'si' if s.modalita_prova else 'no'}"
         f" piano={s.modello_piano} scrittura={s.modello_scrittura} ocr={s.modello_ocr} voce={s.modello_voce}"
-        f" sottofondo={'acceso' if s.sottofondo else 'spento'}"
+        f" sottofondo={'acceso' if s.sottofondo else 'spento'} voci_nas={s.voci_url or 'assenti'}"
     )
 
 

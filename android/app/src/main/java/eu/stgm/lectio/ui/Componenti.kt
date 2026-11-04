@@ -2,6 +2,8 @@ package eu.stgm.lectio.ui
 
 import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,6 +16,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -46,6 +52,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -70,7 +77,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import eu.stgm.lectio.ui.tema.Colori
 import eu.stgm.lectio.ui.tema.L
 import eu.stgm.lectio.ui.tema.LocalMovimenti
 import eu.stgm.lectio.ui.tema.materia
@@ -184,9 +193,10 @@ fun PulsantePieno(
     altezza: Dp = 58.dp,
     /** Il colore del testo; null = quello sull'accento. */
     coloreTesto: Color? = null,
+    raggio: Dp = 18.dp,
 ) {
     val c = L.colori
-    val forma = RoundedCornerShape(18.dp)
+    val forma = RoundedCornerShape(raggio)
     Row(
         modifier
             .fillMaxWidth()
@@ -746,6 +756,221 @@ fun Entra(visibile: Boolean, contenuto: @Composable () -> Unit) {
 @Composable
 fun Toccabile(onClick: () -> Unit, modifier: Modifier = Modifier, contenuto: @Composable BoxScope.() -> Unit) {
     Box(modifier.clickable(onClick = onClick), content = contenuto)
+}
+
+// --- Nuova lezione e materiale (v1.4, prototipi NuovaLezioneTel e MaterialePc) ------------------
+
+/** Il bordo delle righe scelte (#A9B1F5 / scuro #3B4290) e il loro fondo (#F6F7FF / #1E2140). */
+val Colori.bordoScelto: Color get() = if (scuro) Color(0xFF3B4290) else Color(0xFFA9B1F5)
+val Colori.fondoScelto: Color get() = if (scuro) Color(0xFF1E2140) else Color(0xFFF6F7FF)
+
+/** Il fondo delle schede spente o non scelte (#FAFAF8) e il loro bordo tratteggiato (#DCDAD3). */
+val Colori.fondoSpento: Color get() = if (scuro) Color(0xFF17171B) else Color(0xFFFAFAF8)
+val Colori.bordoSpento: Color get() = if (scuro) Color(0xFF3A3A42) else Color(0xFFDCDAD3)
+
+/**
+ * La pillola da scegliere dei prototipi v1.4: alta 38, 14 / 700; accesa = bordo 2 accento,
+ * fondo accento tenue, testo accento; spenta = fondo come la pagina. Il tocco vale 48 dp
+ * in altezza anche se la pillola ne disegna 38.
+ */
+@Composable
+fun PillolaOpzione(
+    testo: String,
+    accesa: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icona: ImageVector? = null,
+    abilitato: Boolean = true,
+    ruolo: Role = Role.RadioButton,
+) {
+    val c = L.colori
+    val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val fondo by animateColorAsState(if (accesa) c.accentoTenue else c.fondo, morbido(200), label = "fondo")
+    val bordo by animateColorAsState(if (accesa) c.accento else Color.Transparent, morbido(200), label = "bordo")
+    Box(
+        modifier
+            .heightIn(min = 48.dp)
+            .androidx_selezionabile(accesa, interazione, abilitato, ruolo, onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .height(38.dp)
+                .clip(CircleShape)
+                .background(fondo)
+                .border(2.dp, bordo, CircleShape)
+                .androidx_increspatura(interazione)
+                .alpha(if (abilitato) 1f else 0.45f)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icona != null) {
+                Icon(icona, contentDescription = null, tint = if (accesa) c.accentoTesto else c.tenue, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(testo, style = L.testi.pillola, color = if (accesa) c.accentoTesto else c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+private fun Modifier.androidx_selezionabile(
+    scelto: Boolean,
+    interazione: androidx.compose.foundation.interaction.MutableInteractionSource,
+    abilitato: Boolean,
+    ruolo: Role,
+    onClick: () -> Unit,
+): Modifier = if (ruolo == Role.Checkbox) {
+    this.toggleable(scelto, interazione, null, abilitato, ruolo) { onClick() }
+} else {
+    this.selectable(scelto, interazione, null, abilitato, ruolo, onClick)
+}
+
+/** L'increspatura del tocco solo sulla parte disegnata (la zona toccabile è più grande). */
+@Composable
+private fun Modifier.androidx_increspatura(interazione: androidx.compose.foundation.interaction.MutableInteractionSource): Modifier =
+    this.indication(interazione, ripple())
+
+/**
+ * Il binario a segmenti dei prototipi v1.4 (tipo, durata, domande): fondo superficie 2,
+ * raggio 14, il segmento scelto bianco con ombra leggera, 14 / 700. Ogni segmento è
+ * toccabile per tutta l'altezza del binario (50 dp).
+ */
+@Composable
+fun Binario(opzioni: List<String>, scelta: Int, onScegli: (Int) -> Unit, modifier: Modifier = Modifier, abilitato: Boolean = true) {
+    val c = L.colori
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.superficie2).padding(horizontal = 2.dp)) {
+        opzioni.forEachIndexed { i, testo ->
+            val attivo = i == scelta
+            val forma = RoundedCornerShape(11.dp)
+            val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(50.dp)
+                    .selectable(attivo, interazione, null, abilitato, Role.RadioButton) { onScegli(i) }
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .then(if (attivo && !c.scuro) Modifier.shadow(2.dp, forma, clip = false, ambientColor = Color(0x1F141420), spotColor = Color(0x1F141420)) else Modifier)
+                        .clip(forma)
+                        .background(if (attivo) (if (c.scuro) Color(0xFF3A3A43) else c.superficie) else Color.Transparent)
+                        .androidx_increspatura(interazione),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        testo,
+                        style = L.testi.pillola,
+                        color = if (attivo) c.testo else c.tenue,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Il campo con il bordo dei prototipi v1.4: bordo 2 `#ECEAE4` (accento quando si scrive),
+ * raggio 14, fondo superficie. [righe] > 1 = area di testo.
+ */
+@Composable
+fun CampoBordato(
+    valore: String,
+    onCambia: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    segnaposto: String? = null,
+    righe: Int = 1,
+    stile: TextStyle = L.testi.testo.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+    altezza: Dp = 52.dp,
+    tastiera: KeyboardOptions = KeyboardOptions.Default,
+    descrizione: String? = null,
+    fondo: Color = L.colori.superficie,
+    bordoSpento: Color = L.colori.superficie2,
+    abilitato: Boolean = true,
+) {
+    val c = L.colori
+    val forma = RoundedCornerShape(14.dp)
+    val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val acceso by interazione.collectIsFocusedAsState()
+    val bordo by animateColorAsState(if (acceso) c.accento else bordoSpento, morbido(200), label = "bordo")
+    androidx.compose.foundation.text.BasicTextField(
+        value = valore,
+        onValueChange = onCambia,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (righe == 1) Modifier.height(altezza) else Modifier)
+            .then(if (descrizione != null) Modifier.semantics { contentDescription = descrizione } else Modifier),
+        enabled = abilitato,
+        singleLine = righe == 1,
+        minLines = righe,
+        textStyle = stile.copy(color = c.testo),
+        keyboardOptions = tastiera,
+        interactionSource = interazione,
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(c.accento),
+        decorationBox = { campo ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (righe == 1) Modifier.fillMaxHeight() else Modifier)
+                    .clip(forma)
+                    .background(fondo)
+                    .border(2.dp, bordo, forma)
+                    .padding(horizontal = 14.dp, vertical = if (righe == 1) 0.dp else 12.dp),
+                contentAlignment = if (righe == 1) Alignment.CenterStart else Alignment.TopStart,
+            ) {
+                if (valore.isEmpty() && segnaposto != null) {
+                    Text(segnaposto, style = stile.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = c.moltoTenue, maxLines = righe, overflow = TextOverflow.Ellipsis)
+                }
+                campo()
+            }
+        },
+    )
+}
+
+/** Il tondo col numero della sezione (28 dp, accento tenue, 13 / 800). */
+@Composable
+fun NumeroSezione(n: Int) {
+    val c = L.colori
+    Box(Modifier.size(28.dp).clip(CircleShape).background(c.accentoTenue), contentAlignment = Alignment.Center) {
+        Text(n.toString(), style = L.testi.piccolo.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = c.accentoTesto)
+    }
+}
+
+/**
+ * Una sezione numerata (prototipo NuovaLezioneTel): scheda bianca raggio 20, padding 16,
+ * in testa il numero e il titolo 18 / 800, a destra [destra] se c'è.
+ */
+@Composable
+fun SezioneNumerata(
+    n: Int,
+    titolo: String,
+    modifier: Modifier = Modifier,
+    destra: (@Composable () -> Unit)? = null,
+    contenuto: @Composable ColumnScope.() -> Unit,
+) {
+    val c = L.colori
+    val forma = RoundedCornerShape(20.dp)
+    Column(
+        modifier.fillMaxWidth().clip(forma).background(c.superficie).padding(16.dp).animateContentSize(morbido()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            NumeroSezione(n)
+            Text(
+                titolo,
+                style = L.testi.titoloSezione.copy(fontSize = 18.sp, lineHeight = 22.sp),
+                color = c.testo,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+            destra?.invoke()
+        }
+        contenuto()
+    }
 }
 
 /** Una riga di elenco dentro una scheda: icona o pallino, titolo, sotto, a destra. */

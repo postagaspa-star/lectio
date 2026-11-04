@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Lectio — Nuova lezione (proposta)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2F3CB0;text-decoration:none}a:hover{color:#1F2A8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F5F4F0; color: #1A1A1F; font-family: Figtree, system-ui, sans-serif">
+
+<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 128px; overflow-y: auto; padding: 12px 16px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px">
+<a href="Materia.dc.html" aria-label="Indietro" style="width: 44px; height: 44px; border-radius: 999px; background: #ECEAE4; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<span style="display: flex; align-items: center; gap: 8px; background: #FBF1DE; color: #8A5506; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700"><span style="width: 8px; height: 8px; border-radius: 999px; background: #C27C0E"></span>Storia dell'Arte</span>
+</div>
+<h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.6px">Nuova lezione</h1>
+
+<section style="background: #FFFFFF; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 26px; height: 26px; border-radius: 999px; background: #ECEEFE; color: #2F3CB0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">1</span><h2 style="margin: 0; font-size: 18px; font-weight: 800">Su cosa</h2></div>
+<input value="{{ argomento }}" onInput="{{ scriviArgomento }}" aria-label="Argomento" placeholder="Per esempio La scultura classica" style="height: 50px; border-radius: 14px; border: 2px solid #ECEAE4; background: #FFFFFF; padding: 0 12px; font-family: inherit; font-size: 16px; font-weight: 600; color: #1A1A1F; outline: none">
+</section>
+
+<section style="background: #FFFFFF; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 26px; height: 26px; border-radius: 999px; background: #ECEEFE; color: #2F3CB0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">2</span><h2 style="margin: 0; font-size: 18px; font-weight: 800; flex-grow: 1">Materiale</h2><span style="font-size: 14px; font-weight: 800; color: #2F3CB0">{{ conteggio }}</span></div>
+<div style="display: flex; gap: 6px">
+<button onClick="{{ usaSuggeriti }}" style="{{ stileSuggeriti }}">Sull'argomento</button>
+<button onClick="{{ usaTutti }}" style="{{ stileTutti }}">Tutti</button>
+<button onClick="{{ usaNessuno }}" style="{{ stileNessuno }}">Nessuno</button>
+</div>
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{ materiali }}" as="m" hint-placeholder-count="6">
+<button onClick="{{ m.pick }}" aria-pressed="{{ m.premuto }}" style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 2px; border: none; border-bottom: 1px solid #ECEBE6; background: none; font-family: inherit; text-align: left; cursor: pointer">
+<span style="{{ m.casella }}"><sc-if value="{{ m.scelto }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg></sc-if></span>
+<span style="flex-grow: 1; font-size: 15px; font-weight: 700; color: #1A1A1F">{{ m.titolo }}</span>
+<sc-if value="{{ m.suggerito }}" hint-placeholder-val="{{ false }}"><span style="background: #ECEEFE; color: #2F3CB0; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 800">argomento</span></sc-if>
+</button>
+</sc-for>
+</div>
+</section>
+
+<section style="background: #FFFFFF; border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 26px; height: 26px; border-radius: 999px; background: #ECEEFE; color: #2F3CB0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">3</span><h2 style="margin: 0; font-size: 18px; font-weight: 800">Come la vuoi</h2></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; background: #ECEAE4; border-radius: 14px; padding: 4px">
+<sc-for list="{{ tipi }}" as="t" hint-placeholder-count="3">
+<button onClick="{{ t.pick }}" style="{{ t.stile }}">{{ t.nome }}</button>
+</sc-for>
+</div>
+<span style="font-size: 14px; font-weight: 600; color: #5E5E68">{{ fraseTipo }}</span>
+<textarea value="{{ indicazioni }}" onInput="{{ scriviIndicazioni }}" rows="3" aria-label="Le tue indicazioni" placeholder="Le tue indicazioni, per esempio: insisti sul Discobolo" style="border-radius: 14px; border: 2px solid #ECEAE4; background: #FFFFFF; padding: 10px 12px; font-family: inherit; font-size: 15px; font-weight: 500; line-height: 1.45; color: #1A1A1F; resize: none; outline: none"></textarea>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{ spunti }}" as="c" hint-placeholder-count="6">
+<button onClick="{{ c.pick }}" style="{{ c.stile }}">{{ c.etichetta }}</button>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: #ECEAE4; border-radius: 14px; padding: 4px">
+<sc-for list="{{ durate }}" as="d" hint-placeholder-count="4">
+<button onClick="{{ d.pick }}" style="{{ d.stile }}">{{ d.etichetta }}</button>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background: #ECEAE4; border-radius: 14px; padding: 4px">
+<button onClick="{{ obbligatorie }}" style="{{ stileObbligatorie }}">Domande obbligatorie</button>
+<button onClick="{{ saltabili }}" style="{{ stileSaltabili }}">Si possono saltare</button>
+</div>
+</section>
+
+<section style="background: #FFFFFF; border-radius: 20px; padding: 16px; display: flex; align-items: center; gap: 10px">
+<span style="width: 26px; height: 26px; border-radius: 999px; background: #ECEEFE; color: #2F3CB0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800">4</span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 800; flex-grow: 1">Voce</h2>
+<span style="font-size: 15px; font-weight: 700">Lorenzo</span><span style="font-size: 14px; font-weight: 600; color: #5E5E68">espressiva</span>
+</section>
+</div>
+
+<div style="position: absolute; left: 0; right: 0; bottom: 0; background: #FFFFFF; border-top: 1px solid #ECEBE6; padding: 12px 16px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 700"><span>{{ riassunto }}</span><span style="color: #5E5E68; font-weight: 600">{{ dopo }}</span></div>
+<button onClick="{{ prepara }}" disabled="{{ bloccato }}" style="{{ stilePrepara }}">{{ etichettaPulsante }}</button>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const MAT = [
+{ id: 9, titolo: "Fidia e le statue crisoelefantine", parole: ["fidia", "scultura", "classica", "statue"] },
+{ id: 10, titolo: "Mirone e il Discobolo", parole: ["mirone", "discobolo", "scultura", "classica"] },
+{ id: 11, titolo: "Mirone e il Discobolo (2)", parole: ["mirone", "discobolo", "scultura", "classica"] },
+{ id: 12, titolo: "L'Auriga di Delfi", parole: ["auriga", "delfi", "severo", "scultura"] },
+{ id: 13, titolo: "Il Doriforo di Policleto", parole: ["policleto", "doriforo", "scultura", "classica"] },
+{ id: 14, titolo: "Le metope dei templi", parole: ["metope", "templi"] },
+{ id: 15, titolo: "La scultura dei frontoni", parole: ["frontoni", "scultura", "templi"] },
+{ id: 16, titolo: "La pittura vascolare", parole: ["pittura", "vascolare", "vasi"] },
+{ id: 17, titolo: "La scultura attica arcaica", parole: ["scultura", "attica", "arcaica"] },
+{ id: 18, titolo: "Kouroi e korai", parole: ["kouroi", "korai", "scultura", "arcaica"] },
+{ id: 19, titolo: "Le correzioni ottiche", parole: ["correzioni", "ottiche", "templi"] },
+{ id: 20, titolo: "Gli ordini architettonici", parole: ["ordini", "dorico", "ionico", "corinzio"] },
+{ id: 21, titolo: "L'anfora del Dipylon", parole: ["anfora", "dipylon", "vasi"] },
+{ id: 22, titolo: "I periodi dell'arte greca", parole: ["periodi", "arte", "greca"] },
+{ id: 23, titolo: "Come si scrive una didascalia", parole: ["didascalia", "opera"] }
+];
+const TIPI = [
+{ k: "spiegazione", nome: "Spiegazione", frase: "Te lo spiego dall'inizio, con domande lungo la strada." },
+{ k: "ripasso", nome: "Ripasso", frase: "Più veloce: i punti chiave e tante domande alla fine." },
+{ k: "interrogazione", nome: "Interroga", frase: "Ti interrogo come il prof, poi ti dico la risposta giusta." }
+];
+const SPUNTI = [
+{ etichetta: "Da zero", frase: "Spiegalo partendo da zero, come se non l'avessi mai studiato." },
+{ etichetta: "Date e nomi", frase: "Insisti su date, nomi degli artisti e delle opere." },
+{ etichetta: "Confronta", frase: "Confronta gli artisti tra loro: cosa cambia da uno all'altro." },
+{ etichetta: "Descrivi le opere", frase: "Descrivi bene le opere, come se le avessi davanti." },
+{ etichetta: "Più difficili", frase: "Fammi domande più difficili di quelle del prof." },
+{ etichetta: "Esempi", frase: "Usa tanti esempi concreti." }
+];
+const argomento = s.argomento ?? "La scultura classica: Mirone, Policleto e Fidia";
+const indicazioni = s.indicazioni ?? "";
+const tipo = s.tipo || "spiegazione";
+const durata = s.durata || 20;
+const norm = (x) => x.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const parole = norm(argomento).split(/[^a-z]+/).filter((w) => w.length > 3);
+const suggeriti = MAT.filter((m) => m.parole.filter((p) => parole.indexOf(p) >= 0).length >= 2).map((m) => m.id);
+const auto = s.scelti == null;
+const scelti = auto ? suggeriti : s.scelti;
+const n = scelti.length;
+const euro = (x) => x.toFixed(2).replace(".", ",") + " €";
+const costo = { 15: 0.21, 20: 0.27, 30: 0.41, 45: 0.61 }[durata];
+const pill = "height: 36px; padding: 0 12px; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; ";
+const pillOn = pill + "border: 2px solid #3D4ED8; background: #ECEEFE; color: #2F3CB0;";
+const pillOff = pill + "border: 2px solid transparent; background: #F5F4F0; color: #1A1A1F;";
+const seg = "height: 42px; border-radius: 11px; border: none; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; ";
+const segOn = seg + "background: #FFFFFF; color: #1A1A1F; box-shadow: 0 1px 3px rgba(20,20,30,.12);";
+const segOff = seg + "background: transparent; color: #5E5E68;";
+const manca = !argomento.trim() || n === 0;
+const toggle = (id) => {
+const base = (this.state && this.state.scelti != null) ? this.state.scelti : suggeriti;
+this.setState({ scelti: base.indexOf(id) >= 0 ? base.filter((x) => x !== id) : base.concat([id]) });
+};
+const tipoNome = TIPI.find((t) => t.k === tipo);
+return {
+argomento: argomento,
+indicazioni: indicazioni,
+scriviArgomento: (e) => this.setState({ argomento: e.target.value }),
+scriviIndicazioni: (e) => this.setState({ indicazioni: e.target.value.slice(0, 600) }),
+conteggio: n + " di " + MAT.length,
+usaSuggeriti: () => this.setState({ scelti: null }),
+usaTutti: () => this.setState({ scelti: MAT.map((m) => m.id) }),
+usaNessuno: () => this.setState({ scelti: [] }),
+stileSuggeriti: auto ? pillOn : pillOff,
+stileTutti: !auto && n === MAT.length ? pillOn : pillOff,
+stileNessuno: !auto && n === 0 ? pillOn : pillOff,
+materiali: MAT.map((m) => {
+const scelto = scelti.indexOf(m.id) >= 0;
+return {
+titolo: m.titolo, scelto: scelto, premuto: scelto ? "true" : "false", suggerito: suggeriti.indexOf(m.id) >= 0,
+casella: "width: 22px; height: 22px; flex-shrink: 0; border-radius: 7px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; " + (scelto ? "background: #3D4ED8;" : "border: 2px solid #C9C7C0; background: #FFFFFF;"),
+pick: () => toggle(m.id)
+};
+}),
+tipi: TIPI.map((t) => ({ nome: t.nome, stile: t.k === tipo ? segOn : segOff, pick: () => this.setState({ tipo: t.k }) })),
+fraseTipo: tipoNome.frase,
+spunti: SPUNTI.map((c) => {
+const dentro = indicazioni.indexOf(c.frase) >= 0;
+return {
+etichetta: (dentro ? "✓ " : "+ ") + c.etichetta,
+stile: dentro ? pillOn : pillOff,
+pick: () => {
+const ora = (this.state && this.state.indicazioni) || "";
+const nuovo = ora.indexOf(c.frase) >= 0 ? ora.replace(c.frase, "").replace(/\s{2,}/g, " ").trim() : (ora.trim() ? ora.trim() + " " : "") + c.frase;
+this.setState({ indicazioni: nuovo.slice(0, 600) });
+}
+};
+}),
+durate: [15, 20, 30, 45].map((m) => ({ etichetta: m + " min", stile: m === durata ? segOn : segOff, pick: () => this.setState({ durata: m }) })),
+stileObbligatorie: s.saltabili ? segOff : segOn,
+stileSaltabili: s.saltabili ? segOn : segOff,
+obbligatorie: () => this.setState({ saltabili: false }),
+saltabili: () => this.setState({ saltabili: true }),
+riassunto: !argomento.trim() ? "Manca l'argomento" : n === 0 ? "Scegli il materiale" : tipoNome.nome + " · " + durata + " min · " + n + (n === 1 ? " materiale" : " materiali"),
+dopo: "mese: " + euro(0.05 + costo) + " di 2 €",
+bloccato: manca,
+stilePrepara: "height: 54px; border-radius: 16px; border: none; font-family: inherit; font-size: 17px; font-weight: 700; " + (manca ? "background: #ECEAE4; color: #74747D;" : "background: #3D4ED8; color: #FFFFFF; box-shadow: 0 8px 20px rgba(61,78,216,.28); cursor: pointer;"),
+etichettaPulsante: "Prepara la lezione · " + euro(costo),
+prepara: () => {}
+};
+}
+}
+</script>
+</body>
+</html>

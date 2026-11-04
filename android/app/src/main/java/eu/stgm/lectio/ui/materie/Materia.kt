@@ -445,7 +445,8 @@ private fun SchedaDelProf(
     Scheda(modifier, padding = PaddingValues(18.dp), spazio = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TitoloSezione("Cosa chiede il prof", Modifier.weight(1f))
-            if (scheda != null && scheda.stato != "vuota") PulsanteTesto("Modifica", azioni.modificaScheda, abilitato = !senzaRete)
+            // Anche vuota: Andrea può scriverla a mano prima che arrivi una verifica.
+            if (scheda != null) PulsanteTesto("Modifica", azioni.modificaScheda, abilitato = !senzaRete)
         }
         when (scheda?.stato) {
             null -> Segnaposto(altezza = 16.dp)

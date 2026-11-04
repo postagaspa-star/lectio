@@ -370,7 +370,10 @@ def aggiorna(ctx, materia_id: int) -> None:
                 db.aggiungi_novita(conn, "scheda_aggiornata", novita, materia_id=materia_id)
 
     if not documenti and not esiti:
-        chiudi("pronta" if any(attuale[k] for k in CAMPI) or note else "vuota")
+        # Nessuna verifica né esito (per esempio un materiale passato da verifica ad appunti): di quello
+        # che aveva scritto l'AI non resta niente, restano solo le parti scritte da Andrea.
+        dati = unisci(vuota(), di_andrea)
+        chiudi("pronta" if any(dati[k] for k in CAMPI) or note else "vuota", dati=dati)
         return
     try:
         oggetto = ai.chiedi_json(

@@ -126,6 +126,22 @@ object Condivisione {
             ?: materie.firstOrNull { trovata.contains(it.nome.lowercase(Locale.ITALIAN)) || it.nome.lowercase(Locale.ITALIAN).contains(trovata) }?.id
     }
 
+    private val RIGA_GEMINI = Regex("^\\s*\\**\\s*MATERIA\\s*:.*\\|.*TIPO\\s*:([^|\\n]*)", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+
+    /**
+     * Un testo trascritto da Gemini col modello di verifica (riga `MATERIA: … | TIPO: …`,
+     * contratto §12) è una verifica o un'interrogazione, come lo riconosce il server:
+     * così "Che cos'è" parte già giusto. null = non è un testo di Gemini (parte da Appunti).
+     */
+    fun tipoDaGemini(testo: String?): TipoMateriale? {
+        if (testo.isNullOrBlank()) return null
+        val tipo = RIGA_GEMINI.find(testo.take(3000))?.groupValues?.get(1)?.replace("*", "")?.trim()?.lowercase(Locale.ITALIAN) ?: return null
+        return when {
+            "oral" in tipo || "interrog" in tipo -> TipoMateriale.INTERROGAZIONE
+            else -> TipoMateriale.VERIFICA
+        }
+    }
+
     /** Quanti dei file condivisi sono foto (per il costo mostrato prima). */
     fun quanteFoto(generi: List<GenereFile?>): Int = generi.count { it?.immagine == true }
 }

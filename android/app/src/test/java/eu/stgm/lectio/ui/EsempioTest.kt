@@ -80,7 +80,7 @@ class EsempioTest {
         assertEquals("pronta", materia.stato.value.scheda?.stato)
         assertTrue(materia.stato.value.ripassare.isNotEmpty())
 
-        val nuova = NuovaLezioneViewModel(esempio, SorgenteEsempio.MATERIA_STORIA, 3).apply { carica() }
+        val nuova = NuovaLezioneViewModel(esempio, SorgenteEsempio.MATERIA_STORIA, 3, oggi = { oggi }).apply { carica() }
         aspetta { nuova.stato.value.stimaEspressiva != null }
         assertEquals("Prepara la lezione · 0,27 €", nuova.stato.value.costo.etichettaPulsante)
         nuova.voce(TipoVoce.GRATIS)

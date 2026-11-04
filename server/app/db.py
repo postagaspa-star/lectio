@@ -223,10 +223,28 @@ def _semina_2(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE schede SET da_prova = 1 WHERE aggiornata_il IS NOT NULL")
 
 
+# 1.1.0 (4/11): com'è fatta la lezione e le indicazioni di Andrea; chi ha scritto il titolo del materiale.
+SCHEMA_3 = """
+ALTER TABLE lezioni ADD COLUMN tipo TEXT NOT NULL DEFAULT 'spiegazione';
+ALTER TABLE lezioni ADD COLUMN indicazioni TEXT NOT NULL DEFAULT '';
+ALTER TABLE materiali ADD COLUMN titolo_da TEXT NOT NULL DEFAULT 'utente'
+"""
+
+
+def _semina_3(conn: sqlite3.Connection) -> None:
+    # I titoli presi dal nome del file (o quelli predefiniti) li riscrive Lectio leggendo il materiale.
+    from .titoli import titolo_automatico
+
+    for r in conn.execute("SELECT id, titolo, nome_file, origine, tipo, data FROM materiali").fetchall():
+        if titolo_automatico(r["titolo"], r["nome_file"]):
+            conn.execute("UPDATE materiali SET titolo_da = 'file' WHERE id = ?", (r["id"],))
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
     (2, SCHEMA_2, _semina_2),
+    (3, SCHEMA_3, _semina_3),
 ]
 
 

@@ -7,6 +7,8 @@
 - Azure (voce gratis fino a 500.000 caratteri al mese): SSML, i segni si tolgono e
   [pace=slow] diventa <prosody rate="-10%">. Il piano F0 accetta circa 20 richieste al
   minuto: si va una alla volta con una pausa minima.
+- Voci del NAS (Kyutai Pocket TTS e Supertonic, gratis, senza internet): un servizio a parte
+  sul NAS, più lento; i segni si tolgono.
 - Voce di prova (espeak-ng, robotica, dichiarata): solo in modalità prova, gratis."""
 
 import base64
@@ -24,7 +26,7 @@ from xml.sax.saxutils import escape
 import httpx
 
 from .config import MISTRAL_URL
-from .rete import ErroreFornitore, controlla, invia
+from .rete import ErroreFornitore, NonElaborata, controlla, invia
 
 log = logging.getLogger("uvicorn.error")
 
@@ -219,12 +221,94 @@ class VoceProva:
                 return Audio(f.read(), "wav", len(pulito))
 
 
+class VoceNas:
+    """Le voci gratis sul NAS (contratto 16.5): un piccolo servizio nel container "lectio-voci",
+    senza internet e senza costi. Lavora una voce alla volta, più piano di Mistral: per questo ogni
+    voce dice quanti minuti di lavoro servono per ogni minuto di lezione."""
+
+    fornitore = "nas"
+    tipo = "locale"
+    a_pagamento = False
+    parallelo = 1
+    NOME = "Il servizio delle voci"
+    SALUTE_SECONDI = 30
+
+    def __init__(self, url: str, transport: httpx.BaseTransport | None = None, orologio=time.monotonic,
+                 timeout: float = 900.0):
+        self._url = url.rstrip("/")
+        self._transport = transport
+        self._orologio = orologio
+        self._timeout = timeout
+        self._salute: tuple[float, bool] | None = None
+        self._lock = threading.Lock()
+
+    def disponibile(self) -> bool:
+        """Risponde? Tenuto in memoria per 30 secondi, per non chiederlo a ogni elenco delle voci."""
+        with self._lock:
+            ora = self._orologio()
+            if self._salute is not None and ora < self._salute[0]:
+                return self._salute[1]
+            try:
+                with httpx.Client(transport=self._transport, timeout=3.0) as c:
+                    r = c.get(f"{self._url}/salute")
+                ok = r.status_code == 200 and bool(r.json().get("ok"))
+            except Exception as e:
+                log.warning("le voci del NAS non rispondono: %s", type(e).__name__)
+                ok = False
+            self._salute = (ora + self.SALUTE_SECONDI, ok)
+            return ok
+
+    def caratteri(self, testo: str, emozione: str | None, lento: bool) -> int:
+        return len(senza_segni(testo))
+
+    def sintetizza(self, testo: str, *, emozione: str | None = None, lento: bool = False,
+                   voce: str | None = None) -> Audio:
+        pulito = senza_segni(testo)
+        corpo = {"motore": voce or "giovanni", "testo": pulito}
+
+        def manda() -> httpx.Response:
+            with httpx.Client(transport=self._transport, timeout=self._timeout) as c:
+                return c.post(f"{self._url}/voce", json=corpo)
+
+        r = invia(self.NOME, manda)
+        if r.status_code >= 400:
+            try:
+                frase = str(r.json().get("errore") or "")
+            except ValueError:
+                frase = ""
+            log.warning("le voci del NAS hanno risposto %s: %s", r.status_code, frase[:200])
+            if r.status_code >= 500:
+                # Un pezzo non riuscito si ritenta: non costa niente.
+                e = NonElaborata(self.NOME, str(r.status_code))
+                if frase:
+                    e.frase = f"{frase} Tocca Riprova."
+                raise e
+            raise ErroreFornitore(frase or "La voce gratis ha rifiutato un pezzo da leggere.")
+        if not r.content:
+            raise ErroreFornitore("La voce gratis ha risposto senza audio. Tocca Riprova.")
+        with self._lock:
+            self._salute = (self._orologio() + self.SALUTE_SECONDI, True)
+        return Audio(r.content, "wav", len(pulito))
+
+
+# Le voci del NAS che si possono scegliere: id dopo "nas:", nome a schermo, minuti di lavoro per
+# ogni minuto di lezione. Misurati sul NAS il 4/11 (0,45-0,57; 1,12-1,15; 0,94), più un po' di margine.
+VOCI_NAS = (
+    ("giovanni", "Giovanni", 0.6),
+    ("giovanni_grande", "Giovanni grande", 1.3),
+    ("supertonic", "Supertonic", 1.1),
+)
+NAS_PREDEFINITA = "giovanni"
+MINUTI_PER_MINUTO_ALTRE = {"espressiva": 0.1, "gratis": 0.15, "prova": 0.05}
+
+
 @dataclass
 class VoceScelta:
     id: str
-    tipo: str  # espressiva | gratis | prova
+    tipo: str  # espressiva | gratis | locale (le voci del NAS) | prova
     fornitore: object
     nome_voce: str | None
+    minuti_per_minuto: float = 0.1
 
 
 class Catalogo:
@@ -232,8 +316,9 @@ class Catalogo:
 
     def __init__(self, prova: bool, euro_al_minuto_mistral: float | None, voce_mistral_id: str,
                  mistral: VoceMistral | None, azure: VoceAzure | None, voce_prova: VoceProva,
-                 euro_al_minuto_azure: float = 0.0):
+                 euro_al_minuto_azure: float = 0.0, nas: VoceNas | None = None):
         self.prova = prova
+        self.nas = nas
         # None = il modello della voce non ha un prezzo in prezzi.json: la voce espressiva resta ferma.
         self.euro_al_minuto_mistral = euro_al_minuto_mistral
         self.euro_al_minuto_azure = euro_al_minuto_azure
@@ -279,9 +364,15 @@ class Catalogo:
             for v in voci:
                 uscita.append({"id": f"azure:{v['ShortName']}", "nome": nomi[v["ShortName"]], "tipo": "gratis",
                                "fornitore": "azure", "euro_al_minuto": self.euro_al_minuto_azure, "disponibile": True})
-        else:
+        elif self.nas is None:
+            # Nessuna voce gratis accesa: le app mostrano "non ancora attiva".
             uscita.append({"id": f"azure:{AZURE_PREDEFINITA}", "nome": "Isabella", "tipo": "gratis",
                            "fornitore": "azure", "euro_al_minuto": self.euro_al_minuto_azure, "disponibile": False})
+        if self.nas is not None:
+            pronte = self.nas.disponibile()
+            for motore, nome, minuti in VOCI_NAS:
+                uscita.append({"id": f"nas:{motore}", "nome": nome, "tipo": "gratis", "fornitore": "nas",
+                               "euro_al_minuto": 0, "disponibile": pronte, "minuti_per_minuto": minuti})
         if self.prova:
             uscita.append({"id": "prova:espeak", "nome": "Voce di prova", "tipo": "prova", "fornitore": "espeak",
                            "euro_al_minuto": 0, "disponibile": self.voce_prova.disponibile()})
@@ -292,23 +383,31 @@ class Catalogo:
         if not voce_id or ":" not in voce_id:
             return None
         prefisso, nome = voce_id.split(":", 1)
+        altre = MINUTI_PER_MINUTO_ALTRE
         if prefisso == "mistral" and self.mistral_disponibile and nome == self.voce_mistral_id:
-            return VoceScelta(voce_id, "espressiva", self.mistral, nome)
+            return VoceScelta(voce_id, "espressiva", self.mistral, nome, altre["espressiva"])
         if prefisso == "azure" and self.azure is not None and nome.startswith("it-IT-"):
-            return VoceScelta(voce_id, "gratis", self.azure, nome)
+            return VoceScelta(voce_id, "gratis", self.azure, nome, altre["gratis"])
+        if prefisso == "nas" and self.nas is not None:
+            # Anche se in questo momento non risponde: una lezione già in coda aspetta e ritenta.
+            for motore, _, minuti in VOCI_NAS:
+                if nome == motore:
+                    return VoceScelta(voce_id, "locale", self.nas, motore, minuti)
         if prefisso == "prova" and nome == "espeak" and self.prova:
-            return VoceScelta(voce_id, "prova", self.voce_prova, None)
+            return VoceScelta(voce_id, "prova", self.voce_prova, None, altre["prova"])
         return None
 
     def ripiego(self, preferita: str | None) -> str | None:
         """La voce da usare quando l'app non ne sceglie una: la preferita se si può,
-        altrimenti quella di prova (in prova) o la gratis."""
+        altrimenti l'espressiva, una del NAS, quella di prova (in prova) o quella di Azure."""
         if self.risolvi(preferita):
             return preferita
-        if self.prova:
-            return "prova:espeak"
         if self.mistral_disponibile:
             return f"mistral:{self.voce_mistral_id}"
+        if self.nas is not None:
+            return f"nas:{NAS_PREDEFINITA}"
+        if self.prova:
+            return "prova:espeak"
         if self.azure is not None:
             return f"azure:{self.azure.predefinita()}"
         return None

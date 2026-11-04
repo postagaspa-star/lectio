@@ -24,13 +24,34 @@
   const ESTENSIONI = ['.txt', '.md', '.pdf', '.docx', '.odt', '.rtf', '.jpg', '.jpeg', '.png', '.webp'];
   const IMMAGINI = ['.jpg', '.jpeg', '.png', '.webp'];
   const MASSIMO_BYTE = 20 * 1024 * 1024;
-  const TIPI_MATERIALE = [
-    { tipo: 'verifica', nome: 'Verifica corretta' },
-    { tipo: 'interrogazione', nome: 'Interrogazione' },
-    { tipo: 'appunti', nome: 'Appunti' },
-    { tipo: 'libro', nome: 'Libro' },
+  /**
+   * §16.4 "Che cos'è" in due famiglie: Da studiare (Lectio lo spiega e ci fa le domande) e Già corretta dal prof
+   * (Lectio impara come chiede e corregge). Foto e file partono da Appunti.
+   */
+  const FAMIGLIE_MATERIALE = [
+    { chiave: 'studio', nome: 'Da studiare', frase: 'Lectio lo spiega e ci fa le domande', tipi: [{ tipo: 'appunti', nome: 'Appunti' }, { tipo: 'libro', nome: 'Libro' }] },
+    { chiave: 'prof', nome: 'Già corretta dal prof', frase: 'Lectio impara come chiede e corregge', tipi: [{ tipo: 'verifica', nome: 'Verifica' }, { tipo: 'interrogazione', nome: 'Interrogazione' }] },
   ];
   const NOMI_TIPO_MATERIALE = { verifica: 'Verifica corretta', interrogazione: 'Interrogazione', appunti: 'Appunti', libro: 'Libro', altro: 'Altro' };
+  /** Il nome breve del tipo nelle righe della Nuova lezione ("Appunti · foto · 4 novembre"). */
+  const NOMI_TIPO_BREVE = { verifica: 'Verifica', interrogazione: 'Interrogazione', appunti: 'Appunti', libro: 'Libro', altro: 'Altro' };
+  /** §16.1 I tre tipi di lezione, con la frase della loro scheda. */
+  const TIPI_LEZIONE = [
+    { tipo: 'spiegazione', nome: 'Spiegazione', frase: 'Te lo spiego dall\'inizio, con domande lungo la strada' },
+    { tipo: 'ripasso', nome: 'Ripasso', frase: 'Più veloce: i punti chiave e tante domande alla fine' },
+    { tipo: 'interrogazione', nome: 'Interrogazione', frase: 'Ti interrogo come il prof, poi ti dico la risposta giusta' },
+  ];
+  /** §6 Gli spunti a pillola: ognuno aggiunge o toglie una frase dalle indicazioni. */
+  const SPUNTI = [
+    { etichetta: 'Spiegalo da zero', frase: 'Spiegalo partendo da zero, come se non l\'avessi mai studiato.' },
+    { etichetta: 'Insisti su date e nomi', frase: 'Insisti su date e nomi.' },
+    { etichetta: 'Confronta gli autori', frase: 'Confronta gli autori tra loro: cosa cambia da uno all\'altro.' },
+    { etichetta: 'Descrivi bene le opere', frase: 'Descrivi bene le opere, come se le avessi davanti.' },
+    { etichetta: 'Domande più difficili', frase: 'Fammi domande più difficili di quelle del prof.' },
+    { etichetta: 'Tanti esempi', frase: 'Usa tanti esempi concreti.' },
+  ];
+  /** §16.1 Le indicazioni: al massimo 600 caratteri. */
+  const MASSIMO_INDICAZIONI = 600;
   const NOMI_TIPI_DOMANDA = {
     aperta: 'Aperte', definizione: 'Definizioni', date: 'Date', esercizio: 'Esercizi', vero_falso: 'Vero o falso',
     scelta_multipla: 'Scelta multipla', collegamento: 'Collegamenti', traduzione: 'Traduzioni', altro: 'Altro',
@@ -473,39 +494,160 @@
     return t.length > 0 && t.length <= 2000;
   }
 
-  /**
-   * §6 "Userò": "4 verifiche, 1 interrogazione e 3 appunti di Storia" dal materiale della materia. Le verifiche
-   * e le interrogazioni si usano sempre; gli appunti e il libro solo quelli accesi (tutti, se non si è toccato Cambia).
-   */
   /** Il materiale che una lezione può usare: solo quello già letto dal server (non in lettura, non in errore). */
   function prontoDaUsare(x) {
     return !!x && (x.stato == null || x.stato === 'pronto');
   }
 
-  /**
-   * I `materiali` da mandare (§15.1): null finché non si tocca Cambia (= tutti); dopo, le verifiche e interrogazioni
-   * pronte più gli appunti/libri accesi e pronti. Un elenco vuoto il server lo rifiuta: la pagina lo blocca prima.
-   */
-  function materialiScelti(materiale, accesi) {
-    if (accesi == null) return null;
-    return (materiale || []).filter((x) => prontoDaUsare(x) && (['verifica', 'interrogazione'].includes(x.tipo) || accesi.includes(x.id))).map((x) => x.id);
+  // --- Nuova lezione (§6, contratto §16) -------------------------------------------------------
+
+  /** Minuscolo e senza accenti, per cercare nei titoli. */
+  function normalizza(testo) {
+    return String(testo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
 
-  function frasiUsero(materiale, nomeMateria, accesi) {
+  /** Le domande alla fine di una spiegazione (contratto §9.1): 15→4, 20→5, 30→6, 45→8, altrimenti 3 + durata/10. */
+  function finaliSpiegazione(durata) {
+    const d = Number(durata) || 20;
+    const tabella = { 15: 4, 20: 5, 30: 6, 45: 8 };
+    return tabella[d] != null ? tabella[d] : 3 + Math.round(d / 10);
+  }
+
+  /**
+   * Com'è fatta la lezione, in parole (contratto §16.1, la stessa regola di misure.struttura nel server):
+   * spiegazione "4 parti, una domanda dopo ognuna e 5 alla fine"; ripasso "I punti chiave in breve e 8 domande alla
+   * fine"; interrogazione "12 domande come le fa il prof, con la risposta giusta dopo ognuna".
+   */
+  function struttura(tipo, durata) {
+    const d = Number(durata) || 20;
+    const finali = finaliSpiegazione(d);
+    if (tipo === 'ripasso') return 'I punti chiave in breve e ' + Math.round(finali * 1.6) + ' domande alla fine';
+    if (tipo === 'interrogazione') return Math.round(d * 0.6) + ' domande come le fa il prof, con la risposta giusta dopo ognuna';
+    const blocchi = Math.max(3, Math.round(d / 5));
+    return blocchi + ' parti, una domanda dopo ognuna e ' + finali + ' alla fine';
+  }
+
+  /** "Spiegazione di 20 minuti". */
+  function titoloLezione(tipo, durata) {
+    const t = TIPI_LEZIONE.find((x) => x.tipo === tipo) || TIPI_LEZIONE[0];
+    return t.nome + ' di ' + (Number(durata) || 20) + ' minuti';
+  }
+
+  /**
+   * Uno spunto tocca le indicazioni: se la frase c'è la toglie, altrimenti la aggiunge in fondo. Se non ci sta nei
+   * 600 caratteri non la aggiunge (ok: false), così nel testo non resta mai una frase a metà.
+   */
+  function alternaSpunto(testo, frase, massimo) {
+    const max = massimo || MASSIMO_INDICAZIONI;
+    const ora = String(testo || '');
+    if (ora.includes(frase)) {
+      return { testo: ora.replace(frase, '').replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').trim(), ok: true };
+    }
+    const base = ora.trim();
+    const nuovo = (base ? base + ' ' : '') + frase;
+    if (nuovo.length > max) return { testo: ora, ok: false };
+    return { testo: nuovo, ok: true };
+  }
+
+  /** La riga INDICAZIONI del riepilogo: le prime 140 lettere, o quello che succede senza. */
+  function riepilogoIndicazioni(testo) {
+    const t = String(testo || '').trim();
+    if (!t) return 'Nessuna: segue il materiale e la scheda del prof';
+    return t.length > 140 ? t.slice(0, 140).trimEnd() + '…' : t;
+  }
+
+  /** La riga MATERIALE del riepilogo: "Mirone e il Discobolo", "2 materiali: A e B", "5 materiali: A, B e altri 3". */
+  function riepilogoMateriale(titoli) {
+    const t = (titoli || []).map((x) => x || 'Materiale');
+    if (!t.length) return 'Scegli almeno un materiale';
+    if (t.length === 1) return t[0];
+    if (t.length === 2) return '2 materiali: ' + t[0] + ' e ' + t[1];
+    const resto = t.length - 2;
+    return t.length + ' materiali: ' + t[0] + ', ' + t[1] + (resto === 1 ? ' e un altro' : ' e altri ' + resto);
+  }
+
+  /** La riga PER del riepilogo: "La verifica di giovedì 29 ottobre · domande obbligatorie". */
+  function riepilogoPer(evento, saltabili) {
+    const per = evento ? (evento.tipo === 'orale' ? 'L\'interrogazione di ' : 'La verifica di ') + dataLunga(evento.data) : 'Nessuna data';
+    return per + ' · domande ' + (saltabili ? 'che si possono saltare' : 'obbligatorie');
+  }
+
+  /** La pillola PER di un evento: "Interrogazione di lunedì 10 novembre". */
+  function etichettaEvento(evento) {
+    return (evento && evento.tipo === 'orale' ? 'Interrogazione di ' : 'Verifica di ') + dataLunga(evento && evento.data);
+  }
+
+  /** I due gruppi della sezione "Da quale materiale": appunti e libro / verifiche e interrogazioni. In errore: fuori. */
+  function gruppiMateriale(materiale) {
+    const visibili = (materiale || []).filter((x) => x && x.stato !== 'errore');
+    return {
+      studio: visibili.filter((x) => !['verifica', 'interrogazione'].includes(x.tipo)),
+      prof: visibili.filter((x) => ['verifica', 'interrogazione'].includes(x.tipo)),
+    };
+  }
+
+  /** "Appunti · foto · 4 novembre" sotto il titolo di una riga del materiale. */
+  function sottoMateriale(x) {
+    const parti = [NOMI_TIPO_BREVE[x.tipo] || 'Materiale'];
+    if (x.origine === 'foto') parti.push('foto');
+    else if (x.origine === 'file') parti.push('file');
+    else if (x.origine === 'scritto') parti.push('scritto');
+    const d = dataBreve(x.data || x.creato_il);
+    if (d) parti.push(d);
+    return parti.join(' · ');
+  }
+
+  /** Filtra per titolo (senza badare a maiuscole e accenti). */
+  function filtraPerTitolo(lista, cerca) {
+    const f = normalizza(cerca).trim();
+    if (!f) return lista || [];
+    return (lista || []).filter((x) => normalizza(x.titolo || x.nome_file || '').includes(f));
+  }
+
+  /**
+   * Le caselle spuntate (§16.2): finché Andrea non tocca una casella valgono i suggeriti del server (se il server
+   * non sa suggerire, tutto); dopo, la sua scelta. Sempre e solo materiale pronto, nell'ordine dell'elenco.
+   */
+  function materialiSpuntati(materiale, auto, suggeriti, manuali) {
     const pronti = (materiale || []).filter(prontoDaUsare);
-    const conta = (tipo) => pronti.filter((x) => x.tipo === tipo && (accesi == null || tipo === 'verifica' || tipo === 'interrogazione' || accesi.includes(x.id))).length;
-    const parti = [];
-    const v = conta('verifica');
-    const i = conta('interrogazione');
-    const a = conta('appunti') + conta('altro');
-    const b = conta('libro');
-    if (v) parti.push(plurale(v, 'verifica', 'verifiche'));
-    if (i) parti.push(plurale(i, 'interrogazione', 'interrogazioni'));
-    if (a) parti.push(plurale(a, 'appunto', 'appunti'));
-    if (b) parti.push(plurale(b, 'libro', 'libri'));
-    if (!parti.length) return 'Ancora niente materiale di ' + (nomeMateria || 'questa materia');
-    const elenco = parti.length === 1 ? parti[0] : parti.slice(0, -1).join(', ') + ' e ' + parti[parti.length - 1];
-    return elenco + ' di ' + (nomeMateria || 'questa materia');
+    if (auto) {
+      if (suggeriti == null) return pronti.map((x) => x.id);
+      return pronti.filter((x) => suggeriti.includes(x.id)).map((x) => x.id);
+    }
+    const scelti = manuali || [];
+    return pronti.filter((x) => scelti.includes(x.id)).map((x) => x.id);
+  }
+
+  // --- Un materiale: titolo e che cos'è (§5.1) ----------------------------------------------------
+
+  function famigliaDi(tipo) {
+    return FAMIGLIE_MATERIALE.find((f) => f.tipi.some((t) => t.tipo === tipo)) || FAMIGLIE_MATERIALE[0];
+  }
+
+  /** Il titolo di un materiale come lo vuole il server: spazi in più tolti. */
+  function pulisciTitolo(t) {
+    return String(t || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /** Sotto il TITOLO: da dove viene. Niente se l'ha scelto Andrea. */
+  function notaTitolo(x) {
+    if (!x || x.titolo_da === 'utente' || !x.titolo_da) return null;
+    const foto = x.origine === 'foto';
+    const da = x.nome_file ? (foto ? 'Dalla foto ' : 'Dal file ') + x.nome_file : null;
+    if (x.titolo_da === 'lectio') {
+      const come = 'titolo scritto da Lectio leggendo ' + (foto ? 'la foto' : x.origine === 'scritto' ? 'gli appunti' : 'il file');
+      return da ? da + ' · ' + come : come.charAt(0).toUpperCase() + come.slice(1);
+    }
+    return da;
+  }
+
+  /** PATCH /api/materiale/{id}: solo i campi cambiati ({} se niente). */
+  function campiCambiati(originale, ora) {
+    const c = {};
+    const t = pulisciTitolo(ora.titolo);
+    if (ora.titolo != null && t !== pulisciTitolo(originale.titolo)) c.titolo = t;
+    if (ora.tipo && ora.tipo !== originale.tipo) c.tipo = ora.tipo;
+    return c;
   }
 
   /** I limiti della scheda del prof come li vuole il server (server/app/schemi.py, SchedaPut). */
@@ -642,12 +784,6 @@
     return IMMAGINI.includes(estensione(nome));
   }
 
-  /** Il titolo predefinito da un nome di file: "verifica_storia-12.pdf" → "verifica storia 12". */
-  function titoloDaFile(nome) {
-    const senza = String(nome || '').replace(/\.[^.]+$/, '');
-    return senza.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Senza titolo';
-  }
-
   /** Le righe non vuote di un testo (argomenti, cose che corregge, altre domande uscite). */
   function righe(testo) {
     return String(testo || '').split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
@@ -718,15 +854,26 @@
     }
   }
 
+  /** §16.5: "pronta in circa N min". Dalla stima del server se c'è, altrimenti 2 + durata × minuti_per_minuto
+   *  (0,5 in su). null se non si sa (server vecchi, voci senza tempo). */
+  function prontaIn(voce, durata, stima) {
+    if (stima && stima.minuti_preparazione != null) return Number(stima.minuti_preparazione);
+    if (voce && voce.minuti_per_minuto != null) return Math.floor(2 + Number(durata) * Number(voce.minuti_per_minuto) + 0.5);
+    return null;
+  }
+
   return {
-    GIORNI, MESI, DURATE, VELOCITA, COLORI, NOMI_COLORI, ESTENSIONI, MASSIMO_BYTE, TIPI_MATERIALE, NOMI_TIPO_MATERIALE, NOMI_TIPI_DOMANDA, FASI,
+    GIORNI, MESI, DURATE, VELOCITA, COLORI, NOMI_COLORI, ESTENSIONI, MASSIMO_BYTE, FAMIGLIE_MATERIALE, NOMI_TIPO_MATERIALE, NOMI_TIPO_BREVE, NOMI_TIPI_DOMANDA, FASI,
+    TIPI_LEZIONE, SPUNTI, MASSIMO_INDICAZIONI,
     numero, euro, euroTondo, euroCosto, migliaia, limita, percentuale, dimensione, barraMese, spesaInAvviso,
     data, dataLunga, dataBreve, iso, giorniFra, quando, siAzzera,
     tempo, meno, durataBreve, mancano, etichettaVelocita, prossimaVelocita, durataVicina,
     riassuntoLezione, statoLezione, fasi, capitoliStato, capitoloA, etichettaDomanda, piuRecente, puntoDiPartenza, Fermate,
-    esitoRisposta, rispostaValida, frasiUsero, primoColoreLibero, azioneTastoPlay, modoSalto, domandaAperta, materialiScelti, prontoDaUsare,
+    esitoRisposta, rispostaValida, primoColoreLibero, azioneTastoPlay, modoSalto, domandaAperta, prontoDaUsare,
+    normalizza, finaliSpiegazione, struttura, titoloLezione, alternaSpunto, riepilogoIndicazioni, riepilogoMateriale, riepilogoPer, etichettaEvento,
+    gruppiMateriale, sottoMateriale, filtraPerTitolo, materialiSpuntati, famigliaDi, pulisciTitolo, notaTitolo, campiCambiati,
     LIMITI_SCHEDA, schedaDaMandare, controllaScheda,
-    creaSequenza, voceDi, statoVoci, sceltaVoce, etichettaPrepara,
-    estensione, controllaFile, eImmagine, titoloDaFile, righe, testoInterrogazione, codiceValido, prof, plurale, sottoMateria, basataSu, leggiRotta,
+    creaSequenza, voceDi, statoVoci, sceltaVoce, etichettaPrepara, prontaIn,
+    estensione, controllaFile, eImmagine, righe, testoInterrogazione, codiceValido, prof, plurale, sottoMateria, basataSu, leggiRotta,
   };
 });

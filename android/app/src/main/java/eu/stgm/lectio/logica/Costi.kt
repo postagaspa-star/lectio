@@ -17,12 +17,22 @@ object Costi {
     /** L'avviso calmo arriva all'80% del tetto (aspetto.md §0.6). */
     const val SOGLIA_AVVISO = 0.8
 
-    fun voci(elenco: List<Voce>): VociDisponibili {
-        val espressiva = elenco.firstOrNull { it.tipo == "espressiva" && it.disponibile }
-        val gratis = elenco.firstOrNull { it.tipo == "gratis" && it.disponibile }
-        val prova = elenco.firstOrNull { it.tipo == "prova" && it.disponibile }
-        return VociDisponibili(espressiva, gratis, prova)
+    /**
+     * Una voce attiva per genere. Con più voci dello stesso genere (le voci gratis del NAS)
+     * vale [preferita] se è di quel genere ed è attiva, altrimenti la prima.
+     */
+    fun voci(elenco: List<Voce>, preferita: String? = null): VociDisponibili {
+        fun di(tipo: String) = elenco.firstOrNull { it.tipo == tipo && it.disponibile && it.id == preferita }
+            ?: elenco.firstOrNull { it.tipo == tipo && it.disponibile }
+        return VociDisponibili(di("espressiva"), di("gratis"), di("prova"))
     }
+
+    /**
+     * "Pronta in circa N min" di una voce del NAS: N = 2 + durata × minuti_per_minuto,
+     * arrotondato (0,5 in su). null se il server non lo dice.
+     */
+    fun prontaIn(voce: Voce?, durata: Int): Int? =
+        voce?.minutiPerMinuto?.takeIf { it >= 0 }?.let { kotlin.math.floor(2 + durata * it + 0.5).toInt() }
 
     /** La voce da proporre: la predefinita delle impostazioni se c'è, altrimenti l'espressiva. */
     fun voceIniziale(voci: VociDisponibili, predefinita: String?): TipoVoce = when {
@@ -67,6 +77,8 @@ data class VistaCosto(
     val blocco: String?,
     /** La parte di [spesoMese] ancora in preparazione (contratto v1.3). */
     val impegnato: Double = 0.0,
+    /** Quanti minuti servono al server con la voce scelta (null dai server vecchi). */
+    val minutiPreparazione: Int? = null,
 ) {
     val etichettaPulsante: String
         get() = if (costoScelto == null) "Prepara la lezione" else "Prepara la lezione · ${Formati.euro(costoScelto)}"
@@ -118,6 +130,7 @@ data class VistaCosto(
                 consentita = consentita,
                 blocco = if (stimaScelta != null && !consentita) stimaScelta.motivo ?: "Sforerebbe il tetto di ${Formati.euro(tetto)}" else null,
                 impegnato = base?.impegnatoEur ?: 0.0,
+                minutiPreparazione = stimaScelta?.minutiPreparazione,
             )
         }
     }

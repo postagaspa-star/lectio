@@ -100,6 +100,23 @@ class PreparatoreFile(private val context: Context) {
         }
     }
 
+    /**
+     * L'inizio di un file di testo (al massimo 4 KB), per riconoscere i testi di Gemini
+     * prima di mandarli. null per le foto, i PDF o se non si legge.
+     */
+    suspend fun inizio(scelto: FileScelto): String? = withContext(Dispatchers.IO) {
+        if (scelto.genere != GenereFile.TESTO && scelto.genere != GenereFile.MARKDOWN) return@withContext null
+        try {
+            context.contentResolver.openInputStream(Uri.parse(scelto.uri))?.use { dentro ->
+                val pezzo = ByteArray(4096)
+                val n = dentro.read(pezzo)
+                if (n > 0) String(pezzo, 0, n, Charsets.UTF_8) else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** Un testo condiviso (da Gemini) diventa un file .txt. */
     suspend fun testo(testo: String, oggetto: String?): FileDaCaricare = withContext(Dispatchers.IO) {
         val nome = Condivisione.nomeTesto(oggetto)

@@ -1,6 +1,7 @@
 """Voci, stime e lezioni (contratto, sezioni 8, 9, 15.1, 15.2 e 15.4)."""
 
 import json
+import math
 import shutil
 import sqlite3
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import FileResponse, Response
 
-from .. import clock, db, forme, ripasso
+from .. import clock, db, forme, misure, ripasso
 from ..auth import richiede_token
 from ..db import get_conn
 from ..errori import ErroreApi, conflitto, non_trovato, non_valido, tetto
@@ -40,12 +41,21 @@ def _scegli_voce(conn: sqlite3.Connection, s: Servizi, voce: str | None):
         scelta = s.catalogo.risolvi(voce)
         if scelta is None:
             raise non_valido("Questa voce adesso non si può usare: scegline un'altra.", campo="voce")
-        return scelta
-    voce_id = s.catalogo.ripiego(_impostazioni(conn, s)["voce_predefinita"])
-    scelta = s.catalogo.risolvi(voce_id)
-    if scelta is None:
-        raise ErroreApi(503, "Nessuna voce è pronta: manca la chiave Mistral o quella di Azure.")
+    else:
+        voce_id = s.catalogo.ripiego(_impostazioni(conn, s)["voce_predefinita"])
+        scelta = s.catalogo.risolvi(voce_id)
+        if scelta is None:
+            raise ErroreApi(503, "Nessuna voce è pronta: manca la chiave Mistral e le voci gratis sono spente.")
+    if scelta.tipo == "locale" and not scelta.fornitore.disponibile():
+        raise non_valido("Le voci gratis del NAS adesso non rispondono: riprova tra poco o scegli un'altra voce.",
+                         campo="voce")
     return scelta
+
+
+def minuti_preparazione(durata: int, scelta) -> int:
+    """Quanto ci vuole, circa, a preparare la lezione (contratto 16.5): 2 minuti per il testo più
+    il lavoro della voce. Le voci del NAS sono le più lente."""
+    return int(math.floor(2 + durata * scelta.minuti_per_minuto + 0.5))
 
 
 def _materiale(conn: sqlite3.Connection, materia_id: int, ristretti: list[int] | None) -> tuple[int, int, int]:
@@ -71,10 +81,11 @@ def _materiale(conn: sqlite3.Connection, materia_id: int, ristretti: list[int] |
     return caratteri_appunti, caratteri_verifiche, len(appunti) + len(verifiche)
 
 
-def _stima(conn: sqlite3.Connection, s: Servizi, durata: int, tipo_voce: str, appunti: int, verifiche: int) -> dict:
+def _stima(conn: sqlite3.Connection, s: Servizi, durata: int, tipo_voce: str, appunti: int, verifiche: int,
+           tipo: str | None = None) -> dict:
     st = s.settings
     return s.cassa.stima_lezione(conn, durata_min=durata, tipo_voce=tipo_voce, caratteri_appunti=appunti,
-                                 caratteri_verifiche=verifiche, prova=st.modalita_prova,
+                                 caratteri_verifiche=verifiche, prova=st.modalita_prova, tipo=tipo,
                                  modello_piano=st.modello_piano, modello_scrittura=st.modello_scrittura,
                                  modello_voce=st.modello_voce, modello_ocr=st.modello_ocr)
 
@@ -92,7 +103,10 @@ def stima(corpo: StimaIn, conn: sqlite3.Connection = Depends(get_conn), s: Servi
     trova_materia(conn, corpo.materia_id)
     scelta = _scegli_voce(conn, s, corpo.voce)
     appunti, verifiche, _ = _materiale(conn, corpo.materia_id, corpo.materiali)
-    return _stima(conn, s, corpo.durata_min, scelta.tipo, appunti, verifiche)
+    risposta = _stima(conn, s, corpo.durata_min, scelta.tipo, appunti, verifiche, corpo.tipo)
+    risposta["struttura"] = misure.struttura(corpo.tipo, corpo.durata_min)
+    risposta["minuti_preparazione"] = minuti_preparazione(corpo.durata_min, scelta)
+    return risposta
 
 
 # --- lezioni ------------------------------------------------------------------------------
@@ -118,7 +132,8 @@ def crea(corpo: LezioneIn, conn: sqlite3.Connection = Depends(get_conn), s: Serv
     if quanti == 0:
         raise conflitto("Questa materia non ha ancora materiale letto: aggiungi appunti o verifiche prima di "
                         "preparare una lezione.")
-    st = _stima(conn, s, durata, scelta.tipo, appunti, verifiche)
+    tipo = misure.tipo_valido(corpo.tipo)
+    st = _stima(conn, s, durata, scelta.tipo, appunti, verifiche, tipo)
     if not st["consentita"]:
         raise tetto(st["motivo"])
     saltabili = corpo.domande_saltabili if corpo.domande_saltabili is not None else bool(imp["domande_saltabili"])
@@ -126,9 +141,11 @@ def crea(corpo: LezioneIn, conn: sqlite3.Connection = Depends(get_conn), s: Serv
     # La stima resta con la lezione: finché è in coda conta nelle stime delle lezioni dopo.
     cur = conn.execute(
         "INSERT INTO lezioni (materia_id, evento_id, argomento, materiali, durata_min, voce, domande_saltabili, stato,"
-        " creata_il, in_coda_dal, stima_eur, stima_caratteri) VALUES (?, ?, ?, ?, ?, ?, ?, 'in_coda', ?, ?, ?, ?)",
+        " creata_il, in_coda_dal, stima_eur, stima_caratteri, tipo, indicazioni)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, 'in_coda', ?, ?, ?, ?, ?, ?)",
         (corpo.materia_id, corpo.evento_id, argomento, json.dumps(ristretti or []), durata, scelta.id, int(saltabili),
-         ora, ora, st["costo_eur"], st["caratteri_stimati"] if scelta.tipo == "gratis" else 0),
+         ora, ora, st["costo_eur"], st["caratteri_stimati"] if scelta.tipo == "gratis" else 0, tipo,
+         corpo.indicazioni or ""),
     )
     s.lavoro.sveglia("lezioni")
     return forme.lezione(conn, trova_lezione(conn, cur.lastrowid))
