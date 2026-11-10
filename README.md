@@ -18,7 +18,12 @@ written against the profile, and the questions answered badly come back in later
 Besides the audio lessons, Lectio writes study material from the same documents:
 
 - **Revision sheets**, by chapters or as one card per work or author, at three levels of detail, with a few
-  relevant photos that a vision model checks before they are used, and a PDF to print.
+  relevant photos that a vision model checks before they are used, and a PDF to print. A sheet covers all the
+  chosen material: pages photographed twice are read once, a small model reads everything in batches and lists
+  every point to know, points about the same subject coming from different documents become one topic, the plan
+  puts each topic in exactly one part (in time order when there are dates, parts of similar weight), a second
+  read of the plan returns only corrections (move this point, merge these parts) that the code applies, and
+  whatever is still missing at the end is written into the part where it belongs.
 - **Written summaries** of a sheet: bullet points, flowing prose, or a mix of the two.
 - **"I didn't get it"** on any passage of a sheet or moment of a lesson: it explains again, or says that the
   documents don't cover it.

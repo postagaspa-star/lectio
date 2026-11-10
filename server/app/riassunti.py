@@ -96,7 +96,9 @@ class PreparazioneRiassunto:
         titolo_schema = self.riga["schema_titolo"] or self.riga["argomento"]
         messaggi = prompt_studio.messaggi_riassunto(materia, titolo_schema, testo, forma, parole)
         modello = self.ctx.settings.modello_scrittura
-        max_token = min(6000, int(parole * 2.4) + 600)
+        # Largo: una risposta tagliata a metà non si può usare (la 1.3.0 si fermava qui con gli schemi lunghi), e il
+        # modello scrive spesso più parole di quelle chieste. Lo spazio in più non costa: si pagano i token scritti.
+        max_token = min(14_000, int(parole * 6) + 2500)
         cosa = f"Riassunto · {NOME_FORMA[forma].lower()}"
         riferimento = f"riassunto:{self.id}"
         dati = {"forma": forma, "sezioni": [{"titolo": s["titolo"], "testo": schema_ripasso.testo_di([s])} for s in contenuto.get("sezioni") or []]}

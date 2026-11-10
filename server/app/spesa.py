@@ -51,9 +51,9 @@ TOKEN_SCHEDA_ENTRATA = 20_000
 TOKEN_SCHEDA_USCITA = 6_000
 
 # Schemi e verifiche simulate (contratto 18 e 21).
-CARATTERI_PIANO_SCHEMA = 60_000
-CARATTERI_SEZIONE = 14_000
-PAROLE_SEZIONE = {"essenziale": 110, "completo": 230, "approfondito": 400}
+CARATTERI_MAPPA_SCHEMA = 40_000  # il modello piccolo legge il materiale a gruppi di questa misura e segna i punti
+CARATTERI_SEZIONE = 16_000
+PAROLE_SEZIONE = {"essenziale": 170, "completo": 400, "approfondito": 640}  # in media: crescono con i punti della parte
 
 
 class TettoRaggiunto(Exception):
@@ -456,17 +456,21 @@ class Cassa:
                      modello_scrittura: str) -> float:
         """Piano, sezioni con il loro controllo, copertura, tabella finale, foto guardate una per una."""
         t = misure.CARATTERI_PER_TOKEN
-        letti = min(caratteri, CARATTERI_PIANO_SCHEMA)
         divisore = {"essenziale": 9000, "completo": 5000, "approfondito": 3500}[livello]
         sezioni = min(30, max(3, round(min(caratteri, 150_000) / divisore)))
         parole = PAROLE_SEZIONE[livello]
-        piano = self.prezzi.costo_testo(modello_scrittura, int((letti + 6000) / t), 900 + 200 * sezioni)
-        per_sezione = self.prezzi.costo_testo(modello_scrittura, int((CARATTERI_SEZIONE + 6000) / t), int(parole * 2.4) + 500)
+        gruppi = max(1, math.ceil(caratteri / CARATTERI_MAPPA_SCHEMA))
+        punti = min(500, max(10, caratteri // 700))
+        mappa = gruppi * self.prezzi.costo_testo(modello_piano, int((min(caratteri, CARATTERI_MAPPA_SCHEMA) + 3000) / t), 3500)
+        # Il piano e la sua rilettura, che vede di nuovo tutti i punti.
+        piano = 2 * self.prezzi.costo_testo(modello_scrittura, int((punti * 130 + 6000) / t), 800 + 120 * sezioni)
+        per_sezione = self.prezzi.costo_testo(modello_scrittura, int((CARATTERI_SEZIONE + 7000) / t), int(parole * 2.4) + 500)
         rilettura = self.prezzi.costo_testo(modello_piano, int((CARATTERI_SEZIONE + 5000) / t), 400)
-        copertura = self.prezzi.costo_testo(modello_piano, int(parole * sezioni * 8 / t) + 1500, 600)
+        copertura = self.prezzi.costo_testo(modello_piano, int(parole * sezioni * 8 / t) + 4000, 800)
+        aggiunte = max(1, sezioni // 4) * (per_sezione + rilettura)  # le parti a cui il controllo aggiunge qualcosa
         tabella = self.prezzi.costo_testo(modello_scrittura, int(parole * sezioni * 8 / t) + 1500, 1200)
         foto = (immagini * 2 + 3) * self.prezzi.costo_testo(modello_piano, 1800, 80)
-        return piano + sezioni * (per_sezione + rilettura) * 1.5 + copertura + tabella + foto + per_sezione
+        return mappa + piano + sezioni * (per_sezione + rilettura) * 1.5 + copertura + aggiunte + tabella + foto
 
     def stima_simulata(self, caratteri: int, minuti: int, modello_piano: str, modello_scrittura: str) -> float:
         """La preparazione, il suo controllo e la correzione alla fine."""

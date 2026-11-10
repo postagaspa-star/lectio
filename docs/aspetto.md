@@ -672,7 +672,9 @@ Se `nota`, `copertura.mancanti` o `avvisi` hanno contenuto: subito sotto il tito
 tenue, raggio 18, padding
 14/16, testo avviso:
 - icona `domanda`, "Non ho trovato tutto" 16/800;
-- `nota` 15/500; poi "Nei tuoi documenti non c'è:" 15/700 con `mancanti` a punti (al massimo 5, poi "e altri 3");
+- `nota` 15/500; poi "Questi punti nei tuoi documenti sono solo nominati, non spiegati:" 15/700 con `mancanti` a punti
+  (al massimo 5, poi "e altri 3"). Dalla 1.3.1 `mancanti` sono i punti segnati nei documenti di cui i documenti non dicono
+  abbastanza per spiegarli (contratto 18);
 - `avvisi` uno per riga 15/500;
 - pulsante secondario **Aggiungi materiale** (apre il foglio della sezione 5).
 

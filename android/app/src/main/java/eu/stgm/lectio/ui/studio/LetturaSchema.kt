@@ -702,7 +702,7 @@ private fun NotaMancanze(sc: Schema, offline: Boolean, azioni: AzioniSchema) {
         }
         sc.nota?.takeIf { it.isNotBlank() }?.let { Text(it, style = medio, color = c.avvisoTesto) }
         if (mancanti.isNotEmpty()) {
-            Text("Nei tuoi documenti non c'è:", style = L.testi.testoMedio.copy(fontWeight = FontWeight.Bold), color = c.avvisoTesto)
+            Text("Questi punti nei tuoi documenti sono solo nominati, non spiegati:", style = L.testi.testoMedio.copy(fontWeight = FontWeight.Bold), color = c.avvisoTesto)
             mancanti.forEach { Text("· $it", style = medio, color = c.avvisoTesto) }
             altri?.let { Text(it, style = medio, color = c.avvisoTesto) }
         }

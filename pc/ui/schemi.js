@@ -348,7 +348,7 @@
       const nota = mancanze ? h('div', { class: 'sch-nota', 'data-nota': 'mancanze' },
         h('div', { class: 'testa' }, icona('domanda'), 'Non ho trovato tutto'),
         mancanze.nota ? h('p', null, mancanze.nota) : null,
-        mancanze.mancanti.length ? h('div', null, h('span', { class: 'forte-nota' }, 'Nei tuoi documenti non c\'è:'),
+        mancanze.mancanti.length ? h('div', null, h('span', { class: 'forte-nota' }, 'Questi punti nei tuoi documenti sono solo nominati, non spiegati:'),
           h('ul', null, mancanze.mancanti.map((t) => h('li', null, t)), mancanze.altri ? h('li', null, 'e altri ' + mancanze.altri) : null)) : null,
         mancanze.avvisi.map((t) => h('p', null, t)),
         h('button', { type: 'button', class: 'pulsante bianco', 'data-azione': 'aggiungi-materiale', onclick: () => A.apriAggiungi(m) }, 'Aggiungi materiale')) : null;

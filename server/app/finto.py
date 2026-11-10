@@ -258,22 +258,28 @@ class TestoFinto:
     def _foto(self, d: dict) -> dict:
         return {"mostra": False, "cosa_si_vede": ""}
 
+    def _schema_mappa(self, d: dict) -> dict:
+        punti = []
+        for b in d.get("brani") or []:
+            for f in frasi(b["testo"])[:2]:
+                punti.append({"testo": f.rstrip(".")[:160], "fonti": [b["id"]]})
+        return {"punti": punti}
+
     def _schema_piano(self, d: dict) -> dict:
-        lettura = d["lettura"]
-        brani = lettura["brani"]
-        n = max(1, min(int(d["massimo"]), len(brani)))
-        gruppi: list[list[dict]] = [[] for _ in range(n)]
-        for i, b in enumerate(brani):
-            gruppi[min(n - 1, i * n // max(1, len(brani)))].append(b)
-        sezioni, concetti = [], []
-        for k, gruppo in enumerate(gruppi, start=1):
-            tutte = [f for b in gruppo for f in frasi(b["testo"])]
-            titolo = _titolo_da(tutte[0], f"Parte {k}") if tutte else f"Parte {k}"
-            punti = [f.rstrip(".") for f in tutte[:3]] or [titolo]
-            concetti += punti
-            sezioni.append({"titolo": titolo, "concetti": punti, "fonti": [b["id"] for b in gruppo][:6]})
+        punti = d["punti"]
+        n = max(1, min(int(d["massimo"]), len(punti)))
+        sezioni = []
+        for k in range(n):
+            numeri = [i + 1 for i in range(len(punti)) if min(n - 1, i * n // max(1, len(punti))) == k]
+            if not numeri:
+                continue
+            primo = punti[numeri[0] - 1]["testo"]
+            sezioni.append({"titolo": _titolo_da(primo, f"Parte {k + 1}"), "punti": [f"P{i}" for i in numeri]})
         forma = d["forma"] if d["forma"] != "auto" else "capitoli"
-        return {"titolo": lettura["argomento"], "forma": forma, "concetti": concetti, "sezioni": sezioni, "immagini": []}
+        return {"titolo": d["lettura"]["argomento"], "forma": forma, "sezioni": sezioni, "immagini": []}
+
+    def _schema_piano_rivisto(self, d: dict) -> dict:
+        return {"sposta": [], "unisci": [], "metti_dopo": []}  # in prova il piano va bene così
 
     def _schema_sezione(self, d: dict) -> dict:
         sezione = d["sezione"]

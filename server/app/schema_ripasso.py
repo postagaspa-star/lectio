@@ -1,14 +1,20 @@
-"""Gli schemi di ripasso (contratto 18): lettura → piano → scrittura → copertura → foto → chiusura.
+"""Gli schemi di ripasso (contratto 18): lettura → punti → piano → scrittura → copertura → foto → chiusura.
 
 Ogni fase salva quello che produce in dati/schemi/<id>/: un Riprova riparte da lì. Ogni parte
 passa dal controllo sui documenti (controllo.py). Le foto sono poche, a meno che le indicazioni
-ne chiedano tante, e ognuna viene guardata prima di metterla."""
+ne chiedano tante, e ognuna viene guardata prima di metterla.
+
+Dalla 1.3.1 il piano non parte più da un pezzo del materiale scelto per somiglianza col titolo:
+il modello piccolo legge TUTTO il materiale a gruppi e segna i punti da sapere, il piano li
+distribuisce tutti nelle parti, e quello che manca si aggiunge nella sua parte, non in fondo."""
 
 import json
 import logging
 import re
 import shutil
 import sqlite3
+import unicodedata
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -16,13 +22,15 @@ from . import ai, clock, controllo, db, immagini, lampo, memoria, prompt_studio,
 from . import scheda as schede
 from .cartella import Cartella
 from .lezione import Annullata, ErroreLezione
-from .spesa import CARATTERI_PIANO_SCHEMA, CARATTERI_SEZIONE, PAROLE_SEZIONE
+from .ai import RispostaNonUsabile
+from .spesa import CARATTERI_MAPPA_SCHEMA, CARATTERI_SEZIONE
 
 log = logging.getLogger("uvicorn.error")
 
-FASI = ("lettura", "piano", "scrittura", "copertura", "immagini", "chiusura")
-FRASI = {"lettura": "Leggo i documenti", "piano": "Preparo lo schema", "scrittura": "Scrivo lo schema",
-         "copertura": "Controllo che ci sia tutto", "immagini": "Cerco le foto", "chiusura": "Finisco"}
+FASI = ("lettura", "mappa", "piano", "scrittura", "copertura", "immagini", "chiusura")
+FRASI = {"lettura": "Leggo i documenti", "mappa": "Segno i punti da sapere", "piano": "Preparo lo schema",
+         "scrittura": "Scrivo lo schema", "copertura": "Controllo che ci sia tutto", "immagini": "Cerco le foto",
+         "chiusura": "Finisco"}
 TIPI_BLOCCO = ("paragrafo", "punti", "passaggi", "definizione", "tabella", "prof")
 IMMAGINI_PER_LIVELLO = {"essenziale": 2, "completo": 3, "approfondito": 5}
 IMMAGINI_MASSIME = 40
@@ -30,6 +38,25 @@ IMMAGINI_TANTE = 15
 DIVISORE_SEZIONI = {"essenziale": 9000, "completo": 5000, "approfondito": 3500}
 TOKEN_PIANO = 8000  # la lunghezza del piano dipende dai concetti dei documenti: con meno viene tagliato a metà
 TOKEN_TABELLA = 3000
+TOKEN_MAPPA = 6000
+TOKEN_CORREZIONI = 3000
+PUNTI_MASSIMI = 500
+FONTI_PER_SEZIONE = 14
+# Le parole di una parte crescono con i punti che deve spiegare, dentro dei limiti per livello.
+PAROLE_PER_PUNTO = {"essenziale": 14, "completo": 32, "approfondito": 50}
+PAROLE_LIMITI = {"essenziale": (80, 380), "completo": (150, 1000), "approfondito": (250, 1400)}
+# Un argomento: i punti sulla stessa cosa (lo stesso soggetto prima dei due punti), al massimo tanti.
+ARGOMENTO_MASSIMO = 8
+_ARTICOLI = {"il", "lo", "la", "i", "gli", "le", "l", "un", "uno", "una"}
+_SOGGETTI_GENERICI = {"causa", "cause", "conseguenza", "conseguenze", "definizione", "esempio", "esempi", "significato",
+                      "nota", "data", "date", "periodo", "contesto", "origine", "origini", "obiettivo", "ruolo"}
+# Quello che non è un punto da studiare: le immagini e le didascalie delle pagine.
+NON_PUNTI = re.compile(r"^(?:immagin[ei]|foto|fotografi[ae]|illustrazion[ei]|didascali[ae])\b", re.IGNORECASE)
+COPERTURA_SOGLIA = 0.75
+_PAROLE_VUOTE = {"della", "delle", "dello", "degli", "nella", "nelle", "negli", "nello", "dalla", "dalle", "dagli",
+                 "sulla", "sulle", "sugli", "alla", "alle", "agli", "come", "cosa", "quale", "quali", "quest", "quell",
+                 "sono", "erano", "aveva", "anche", "perch", "quand", "dove", "molto", "tutti", "tutto", "tutta",
+                 "tutte", "loro", "esser", "stato", "stata", "fino", "verso", "senza", "oltre", "ogni", "parte"}
 
 
 def quante_immagini(livello: str, indicazioni: str | None) -> int:
@@ -48,6 +75,133 @@ def quante_immagini(livello: str, indicazioni: str | None) -> int:
 def numero_sezioni(caratteri: int, livello: str) -> tuple[int, int]:
     centro = min(30, max(3, round(min(caratteri, 150_000) / DIVISORE_SEZIONI[livello])))
     return max(2, centro - 2), min(30, centro + 2)
+
+
+def parole_sezione(livello: str, punti: int) -> int:
+    basso, alto = PAROLE_LIMITI[livello]
+    return max(basso, min(alto, punti * PAROLE_PER_PUNTO[livello]))
+
+
+def token_per(parole: int) -> int:
+    """Lo spazio per la risposta: largo, perché una risposta tagliata a metà non si può usare."""
+    return int(parole * 4) + 1200
+
+
+# --------------------------------------------------------------------------- i punti da sapere
+
+
+def gruppi_per_mappa(brani: list[dict], massimo: int = CARATTERI_MAPPA_SCHEMA) -> list[list[dict]]:
+    """Il materiale a gruppi, nell'ordine, ognuno entro `massimo` caratteri."""
+    gruppi: list[list[dict]] = []
+    totale = 0
+    for b in brani:
+        if not gruppi or (gruppi[-1] and totale + len(b["testo"]) > massimo):
+            gruppi.append([])
+            totale = 0
+        gruppi[-1].append(b)
+        totale += len(b["testo"])
+    return gruppi
+
+
+def valida_mappa(o: dict) -> list[str]:
+    return [] if isinstance(o.get("punti"), list) else ['serve "punti"']
+
+
+def normalizza_mappa(o: dict, validi: set[str]) -> list[dict]:
+    punti = []
+    for p in _lista(o.get("punti")):
+        if isinstance(p, str):
+            testo, fonti = p, []
+        elif isinstance(p, dict):
+            testo, fonti = p.get("testo"), _lista(p.get("fonti"))
+        else:
+            continue
+        testo = _corto(testo, 220)
+        if not testo or NON_PUNTI.match(testo):
+            continue
+        punti.append({"testo": testo, "fonti": [str(f) for f in fonti if str(f) in validi][:8]})
+    return punti
+
+
+def _chiave(testo: str) -> str:
+    t = unicodedata.normalize("NFD", testo.lower())
+    return " ".join(re.findall(r"[a-z0-9]+", "".join(c for c in t if not unicodedata.combining(c))))
+
+
+def unisci_punti(liste: list[list[dict]]) -> list[dict]:
+    """I punti di tutti i gruppi: quelli scritti uguali diventano uno, con le fonti di tutti."""
+    per_chiave: dict[str, dict] = {}
+    uscita = []
+    for lista in liste:
+        for p in lista:
+            k = _chiave(p["testo"])
+            if not k:
+                continue
+            if k in per_chiave:
+                q = per_chiave[k]
+                q["fonti"] = list(dict.fromkeys(q["fonti"] + p["fonti"]))[:8]
+            else:
+                q = {"testo": p["testo"], "fonti": list(p["fonti"])}
+                per_chiave[k] = q
+                uscita.append(q)
+    return uscita[:PUNTI_MASSIMI]
+
+
+def soggetto(testo: str) -> str:
+    """Di chi o di che cosa parla un punto: quello che sta prima dei due punti, senza date e articoli.
+    "Canossa (1077): Enrico IV si umilia" e "Canossa: tre giorni scalzo" hanno lo stesso soggetto."""
+    if ":" not in testo:
+        return ""
+    parole = _chiave(re.sub(r"\([^)]*\)", " ", testo.split(":", 1)[0])).split()
+    while parole and parole[0] in _ARTICOLI:
+        parole.pop(0)
+    if not parole or len(parole) > 8 or not any(len(p) >= 3 and not p.isdigit() for p in parole):
+        return ""
+    chiave = " ".join(parole)
+    return "" if chiave in _SOGGETTI_GENERICI else chiave
+
+
+def raggruppa(punti: list[dict]) -> list[dict]:
+    """I punti sulla stessa cosa, anche se vengono da documenti diversi, diventano un argomento solo: il piano li
+    vede come uno e non li può dividere fra due parti. Ogni argomento sa quali punti contiene ("indici")."""
+    aperti: dict[str, dict] = {}
+    argomenti: list[dict] = []
+    for i, p in enumerate(punti):
+        s = soggetto(p["testo"])
+        a = aperti.get(s) if s else None
+        if a is None or len(a["indici"]) >= ARGOMENTO_MASSIMO:
+            a = {"indici": []}
+            argomenti.append(a)
+            if s:
+                aperti[s] = a
+        a["indici"].append(i)
+    for a in argomenti:
+        testi = [punti[i]["testo"] for i in a["indici"]]
+        if len(testi) == 1:
+            a["testo"] = testi[0]
+        else:
+            testa = testi[0].split(":", 1)[0].strip()
+            a["testo"] = _corto(testa + ": " + "; ".join(t.split(":", 1)[1].strip() for t in testi), 600)
+        a["fonti"] = list(dict.fromkeys(f for i in a["indici"] for f in punti[i]["fonti"]))
+    return argomenti
+
+
+def radici(testo: str) -> set[str]:
+    """Le parole di un testo ridotte alle prime cinque lettere, senza accenti: "papato" e "papale" sono vicine."""
+    t = unicodedata.normalize("NFD", (testo or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return {p[:5] for p in re.findall(r"[a-z0-9]+", t) if len(p) >= 4 or (p.isdigit() and len(p) >= 3)}
+
+
+def coperto(punto: str, parole_testo: set[str]) -> bool:
+    """Senza spendere: un punto è coperto se il testo ha le sue date e quasi tutte le sue parole.
+    Quelli con meno di due parole utili li giudica il modello."""
+    mie = radici(punto) - _PAROLE_VUOTE
+    if len(mie) < 2:
+        return False
+    if not {p for p in mie if p.isdigit()} <= parole_testo:
+        return False
+    return len(mie & parole_testo) / len(mie) >= COPERTURA_SOGLIA
 
 
 def _corto(v, massimo: int = 100) -> str:
@@ -106,18 +260,176 @@ def valida_piano(o: dict) -> list[str]:
     return errori
 
 
-def normalizza_piano(o: dict, lettura: dict, forma: str, massimo: int) -> dict:
-    validi = {b["id"] for b in lettura["brani"]}
-    sezioni = []
-    for s in o["sezioni"][:massimo]:
-        sezioni.append({"titolo": stile.ripulisci(_corto(s["titolo"])), "concetti": [_corto(c, 160) for c in _lista(s.get("concetti")) if _corto(c)][:40],
-                        "fonti": [str(f) for f in _lista(s.get("fonti")) if str(f) in validi][:12]})
+def _numero_punto(x, n: int) -> int | None:
+    """"P12", "12" e anche "P12. Dictatus papae..." (a volte il modello copia il testo dopo il numero)."""
+    m = re.match(r"\s*[Pp]?\s*(\d+)", str(x))
+    if m and 1 <= int(m.group(1)) <= n:
+        return int(m.group(1)) - 1
+    return None
+
+
+def _forma(o: dict, forma: str) -> str:
     scelta = str(o.get("forma") or "").strip().lower()
-    forma = forma if forma != "auto" else (scelta if scelta in ("capitoli", "schede") else "capitoli")
-    concetti = [_corto(c, 160) for c in _lista(o.get("concetti")) if _corto(c)][:250] or [c for s in sezioni for c in s["concetti"]]
+    return forma if forma != "auto" else (scelta if scelta in ("capitoli", "schede") else "capitoli")
+
+
+def assegna(o: dict, punti: list[dict], argomenti: list[dict], forma: str, massimo: int) -> list[dict]:
+    """Ogni argomento in una parte sola (i numeri P del piano sono gli argomenti di `raggruppa`). Quelli che il
+    piano ha dimenticato, e quelli delle parti da uno o due punti in uno schema lungo, vanno nella parte che usa
+    gli stessi documenti (a pari merito, in quella dei punti vicini). Le parti restano nell'ordine del piano,
+    anche quelle rimaste vuote, così i numeri delle foto valgono ancora."""
+    n = len(argomenti)
+    di_chi: dict[int, int] = {}
+    grezze: list[dict] = []
+    for s in o["sezioni"][:massimo]:
+        indici = []
+        for x in _lista(s.get("punti")):
+            a = _numero_punto(x, n)
+            if a is not None and a not in di_chi:
+                di_chi[a] = len(grezze)
+                indici.append(a)
+        grezze.append({"titolo": stile.ripulisci(_corto(s["titolo"])), "argomenti": indici})
+
+    def quanti(g: dict) -> int:
+        return sum(len(argomenti[a]["indici"]) for a in g["argomenti"])
+
+    # Una parte con uno o due punti in uno schema dove le altre ne hanno tanti è un avanzo messo in fondo:
+    # i suoi punti vanno nella parte dove stanno meglio (in forma schede no: lì una scheda può essere corta).
+    piene = [g for g in grezze if g["argomenti"]]
+    media = len(punti) / max(1, len(piene))
+    if forma != "schede":
+        for g in piene:
+            if quanti(g) <= 2 and quanti(g) < media / 4:
+                for a in g["argomenti"]:
+                    del di_chi[a]
+                g["argomenti"], g["tolta"] = [], True
+    fonti_parti = [{f for a in g["argomenti"] for f in argomenti[a]["fonti"]} for g in grezze]
+    possibili = [k for k, g in enumerate(grezze) if not g.get("tolta")]
+
+    def posto(a: int) -> int:
+        return argomenti[a]["indici"][0]
+
+    def distanza(a: int, k: int) -> int:
+        return min((abs(posto(a) - posto(b)) for b in grezze[k]["argomenti"]), default=10 ** 6)
+
+    for a in range(n):
+        if a in di_chi:
+            continue
+        mie = set(argomenti[a]["fonti"])
+        k = max(possibili, key=lambda k: (len(mie & fonti_parti[k]), -distanza(a, k)))
+        grezze[k]["argomenti"].append(a)
+        di_chi[a] = k
+        fonti_parti[k] |= mie
+    return grezze
+
+
+def _visibili(grezze: list[dict]) -> list[int]:
+    """Le parti che hanno dei punti, nell'ordine: la S1 di chi rilegge il piano è grezze[_visibili(grezze)[0]]."""
+    return [k for k, g in enumerate(grezze) if g["argomenti"]]
+
+
+def piano_in_chiaro(o: dict, punti: list[dict], forma: str, massimo: int) -> str:
+    """Il piano come lo legge chi lo controlla: le parti (S1, S2...) con i loro argomenti (P...)."""
+    argomenti = raggruppa(punti)
+    grezze = assegna(o, punti, argomenti, _forma(o, forma), massimo)
+    righe = []
+    for s, k in enumerate(_visibili(grezze), start=1):
+        righe.append(f"S{s}. {grezze[k]['titolo']}")
+        righe += [f"   P{a + 1}. {argomenti[a]['testo']}" for a in grezze[k]["argomenti"]]
+    return "\n".join(righe)
+
+
+def valida_correzioni(o: dict) -> list[str]:
+    if all(isinstance(o.get(c, []), list) for c in ("sposta", "unisci", "metti_dopo")):
+        return []
+    return ['"sposta", "unisci" e "metti_dopo" sono liste, anche vuote']
+
+
+def correggi(grezze: list[dict], correzioni: dict, n: int) -> tuple[list[int], dict[int, int]]:
+    """Le correzioni di chi ha riletto il piano, fatte dal codice: si spostano punti e parti, nessun punto si può
+    perdere. Torna l'ordine delle parti (indici di `grezze`) e, per le parti unite, dove sono finite."""
+    visibili = _visibili(grezze)
+
+    def parte(x) -> int | None:
+        m = re.match(r"\s*[Ss]?\s*(\d+)", str(x))
+        return visibili[int(m.group(1)) - 1] if m and 1 <= int(m.group(1)) <= len(visibili) else None
+
+    unita: dict[int, int] = {}
+
+    def viva(k: int) -> int:
+        visti = set()
+        while k in unita and k not in visti:
+            visti.add(k)
+            k = unita[k]
+        return k
+
+    for c in _lista(correzioni.get("unisci")):
+        da, verso = (parte(c.get("sezione")), parte(c.get("in"))) if isinstance(c, dict) else (None, None)
+        if da is None or verso is None or viva(da) == viva(verso):
+            continue
+        da, verso = viva(da), viva(verso)
+        grezze[verso]["argomenti"] += grezze[da]["argomenti"]
+        grezze[da]["argomenti"] = []
+        unita[da] = verso
+    di_chi = {a: k for k, g in enumerate(grezze) for a in g["argomenti"]}
+    for c in _lista(correzioni.get("sposta")):
+        a, verso = (_numero_punto(c.get("punto"), n), parte(c.get("sezione"))) if isinstance(c, dict) else (None, None)
+        if a is None or verso is None or a not in di_chi or di_chi[a] == viva(verso):
+            continue
+        grezze[di_chi[a]]["argomenti"].remove(a)
+        di_chi[a] = viva(verso)
+        grezze[di_chi[a]]["argomenti"].append(a)
+    ordine = list(range(len(grezze)))
+    for c in _lista(correzioni.get("metti_dopo")):
+        k, dopo = (parte(c.get("sezione")), parte(c.get("dopo"))) if isinstance(c, dict) else (None, None)
+        if k is None or dopo is None or viva(k) == viva(dopo):
+            continue
+        k, dopo = viva(k), viva(dopo)
+        ordine.remove(k)
+        ordine.insert(ordine.index(dopo) + 1, k)
+    return ordine, unita
+
+
+def normalizza_piano(o: dict, lettura: dict, punti: list[dict], forma: str, massimo: int,
+                     correzioni: dict | None = None) -> dict:
+    """Il piano pronto da scrivere: ogni punto in una parte sola (vedi `assegna`), le correzioni di chi l'ha
+    riletto, le parti vuote tolte."""
+    forma = _forma(o, forma)
+    argomenti = raggruppa(punti)
+    grezze = assegna(o, punti, argomenti, forma, massimo)
+    ordine_parti, unita = correggi(grezze, correzioni, len(argomenti)) if correzioni else (list(range(len(grezze))), {})
+    ordine = {b["id"]: j for j, b in enumerate(lettura["brani"])}
+    sezioni, nuovo_numero = [], {}
+    for k in ordine_parti:
+        g = grezze[k]
+        indici = [i for a in g["argomenti"] for i in argomenti[a]["indici"]]
+        if not indici:
+            continue
+        nuovo_numero[k] = len(sezioni) + 1
+        conta = Counter(f for i in indici for f in punti[i]["fonti"])
+        sezioni.append({"titolo": g["titolo"], "concetti": [punti[i]["testo"] for i in indici],
+                        "fonti_punti": [punti[i]["fonti"] for i in indici],
+                        "fonti": sorted(conta, key=lambda f: (-conta[f], ordine.get(f, 0)))[:FONTI_PER_SEZIONE]})
+    immagini = []
+    for f in _lista(o.get("immagini")):
+        if not isinstance(f, dict):
+            continue
+        try:
+            k = max(1, int(f.get("sezione") or 1)) - 1
+        except (TypeError, ValueError):
+            k = 0
+        visti = set()
+        while k in unita and k not in visti:  # la foto segue la sua parte quando viene unita a un'altra
+            visti.add(k)
+            k = unita[k]
+        # Una foto di una parte tolta va nella prima parte dopo (nell'ordine del piano) che c'è ancora.
+        dopo = nuovo_numero.get(k) or next((nuovo_numero[j] for j in range(k, len(grezze)) if j in nuovo_numero), len(sezioni))
+        immagini.append({**f, "sezione": dopo})
+    concetti = [p["testo"] for p in punti]
     titoli = tuple(x["titolo"] for x in sezioni) + tuple(concetti)
-    foto = foto_valide(o.get("immagini"), len(sezioni), _vocabolario(lettura, titoli))
-    return {"titolo": stile.ripulisci(_corto(o["titolo"], 120)), "forma": forma, "concetti": concetti, "sezioni": sezioni, "immagini": foto}
+    foto = foto_valide(immagini, len(sezioni), _vocabolario(lettura, titoli))
+    return {"versione": 2, "titolo": stile.ripulisci(_corto(o["titolo"], 120)), "forma": forma, "concetti": concetti,
+            "sezioni": sezioni, "immagini": foto}
 
 
 def valida_sezione(o: dict) -> list[str]:
@@ -221,33 +533,75 @@ class PreparazioneSchema:
                               "data_in_parole": f"{giorno.day} {clock.MESI[giorno.month - 1]}"}
         if not brani:
             raise ErroreLezione("Nel materiale scelto non ho trovato testo da usare: aggiungi il libro, gli appunti o le verifiche, poi riprova.")
+        brani = memoria.senza_doppioni(brani)  # la stessa pagina fotografata due volte si legge una volta
         self.c.scrivi("lettura.json", {"argomento": self.riga["argomento"], "indicazioni": self.riga["indicazioni"],
                                        "materia": {"nome": self.riga["materia_nome"], "prof": self.riga["materia_prof"]},
                                        "evento": evento, "scheda": scheda, "brani": brani})
 
+    def _mappa(self) -> None:
+        """Il modello piccolo legge tutto il materiale, un gruppo alla volta, e segna i punti da sapere."""
+        if self.c.leggi("mappa.json") is not None or self.c.leggi("piano.json") is not None:
+            return  # un piano fatto prima della 1.3.1 (Riprova di uno schema vecchio) resta quello
+        lettura = self.c.leggi("lettura.json")
+        gruppi = gruppi_per_mappa(lettura["brani"])
+        liste = []
+        for k, gruppo in enumerate(gruppi, start=1):
+            fatto = self.c.leggi(f"mappa/{k:02d}.json")
+            if fatto is None:
+                tanti = len(gruppi) > 1
+                if tanti:
+                    self.avanza("mappa", k - 1, len(gruppi), f"Segno i punti da sapere, {k} di {len(gruppi)}")
+                o = self._chiedi("schema_mappa", prompt_studio.messaggi_schema_mappa(lettura, gruppo), self.ctx.settings.modello_piano,
+                                 valida_mappa, TOKEN_MAPPA, f"Schema · punti da sapere {k} di {len(gruppi)}" if tanti else "Schema · punti da sapere",
+                                 {"brani": gruppo})
+                fatto = normalizza_mappa(o, {b["id"] for b in gruppo})
+                self.c.scrivi(f"mappa/{k:02d}.json", fatto)
+            liste.append(fatto)
+        punti = unisci_punti(liste)
+        if not punti:
+            raise ErroreLezione("Nei tuoi documenti non ho trovato abbastanza su questo argomento per farci uno schema.")
+        self.c.scrivi("mappa.json", {"punti": punti})
+
     def _piano(self) -> None:
         if self.c.leggi("piano.json"):
             return
-        lettura = self.c.leggi("lettura.json")
-        totale = sum(len(b["testo"]) for b in lettura["brani"])
-        cerca = " ".join(x for x in (lettura["argomento"], lettura.get("indicazioni")) if x)
-        per_piano = {**lettura, "brani": self._cerca(cerca, lettura["brani"], CARATTERI_PIANO_SCHEMA)} if totale > CARATTERI_PIANO_SCHEMA else lettura
+        lettura, punti = self.c.leggi("lettura.json"), self.c.leggi("mappa.json")["punti"]
+        argomenti = raggruppa(punti)  # il piano vede un numero per argomento: i punti sulla stessa cosa restano insieme
         livello, forma = self.riga["livello"], self.riga["forma"]
-        minimo, massimo = numero_sezioni(sum(len(b["testo"]) for b in per_piano["brani"]), livello)
-        oggetto = self._chiedi("schema_piano", prompt_studio.messaggi_schema_piano(
-            per_piano, forma, livello, minimo, massimo, quante_immagini(livello, lettura.get("indicazioni"))),
-            self.ctx.settings.modello_scrittura, valida_piano, TOKEN_PIANO, "Schema · piano",
-            {"lettura": per_piano, "forma": forma, "massimo": massimo})
-        self.c.scrivi("piano.json", normalizza_piano(oggetto, per_piano, forma, massimo))
+        minimo, massimo = numero_sezioni(sum(len(b["testo"]) for b in lettura["brani"]), livello)
+        minimo, massimo = max(1, min(minimo, len(argomenti))), max(1, min(massimo, len(argomenti)))
+        immagini = quante_immagini(livello, lettura.get("indicazioni"))
+        primo = self.c.leggi("piano-primo.json")
+        if primo is None:
+            primo = self._chiedi("schema_piano", prompt_studio.messaggi_schema_piano(
+                lettura, [a["testo"] for a in argomenti], forma, livello, minimo, massimo, immagini),
+                self.ctx.settings.modello_scrittura, valida_piano, TOKEN_PIANO, "Schema · piano",
+                {"lettura": lettura, "punti": argomenti, "forma": forma, "massimo": massimo})
+            self.c.scrivi("piano-primo.json", primo)
+        # Un piano lungo fatto in una volta lascia punti fuori tema e parti di avanzi in fondo: lo rilegge il
+        # modello stesso e scrive solo le correzioni (sposta, unisci, metti dopo), che fa il codice: riscritto
+        # per intero, un piano lungo perde dei punti. Se il controllo va male resta il primo piano.
+        self.avanza("piano", frase="Controllo l'ordine dello schema")
+        correzioni = self.c.leggi("piano-correzioni.json")
+        if correzioni is None:
+            try:
+                correzioni = self._chiedi("schema_piano_rivisto", prompt_studio.messaggi_schema_piano_rivisto(
+                    lettura, piano_in_chiaro(primo, punti, forma, massimo), len(argomenti), livello),
+                    self.ctx.settings.modello_scrittura, valida_correzioni, TOKEN_CORREZIONI, "Schema · controllo del piano",
+                    {"piano": primo})
+            except RispostaNonUsabile:
+                correzioni = {}
+            self.c.scrivi("piano-correzioni.json", correzioni)
+        self.c.scrivi("piano.json", normalizza_piano(primo, lettura, punti, forma, massimo, correzioni))
 
     def _scrivi_sezione(self, k: int, sezione: dict, lettura: dict, piano: dict) -> dict:
         """Una parte scritta, controllata e messa in forma."""
         cerca = " ".join([sezione["titolo"], *sezione["concetti"]])
         brani = self._cerca(cerca, lettura["brani"], CARATTERI_SEZIONE, sezione["fonti"])
-        parole = PAROLE_SEZIONE[self.riga["livello"]]
+        parole = parole_sezione(self.riga["livello"], len(sezione["concetti"]))
         messaggi = prompt_studio.messaggi_schema_sezione(lettura, piano, k, sezione, brani, parole, piano["forma"])
         modello = self.ctx.settings.modello_scrittura
-        max_token = int(parole * 3.2) + 900
+        max_token = token_per(parole)
         cosa = f"Schema · parte {k}"
         dati = {"lettura": lettura, "sezione": sezione, "brani": brani, "forma": piano["forma"]}
         grezzo = self.c.leggi(f"sezioni/{k:02d}.grezzo.json")
@@ -271,38 +625,98 @@ class PreparazioneSchema:
         self.avanza("scrittura", n, n)
 
     def _scritte(self, piano: dict, extra: bool = False) -> list[dict]:
+        """Le parti scritte, ognuna con in fondo quello che le è stato aggiunto dopo il controllo.
+        `extra`: la parte "Altri punti da sapere" degli schemi fatti prima della 1.3.1."""
         n = len(piano["sezioni"]) + (1 if extra else 0)
-        trovate = [self.c.leggi(f"sezioni/{k:02d}.json") for k in range(1, n + 1)]
-        return [s for s in trovate if s and s.get("blocchi")]
+        uscita = []
+        for k in range(1, n + 1):
+            s = self.c.leggi(f"sezioni/{k:02d}.json")
+            if not s:
+                continue
+            aggiunta = self.c.leggi(f"sezioni/{k:02d}.aggiunta.json")
+            if aggiunta and aggiunta.get("blocchi"):
+                s = {**s, "blocchi": s["blocchi"] + aggiunta["blocchi"], "carte": (s.get("carte") or []) + (aggiunta.get("carte") or [])}
+            if s.get("blocchi"):
+                uscita.append(s)
+        return uscita
 
     def _copertura(self) -> None:
+        """Ogni punto segnato nei documenti deve stare nello schema. Prima un confronto di parole che non costa
+        niente; i dubbi li guarda il modello piccolo; quelli che mancano davvero si aggiungono nella loro parte."""
         if self.c.leggi("copertura.json") is not None:
             return
         lettura, piano = self.c.leggi("lettura.json"), self.c.leggi("piano.json")
         sezioni = self._scritte(piano)
         if not sezioni:
             raise ErroreLezione("Nei tuoi documenti non ho trovato abbastanza su questo argomento per farci uno schema.")
-        mancanti: list[str] = []
-        if piano["concetti"]:
-            o = self._chiedi("copertura", prompt_studio.messaggi_copertura(piano["concetti"], testo_di(sezioni)[:40_000]),
-                             self.ctx.settings.modello_piano, lambda x: [] if isinstance(x.get("mancanti"), list) else ['serve "mancanti"'],
-                             1200, "Schema · controllo di quello che manca", {})
-            noti = set(piano["concetti"])
-            mancanti = [str(c) for c in o["mancanti"] if str(c) in noti]
-        rimasti = mancanti
-        extra = False
-        if mancanti:
-            sezione = {"titolo": "Altri punti da sapere", "concetti": mancanti[:30], "fonti": []}
-            con_extra = {**piano, "sezioni": piano["sezioni"] + [sezione]}
-            scritta = self._scrivi_sezione(len(piano["sezioni"]) + 1, sezione, lettura, con_extra)
-            extra = bool(scritta.get("blocchi"))
-            testo = testo_di([scritta]).lower() if extra else ""
-            rimasti = [c for c in mancanti if not all(p in testo for p in re.findall(r"[a-zàèéìòù]{5,}", c.lower())[:3])]
+        testo = testo_di(sezioni)
+        parole_testo = radici(testo)
+        dubbi = [(k, c) for k, s in enumerate(piano["sezioni"], start=1) for c in s.get("concetti") or [] if not coperto(c, parole_testo)]
+        esame = self.c.leggi("copertura-esame.json")
+        if esame is None:
+            detti: list[str] = []
+            elenco = list(dict.fromkeys(c for _, c in dubbi))[:200]
+            if elenco:
+                def valida(x: dict) -> list[str]:
+                    return [] if isinstance(x.get("mancanti"), list) else ['serve "mancanti"']
+                o = self._chiedi("copertura", prompt_studio.messaggi_copertura(elenco, testo[:90_000]), self.ctx.settings.modello_piano,
+                                 valida, 3000, "Schema · controllo di quello che manca", {"concetti": elenco})
+                detti = [elenco[i] for i in (_numero_punto(str(x).lstrip("Cc"), len(elenco)) for x in o["mancanti"]) if i is not None]
+            esame = {"mancanti": detti}
+            self.c.scrivi("copertura-esame.json", esame)
+        detti_set = set(esame["mancanti"])
+        per_parte: dict[int, list[str]] = {}
+        for k, c in dubbi:
+            if c in detti_set and c not in per_parte.get(k, []):
+                per_parte.setdefault(k, []).append(c)
+        rimasti: list[str] = []
+        for j, (k, concetti) in enumerate(sorted(per_parte.items()), start=1):
+            self.avanza("copertura", j - 1, len(per_parte), "Aggiungo quello che mancava")
+            if not self._aggiungi(k, concetti, lettura, piano).get("blocchi"):
+                rimasti += concetti
         tabella = None
         if piano["forma"] == "capitoli" and self.riga["livello"] != "essenziale":
-            tabella = self._tabella(lettura, self._scritte(piano, extra))
+            tabella = self._tabella(lettura, self._scritte(piano))
         self.c.scrivi("copertura.json", {"concetti": len(piano["concetti"]), "coperti": len(piano["concetti"]) - len(rimasti),
-                                         "mancanti": rimasti[:40], "extra": extra, "tabella": tabella})
+                                         "mancanti": rimasti[:40], "extra": False, "tabella": tabella})
+
+    def _aggiungi(self, k: int, concetti: list[str], lettura: dict, piano: dict) -> dict:
+        """I blocchi che mancavano alla parte k, scritti dai documenti di quei punti e messi in fondo alla parte."""
+        fatto = self.c.leggi(f"sezioni/{k:02d}.aggiunta.json")
+        if fatto is not None:
+            return fatto
+        sezione = piano["sezioni"][k - 1]
+        da_punto = dict(zip(sezione.get("concetti") or [], sezione.get("fonti_punti") or []))
+        fonti = list(dict.fromkeys([f for c in concetti for f in da_punto.get(c, [])] + list(sezione.get("fonti") or [])))
+        brani = self._cerca(" ".join(concetti), lettura["brani"], CARATTERI_SEZIONE, fonti)
+        scritta = self.c.leggi(f"sezioni/{k:02d}.json") or {"blocchi": []}
+        parole = parole_sezione(self.riga["livello"], len(concetti))
+        messaggi = prompt_studio.messaggi_schema_aggiunta(lettura, piano, k, sezione, concetti,
+                                                          testo_di([{"titolo": sezione["titolo"], **scritta}]), brani, parole)
+        modello = self.ctx.settings.modello_scrittura
+        max_token = token_per(parole)
+        cosa = f"Schema · aggiunta alla parte {k}"
+        dati = {"lettura": lettura, "sezione": {**sezione, "concetti": concetti}, "brani": brani, "forma": piano["forma"]}
+
+        def valida(o: dict) -> list[str]:  # anche niente va bene: vuol dire che i documenti non dicono di più
+            blocchi = o.get("blocchi")
+            return [] if isinstance(blocchi, list) and all(isinstance(b, dict) for b in blocchi) else ['servono i "blocchi"']
+
+        try:
+            grezzo = self.c.leggi(f"sezioni/{k:02d}.aggiunta.grezzo.json")
+            if grezzo is None:
+                grezzo = self._chiedi("schema_sezione", messaggi, modello, valida, max_token, cosa, dati)
+                self.c.scrivi(f"sezioni/{k:02d}.aggiunta.grezzo.json", grezzo)
+            riveduto = grezzo if not grezzo.get("blocchi") else controllo.rivedi(
+                self.ctx, grezzo, brani, compito="schema_sezione", messaggi=messaggi, modello=modello, valida=valida,
+                max_token=max_token, cosa=cosa, materia_id=self.riga["materia_id"], prima=self.controlla, dati=dati,
+                parlato=False, riferimento=self.riferimento)
+        except RispostaNonUsabile:
+            riveduto = {"blocchi": []}  # un'aggiunta andata male non ferma lo schema: il punto resta tra i mancanti
+        uscita = normalizza_sezione(riveduto, {b["id"] for b in brani}, piano["forma"])
+        uscita = {"blocchi": uscita["blocchi"], "carte": uscita["carte"][:2]}
+        self.c.scrivi(f"sezioni/{k:02d}.aggiunta.json", uscita)
+        return uscita
 
     def _tabella(self, lettura: dict, sezioni: list[dict]) -> dict | None:
         testo = testo_di(sezioni)[:40_000]

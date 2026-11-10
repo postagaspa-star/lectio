@@ -14,6 +14,7 @@ import logging
 import math
 import re
 import sqlite3
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -149,8 +150,33 @@ def brani_di(conn: sqlite3.Connection, materia_id: int, ristretti: list[int] | N
         conti[lettera] += 1
         brani.append({"id": f"{lettera}{conti[lettera]}", "pezzo_id": r["pezzo_id"], "n": r["n"], "pagina": r["pagina"],
                       "rango": r["rango"], "materiale_id": r["materiale_id"], "titolo": r["titolo"], "tipo": r["tipo"],
-                      "data": r["data"], "testo": r["testo"]})
+                      "data": r["data"], "testo": testo_pulito(r["testo"])})
     return brani, tagliato
+
+
+def testo_pulito(testo: str) -> str:
+    """Le lettere legate dei PDF ("ﬁ", "ﬂ") tornano lettere normali: se no "ﬁne" non si trova cercando "fine"."""
+    return unicodedata.normalize("NFKC", testo or "")
+
+
+def _impronte(testo: str) -> set[tuple[str, ...]]:
+    parole = re.findall(r"[a-zàèéìòù0-9]+", testo_pulito(testo).lower())
+    return {tuple(parole[i:i + 4]) for i in range(len(parole) - 3)}
+
+
+def senza_doppioni(brani: list[dict], soglia: float = 0.7) -> list[dict]:
+    """Toglie i pezzi che dicono quasi parola per parola cose già dette da un pezzo tenuto: per esempio la
+    stessa pagina fotografata due volte. Resta il primo, che in `brani_di` è quello con la priorità più alta.
+    I pezzi corti restano sempre: troppo poche parole per dire che sono doppi."""
+    viste: set[tuple[str, ...]] = set()
+    tenuti = []
+    for b in brani:
+        impronte = _impronte(b["testo"])
+        if len(impronte) >= 20 and len(impronte & viste) / len(impronte) >= soglia:
+            continue
+        viste |= impronte
+        tenuti.append(b)
+    return tenuti
 
 
 def _data_breve(iso: str | None) -> str:

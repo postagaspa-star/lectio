@@ -3,7 +3,9 @@
 1. Il tetto si controlla prima di ogni tentativo (Cassa.chiama), con la stima peggiore (tutti
    i token di uscita permessi); la spesa si registra con i token veri restituiti dal fornitore.
 2. La risposta deve essere un oggetto JSON che passa la validazione. Se no: UNA seconda
-   richiesta che spiega cosa non va; se anche quella non va, errore chiaro."""
+   richiesta che spiega cosa non va; se anche quella non va, errore chiaro.
+3. Una risposta tagliata perché troppo lunga non si corregge: la seconda richiesta è la stessa
+   di prima, con il doppio dello spazio."""
 
 import json
 import logging
@@ -15,6 +17,7 @@ log = logging.getLogger("uvicorn.error")
 
 # Una foto piccola pesa come un testo di circa 1.500 token.
 CARATTERI_PER_IMMAGINE = 5_000
+TOKEN_USCITA_MASSIMI = 16_000
 FRASE_NON_USABILE = "L'AI ha risposto in un modo che non riesco a usare, anche dopo averle chiesto di correggersi. Tocca Riprova."
 
 
@@ -75,6 +78,10 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
         if not errori:
             return oggetto
         log.warning("%s: risposta non valida (tentativo %s): %s", cosa, tentativo, "; ".join(errori[:5]))
+        if oggetto is None and getattr(risposta, "troncata", False) and max_token < TOKEN_USCITA_MASSIMI:
+            log.warning("%s: risposta tagliata a %s token, la richiedo con più spazio", cosa, max_token)
+            max_token = min(TOKEN_USCITA_MASSIMI, max_token * 2)
+            continue
         messaggi = messaggi + [
             {"role": "assistant", "content": (risposta.testo or "")[:30000]},
             {"role": "user", "content": prompt.correzione(errori)},

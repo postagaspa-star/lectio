@@ -7,7 +7,7 @@ import pytest
 from pypdf import PdfReader
 
 from aiuti import APPUNTI_STORIA, VERIFICA_GEMINI, aggiungi_testo, carica_file, crea_materia, nuova_lezione, prepara_tutto, sfondo_tutto
-from app import db, memoria, schema_ripasso, stile
+from app import db, finto, memoria, schema_ripasso, stile
 from app.firma import FIRMA
 
 pagamento = pytest.mark.pagamento
@@ -119,6 +119,136 @@ def test_i_numeri_della_scheda_li_conta_lectio(client, auth, servizi, server):
 # --------------------------------------------------------------------------- schemi
 
 
+def test_doppioni_e_lettere_legate():
+    pagina = ("Nel 1122 il concordato di Worms chiuse la lotta per le investiture tra il papa e l'imperatore: "
+              "al papa la nomina spirituale dei vescovi, all'imperatore quella temporale, con i beni e i poteri. ") * 2
+    brani = [{"id": "B1", "testo": pagina}, {"id": "B2", "testo": pagina.replace("Nel 1122", "Nell'anno 1122")},
+             {"id": "B3", "testo": "Breve nota."}, {"id": "B4", "testo": "La prima crociata partì nel 1096 dopo il "
+              "concilio di Clermont, dove Urbano II promise l'indulgenza a chi partiva per Gerusalemme con la croce."}]
+    assert [b["id"] for b in memoria.senza_doppioni(brani)] == ["B1", "B3", "B4"]
+    assert memoria.testo_pulito("Veriﬁca: la ﬁne") == "Verifica: la fine"
+
+
+def test_piano_mette_ogni_punto_in_una_parte():
+    punti = [{"testo": "Concordato di Worms (1122)", "fonti": ["B1"]}, {"testo": "Dictatus papae (1075)", "fonti": ["B1"]},
+             {"testo": "Prima crociata (1096)", "fonti": ["B2"]}, {"testo": "Presa di Gerusalemme (1099)", "fonti": ["B2"]},
+             {"testo": "Urbano II a Clermont", "fonti": ["B2"]}]
+    lettura = {"argomento": "Medioevo", "brani": [{"id": "B1", "testo": "concordato worms dictatus papae"},
+                                                  {"id": "B2", "testo": "crociata gerusalemme urbano clermont"}]}
+    o = {"titolo": "Medioevo", "sezioni": [
+        {"titolo": "Papato e impero", "punti": ["P2", "P1", "P1"]},
+        {"titolo": "Vuota", "punti": ["P99"]},
+        {"titolo": "Le crociate", "punti": ["P3", "4"]}],
+        "immagini": [{"sezione": 2, "soggetto": "Gerusalemme", "ricerca": "Gerusalemme"}]}
+    piano = schema_ripasso.normalizza_piano(o, lettura, punti, "capitoli", 10)
+    assert [s["titolo"] for s in piano["sezioni"]] == ["Papato e impero", "Le crociate"]
+    assert piano["sezioni"][0]["concetti"] == ["Dictatus papae (1075)", "Concordato di Worms (1122)"]
+    # P5 dimenticato dal piano: va nella parte che usa lo stesso documento.
+    assert piano["sezioni"][1]["concetti"] == ["Prima crociata (1096)", "Presa di Gerusalemme (1099)", "Urbano II a Clermont"]
+    assert piano["sezioni"][1]["fonti"] == ["B2"] and piano["immagini"][0]["sezione"] == 2
+
+
+def test_argomenti_dallo_stesso_soggetto():
+    s = schema_ripasso.soggetto
+    assert s("Canossa (1077): Enrico IV si umilia") == s("Canossa: tre giorni scalzo") == "canossa"
+    assert s("L'eresia: negazione delle verità") == "eresia"
+    assert s("Causa: la fame") == "" and s("1077: Canossa") == "" and s("Senza due punti") == ""
+    punti = [{"testo": "Canossa (1077): Enrico IV si umilia", "fonti": ["B1"]}, {"testo": "Worms (1122): accordo", "fonti": ["B1"]},
+             {"testo": "Canossa: tre giorni scalzo", "fonti": ["B2"]}]
+    a = schema_ripasso.raggruppa(punti)
+    assert [x["indici"] for x in a] == [[0, 2], [1]]
+    assert a[0]["testo"] == "Canossa (1077): Enrico IV si umilia; tre giorni scalzo" and a[0]["fonti"] == ["B1", "B2"]
+
+
+def test_piano_tiene_insieme_gli_argomenti_e_toglie_le_parti_minuscole():
+    punti = [{"testo": "Dictatus papae (1075): primato del papa", "fonti": ["B1"]},
+             {"testo": "Canossa (1077): Enrico IV si umilia", "fonti": ["B1"]},
+             {"testo": "Dictatus papae: superiorità sul potere imperiale", "fonti": ["B2"]}]
+    punti += [{"testo": f"Papato {j}: fatto numero {j}", "fonti": ["B1"]} for j in range(6)]
+    punti += [{"testo": f"Crociata {j}: fatto numero {j}", "fonti": ["B3"]} for j in range(8)]
+    punti += [{"testo": "Ordini cavallereschi: templari e ospedalieri", "fonti": ["B3"]}]
+    lettura = {"argomento": "Medioevo", "brani": [{"id": "B1", "testo": "papato"}, {"id": "B2", "testo": "dictatus"},
+                                                  {"id": "B3", "testo": "crociate"}]}
+    o = {"titolo": "Medioevo", "sezioni": [
+        {"titolo": "Papato e impero", "punti": [f"P{i}" for i in range(1, 9)]},
+        {"titolo": "Le crociate", "punti": [f"P{i}" for i in range(9, 17)]},
+        {"titolo": "Ordini cavallereschi", "punti": ["P17"]}],
+        "immagini": [{"sezione": 3, "soggetto": "Templari", "ricerca": "templari"}]}
+    piano = schema_ripasso.normalizza_piano(o, lettura, punti, "capitoli", 10)
+    # I due punti sul Dictatus papae sono un argomento solo: stessa parte, uno dopo l'altro.
+    assert [s["titolo"] for s in piano["sezioni"]] == ["Papato e impero", "Le crociate"]
+    assert piano["sezioni"][0]["concetti"][:3] == ["Dictatus papae (1075): primato del papa",
+                                                   "Dictatus papae: superiorità sul potere imperiale",
+                                                   "Canossa (1077): Enrico IV si umilia"]
+    assert set(piano["sezioni"][0]["fonti"]) == {"B1", "B2"}
+    # La parte da un punto solo in fondo va dove ci sono gli stessi documenti, con la sua foto.
+    assert piano["sezioni"][1]["concetti"][-1] == "Ordini cavallereschi: templari e ospedalieri"
+    assert piano["immagini"][0]["sezione"] == 2
+    assert sum(len(s["concetti"]) for s in piano["sezioni"]) == len(punti)
+    # Chi rilegge il piano vede le parti già sistemate, con i numeri degli argomenti.
+    testo = schema_ripasso.piano_in_chiaro(o, punti, "capitoli", 10)
+    assert testo.splitlines()[:3] == ["S1. Papato e impero", "   P1. Dictatus papae (1075): primato del papa; superiorità sul potere imperiale",
+                                      "   P2. Canossa (1077): Enrico IV si umilia"]
+    assert "S3." not in testo and "P17. Ordini cavallereschi" in testo.split("S2.")[1]
+    assert schema_ripasso._numero_punto("P12. Dictatus papae", 20) == 11
+
+
+def test_piano_corretto_da_chi_lo_rilegge():
+    punti = [{"testo": f"{tema} {j}: fatto", "fonti": [fonte]} for tema, fonte, quanti in
+             (("Economia", "B1", 5), ("Papato", "B2", 5), ("Crociate", "B3", 5), ("Chiesa", "B2", 3)) for j in range(quanti)]
+    lettura = {"argomento": "Medioevo", "brani": [{"id": b, "testo": "x"} for b in ("B1", "B2", "B3")]}
+    o = {"titolo": "Medioevo", "sezioni": [
+        {"titolo": "Economia", "punti": ["P1", "P2", "P3", "P4", "P5", "P11"]},
+        {"titolo": "Crociate", "punti": ["P12", "P13", "P14", "P15"]},
+        {"titolo": "Papato", "punti": [f"P{i}" for i in range(6, 11)]},
+        {"titolo": "Chiesa e società", "punti": ["P16", "P17", "P18"]}],
+        "immagini": [{"sezione": 4, "soggetto": "Chiesa", "ricerca": "chiesa"}]}
+    correzioni = {"sposta": [{"punto": "P11", "sezione": "S2"}, {"punto": "P99", "sezione": "S1"}],
+                  "unisci": [{"sezione": "S4", "in": "S3"}], "metti_dopo": [{"sezione": "S3", "dopo": "S1"}, {"sezione": "S9", "dopo": "S1"}]}
+    piano = schema_ripasso.normalizza_piano(o, lettura, punti, "capitoli", 10, correzioni)
+    assert [s["titolo"] for s in piano["sezioni"]] == ["Economia", "Papato", "Crociate"]
+    assert piano["sezioni"][1]["concetti"][-3:] == ["Chiesa 0: fatto", "Chiesa 1: fatto", "Chiesa 2: fatto"]
+    assert piano["sezioni"][2]["concetti"][-1] == "Crociate 0: fatto" and len(piano["sezioni"][0]["concetti"]) == 5
+    assert piano["immagini"][0]["sezione"] == 2  # la foto segue la sua parte unita all'altra
+    assert sum(len(s["concetti"]) for s in piano["sezioni"]) == len(punti)
+    assert schema_ripasso.valida_correzioni(correzioni) == [] and schema_ripasso.valida_correzioni({"sposta": "P3"})
+
+
+def test_copertura_senza_spendere():
+    testo = schema_ripasso.radici("Nel 1122 il Concordato di Worms chiuse la lotta tra papato e impero.")
+    assert schema_ripasso.coperto("Concordato di Worms (1122)", testo)
+    assert not schema_ripasso.coperto("Concordato di Worms (1123)", testo)  # la data deve esserci
+    assert not schema_ripasso.coperto("Dictatus papae di Gregorio VII", testo)
+    assert not schema_ripasso.coperto("Worms", testo)  # troppo poco per dirlo: decide il modello
+
+
+def test_punti_senza_immagini_e_uniti():
+    o = {"punti": [{"testo": "Immagine del papa in trono", "fonti": ["B1"]}, {"testo": "Il papato teocratico", "fonti": ["B1", "X9"]},
+                   "Fotosintesi clorofilliana"]}
+    assert schema_ripasso.normalizza_mappa(o, {"B1"}) == [{"testo": "Il papato teocratico", "fonti": ["B1"]},
+                                                         {"testo": "Fotosintesi clorofilliana", "fonti": []}]
+    uniti = schema_ripasso.unisci_punti([[{"testo": "Il papato teocratico", "fonti": ["B1"]}],
+                                         [{"testo": "il Papato, teocratico.", "fonti": ["B7"]}]])
+    assert uniti == [{"testo": "Il papato teocratico", "fonti": ["B1", "B7"]}]
+
+
+def test_schema_usa_il_piano_riletto(client, auth, servizi, monkeypatch):
+    visti = {}
+
+    def rivisto(self, d):
+        visti["titoli"] = [stile.ripulisci(schema_ripasso._corto(s["titolo"])) for s in d["piano"]["sezioni"]]
+        return {"sposta": [], "unisci": [], "metti_dopo": [{"sezione": "S1", "dopo": "S2"}]}
+
+    monkeypatch.setattr(finto.TestoFinto, "_schema_piano_rivisto", rivisto)
+    m = materia_pronta(client, auth, servizi)
+    s = crea_schema(client, auth, m["id"])
+    studio_tutto(servizi)
+    d = client.get(f"/api/schemi/{s['id']}", headers=auth).json()
+    titoli = [x["titolo"] for x in d["contenuto"]["sezioni"]]
+    attesi = visti["titoli"]
+    assert len(attesi) > 1 and titoli[:2] == [attesi[1], attesi[0]]
+
+
 def test_quante_immagini():
     q = schema_ripasso.quante_immagini
     assert (q("essenziale", ""), q("completo", None), q("approfondito", "")) == (2, 3, 5)
@@ -224,10 +354,46 @@ def test_frase_fuori_dai_documenti_si_toglie(client, auth, servizi, server):
 
 
 @pagamento
-def test_concetto_mancante_diventa_una_parte_in_piu(client, auth, servizi, server):
-    server.mancanti = ["Il senato"]
+def test_punto_mancante_si_aggiunge_nella_sua_parte(client, auth, servizi, server):
+    server.mancanti = ["Le legioni a Teutoburgo"]  # il piano l'ha dimenticato: va nella parte dei punti vicini
     _, d = schema_pronto(client, auth, servizi)
-    assert "Altri punti da sapere" in [s["titolo"] for s in d["contenuto"]["sezioni"]]
+    sezioni = d["contenuto"]["sezioni"]
+    assert "Altri punti da sapere" not in [s["titolo"] for s in sezioni]
+    assert "Le legioni furono sconfitte a Teutoburgo." in str(sezioni[1]["blocchi"])  # in fondo alla sua parte
+    assert "Teutoburgo" not in str(sezioni[0]["blocchi"])
+    assert d["contenuto"]["copertura"] == {"concetti": 3, "coperti": 3, "mancanti": []}
+    assert d["carte"] == 3  # una per parte e una per l'aggiunta
+    chat = [c["messages"][1]["content"] for p, c in server.chiamate if p == "/v1/chat/completions"
+            and isinstance(c["messages"][1]["content"], str)]
+    copertura = next(c for c in chat if "Qui sotto ci sono i concetti" in c)
+    assert "C1. Le legioni a Teutoburgo" in copertura
+    assert "C2." not in copertura  # gli altri due sono coperti dalle parole: per loro non si paga il controllo
+
+
+@pagamento
+def test_schema_legge_tutto_il_materiale_e_ogni_punto_va_in_una_parte(client, auth, servizi, server):
+    _, d = schema_pronto(client, auth, servizi)
+    chat = [c for p, c in server.chiamate if p == "/v1/chat/completions" and isinstance(c["messages"][1]["content"], str)]
+    mappa = [c for c in chat if "segna TUTTI i punti da sapere" in c["messages"][1]["content"]]
+    piano = next(c for c in chat if "Prepara il PIANO di uno schema di ripasso" in c["messages"][1]["content"])
+    assert mappa and all(c["model"] == "mistral-small-latest" for c in mappa)
+    assert "P1. Il principato di Augusto" in piano["messages"][1]["content"]
+    assert "<materiale id=" not in piano["messages"][1]["content"]  # il piano lavora sui punti, non su un pezzo del materiale
+
+
+@pagamento
+def test_riassunto_tagliato_si_richiede_con_piu_spazio(client, auth, servizi, server):
+    _, d = schema_pronto(client, auth, servizi)
+    n = server.conta("/v1/chat/completions")
+    r = client.post(f"/api/schemi/{d['id']}/riassunti", json={"forma": "misto"}, headers=auth).json()
+    server.tronca = 1
+    studio_tutto(servizi)
+    x = client.get(f"/api/riassunti/{r['id']}", headers=auth).json()
+    assert x["stato"] == "pronto" and x["contenuto"]["parti"]
+    scritti = [c for p, c in server.chiamate[n:] if p == "/v1/chat/completions"
+               and "Scrivi il riassunto di questo schema" in c["messages"][1]["content"]]
+    assert len(scritti) == 2 and scritti[1]["max_tokens"] == 2 * scritti[0]["max_tokens"]
+    assert len(scritti[1]["messages"]) == len(scritti[0]["messages"])  # la stessa richiesta, non "correggiti"
 
 
 @pagamento

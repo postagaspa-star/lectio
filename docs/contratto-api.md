@@ -512,6 +512,17 @@ finché è in lavorazione. Una novità `schema_pronto` o `schema_errore` avvisa 
 `testo` e `voci` possono avere `**grassetto**` e nient'altro. Le formule sono già in caratteri normali (x², √2, (x+3)/(x−1)).
 `campi` c'è solo nella forma `schede` (altrimenti `[]`). Tipi sconosciuti: le app li saltano.
 
+Come si prepara (dalla 1.3.1, `fase` = `lettura`, `mappa`, `piano`, `scrittura`, `copertura`, `immagini`, `chiusura`; le app
+mostrano solo `frase`): le pagine uguali (la stessa pagina fotografata due volte) si leggono una volta; il modello piccolo legge
+TUTTO il materiale scelto, a gruppi di 40.000 caratteri, e segna i punti da sapere; i punti sulla stessa cosa (lo stesso
+soggetto prima dei due punti, per esempio "Canossa (1077): …" da due documenti) diventano un argomento solo; il piano mette ogni
+argomento in una sola parte, nell'ordine del tempo quando ci sono date, con parti di peso simile e senza parti di avanzi (una
+parte da uno o due punti in uno schema lungo si unisce a quella con gli stessi documenti); poi il modello rilegge il piano e
+scrive solo le correzioni (punto da spostare, parte da unire a un'altra, parte da mettere dopo un'altra), che fa il codice, così
+nessun punto si perde; le parole di una parte crescono con i suoi punti. Il controllo
+finale confronta ogni punto con il testo (prima le parole, poi il modello piccolo per i dubbi) e quello che manca si scrive in
+fondo alla sua parte. `copertura.mancanti` sono i punti che i documenti nominano senza dire abbastanza per spiegarli.
+
 Immagini: `GET /api/schemi/{id}/immagini/{n}` → JPEG. `POST /api/schemi/{id}/immagini/{n}/cambia` → `Schema` (ne cerca un'altra
 coerente; 404 se non ce ne sono altre). `DELETE /api/schemi/{id}/immagini/{n}` → `Schema`. Le immagini sono poche: 2 in `essenziale`,
 3 in `completo`, 5 in `approfondito`; di più solo se le indicazioni lo chiedono (fino a 40). Ognuna è controllata guardandola:

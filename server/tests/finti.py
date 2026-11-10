@@ -136,6 +136,7 @@ class ServerFinto:
         self.voci_rotte = 0  # quante risposte 500 dare prima di quelle buone
         self.fuori_coda: list[list] = []  # che cosa risponde il controllo dei fatti, una risposta per chiamata
         self.mancanti: list[str] = []  # i concetti che il controllo di copertura dice mancare
+        self.tronca = 0  # quante risposte di chat dare tagliate a metà, come quando finiscono i token
         self.foto_buona = True
         self.piano_senza_foto = False
         self.chiarimento = None
@@ -214,11 +215,11 @@ class ServerFinto:
             return httpx.Response(200, content=wav_veloce(len(testo) * SECONDI_PER_CARATTERE))
         return httpx.Response(404, json={"message": "sconosciuto"})
 
-    def _risposta_chat(self, testo: str, dati: dict) -> httpx.Response:
+    def _risposta_chat(self, testo: str, dati: dict, fine: str = "stop") -> httpx.Response:
         entrata = sum(len(m["content"]) for m in dati["messages"]) // 4
         return httpx.Response(200, json={
             "model": dati["model"],
-            "choices": [{"message": {"role": "assistant", "content": testo}}],
+            "choices": [{"message": {"role": "assistant", "content": testo}, "finish_reason": fine}],
             "usage": {"prompt_tokens": entrata, "completion_tokens": max(1, len(testo) // 4)},
         })
 
@@ -229,6 +230,9 @@ class ServerFinto:
         if self.chat_forzata is not None:
             testo, self.chat_forzata = self.chat_forzata, None
             return self._risposta_chat(testo, dati)
+        if self.tronca > 0:
+            self.tronca -= 1
+            return self._risposta_chat('{"titolo": "Augusto in breve", "parti": [{"titolo": "Il pot', dati, fine="length")
         primo = dati["messages"][1]["content"] if len(dati["messages"]) > 1 else ""
         if isinstance(primo, list):
             primo = primo[0]["text"]
@@ -238,13 +242,21 @@ class ServerFinto:
         if "Qui sotto ci sono delle frasi numerate" in primo:
             oggetto = {"fuori": self.fuori_coda.pop(0) if self.fuori_coda else []}
         elif "Qui sotto ci sono i concetti" in primo:
-            oggetto = {"mancanti": self.mancanti}
+            numerati = re.findall(r"^C(\d+)\. (.+)$", primo, re.MULTILINE)
+            oggetto = {"mancanti": [f"C{n}" for n, testo in numerati if testo.strip() in self.mancanti]}
+        elif "segna TUTTI i punti da sapere" in primo:
+            oggetto = {"punti": [{"testo": "Il principato di Augusto", "fonti": ids[:1]},
+                                 {"testo": "Il senato restò di facciata", "fonti": ids[:1]},
+                                 {"testo": "Le legioni a Teutoburgo", "fonti": ids[:1]}]}
+        elif re.search(r"Nella PARTE \d+ di \d+ dello schema mancano", primo):
+            oggetto = {"blocchi": [{"tipo": "paragrafo", "titolo": None, "testo": "Le legioni furono sconfitte a Teutoburgo.",
+                                    "fonti": ids[:1]}],
+                       "carte": [{"domanda": "Dove furono sconfitte le legioni?", "risposta": "A Teutoburgo."}]}
         elif "Guarda la foto." in primo:
             oggetto = {"mostra": self.foto_buona, "cosa_si_vede": "il soggetto"}
         elif "Prepara il PIANO di uno schema di ripasso" in primo:
-            oggetto = {"titolo": "Augusto sul quaderno", "forma": "capitoli", "concetti": ["Il principato", "Il senato"],
-                       "sezioni": [{"titolo": "Il principato", "concetti": ["Il principato"], "fonti": ids[:2]},
-                                   {"titolo": "Il senato", "concetti": ["Il senato"], "fonti": ids[:2]}],
+            oggetto = {"titolo": "Augusto sul quaderno", "forma": "capitoli",
+                       "sezioni": [{"titolo": "Il principato", "punti": ["P1"]}, {"titolo": "Il senato", "punti": ["P2"]}],
                        "immagini": [{"sezione": 1, "soggetto": "Augusto", "ricerca": "Augusto statua", "didascalia": "Augusto"},
                                     {"sezione": 2, "soggetto": "Personaggio inventato", "ricerca": "nessuno", "didascalia": "No"}]}
             if self.piano_senza_foto:

@@ -25,6 +25,7 @@ class RispostaTesto:
     token_entrata: int
     token_uscita: int
     modello: str
+    troncata: bool = False  # finita perché era arrivata al massimo di token: il testo è a metà
 
 
 class TestoMistral:
@@ -60,4 +61,5 @@ class TestoMistral:
             token_entrata=int(uso.get("prompt_tokens") or 0),
             token_uscita=int(uso.get("completion_tokens") or 0),
             modello=d.get("model") or modello,
+            troncata=d["choices"][0].get("finish_reason") == "length",
         )
