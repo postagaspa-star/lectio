@@ -36,6 +36,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,7 +112,10 @@ import eu.stgm.lectio.ui.materiale.MaterialeViewModel
 import eu.stgm.lectio.ui.materiale.PassoAggiunta
 import eu.stgm.lectio.ui.materiale.PreparatoreFile
 import eu.stgm.lectio.ui.materiale.RichiestaAggiunta
+import eu.stgm.lectio.ui.materie.AzioniCartella
 import eu.stgm.lectio.ui.materie.AzioniMateria
+import eu.stgm.lectio.ui.materie.CartellaScreen
+import eu.stgm.lectio.ui.materie.CartellaViewModel
 import eu.stgm.lectio.ui.materie.MateriaScreen
 import eu.stgm.lectio.ui.materie.MateriaViewModel
 import eu.stgm.lectio.ui.materie.MaterieScreen
@@ -305,6 +309,10 @@ private fun App(
     val lettore: Lettore = if (esempio) lettoreEsempio else app.lettore
     val chiave = if (esempio) "esempio-${visita.giro}" else "vero"
     var nuovaMateria by remember { mutableStateOf(false) }
+    /** Cresce a ogni "Aggiungi" riuscito: la materia o la cartella aperta rilegge tutto. */
+    var giroAggiunte by remember { mutableIntStateOf(0) }
+    /** "Riassunto" dal foglio Nuovo: lo schema da aprire col foglio dei riassunti già aperto (aspetto.md §43.3). */
+    var riassuntiDa by rememberSaveable { mutableStateOf<Long?>(null) }
     val aggiuntaVera: AggiuntaViewModel = viewModel(key = "aggiunta-vero") { AggiuntaViewModel(app.sorgente, preparatore, createSavedStateHandle()) }
     val aggiuntaEsempio: AggiuntaViewModel = viewModel(key = "aggiunta-esempio-${visita.giro}") { AggiuntaViewModel(esempioDati, null) }
     val aggiunta = if (esempio) aggiuntaEsempio else aggiuntaVera
@@ -458,7 +466,8 @@ private fun App(
                             sceltaFile = { sceltaFileGemini.launch(eu.stgm.lectio.logica.Condivisione.TIPI_SELETTORE) },
                             nuovaMateria = nuovaMateria, nuovaMateriaAperta = { nuovaMateria = false },
                             chiediNuovaMateria = { nuovaMateria = true; vai(Navigazione(Scheda.MATERIE)) },
-                            visita = visita, ricomincia = ricomincia,
+                            visita = visita, ricomincia = ricomincia, giroAggiunte = giroAggiunte,
+                            riassuntiDa = riassuntiDa, segnaRiassunti = { riassuntiDa = it },
                         )
                     }
                 }
@@ -480,7 +489,12 @@ private fun App(
                     onGemini = { if (!visita.attiva) { aggiunta.chiudi(); vai(Navigazione(Scheda.GEMINI)) } },
                     onFatto = { materiaId ->
                         aggiunta.chiudi()
-                        vai(Navigazione(nav.scheda, nav.pagine.filterNot { it is Pagina.Materia } + Pagina.Materia(materiaId)))
+                        giroAggiunte++
+                        val cima = nav.inCima
+                        // Aggiunto dalla pagina di una cartella della stessa materia: si resta lì (aspetto.md §42.2).
+                        if (!(cima is Pagina.Cartella && cima.materiaId == materiaId)) {
+                            vai(Navigazione(nav.scheda, nav.pagine.filterNot { it is Pagina.Materia || it is Pagina.Cartella } + Pagina.Materia(materiaId)))
+                        }
                         ambito.launch { messaggi.showSnackbar("Aggiunto: il server lo sta leggendo") }
                     },
                     senzaRete = offline,
@@ -494,6 +508,13 @@ private fun App(
     // La richiesta degli avvisi aspetta la fine della visita: una cosa alla volta.
     if (vista && !visita.attiva) RichiestaNotifiche(app)
 }
+
+/** La stessa istanza per la pagina della materia e per le sue cartelle (la riga conferma passa da qui). */
+@Composable
+private fun vmMateria(sorgente: Sorgente, id: Long, chiave: String, esempio: Boolean, elimina: suspend (List<Long>) -> Unit): MateriaViewModel =
+    viewModel(key = "materia-$id-$chiave") {
+        MateriaViewModel(sorgente, id, togliLezioniLocali = { ids -> if (!esempio) elimina(ids) })
+    }
 
 /** Da una notifica: si passa dalla materia giusta, così "Indietro" porta lì. */
 private fun daMateria(nav: Navigazione, materiaId: Long, segmento: Int): Navigazione =
@@ -544,14 +565,15 @@ private fun Pagine(
     chiediNuovaMateria: () -> Unit,
     visita: Visita,
     ricomincia: () -> Unit,
+    giroAggiunte: Int = 0,
+    riassuntiDa: Long? = null,
+    segnaRiassunti: (Long?) -> Unit = {},
 ) {
     val contesto = LocalContext.current
     val ambito = rememberCoroutineScope()
     when (val p = nav.inCima) {
         is Pagina.Materia -> {
-            val vm: MateriaViewModel = viewModel(key = "materia-${p.id}-$chiave") {
-                MateriaViewModel(sorgente, p.id, togliLezioniLocali = { ids -> if (!esempio) elimina(ids) })
-            }
+            val vm = vmMateria(sorgente, p.id, chiave, esempio, elimina)
             LaunchedEffect(p.segmento) { p.segmento?.let(vm::segmento) }
             val pdf = LocalGestorePdf.current
             MateriaScreen(
@@ -570,8 +592,34 @@ private fun Pagine(
                     nuovaSimulata = { e -> vai(nav.apri(Pagina.NuovaSimulata(p.id, e))) },
                     apriSimulata = { q -> vai(nav.apri(Pagina.Simulata(q.id))) },
                     pdf = { d, nome -> pdf?.scarica(sorgente, d, nome) },
+                    apriCartella = { id -> vai(nav.apri(Pagina.Cartella(id, p.id))) },
+                    apriRiassunti = { s ->
+                        segnaRiassunti(s.id)
+                        vai(nav.apri(Pagina.Schema(s.id)))
+                    },
                 ),
                 esempio, offline, scaricate,
+                ricarica = giroAggiunte,
+            )
+        }
+        is Pagina.Cartella -> {
+            val vm: CartellaViewModel = viewModel(key = "cartella-${p.id}-$chiave") { CartellaViewModel(sorgente, p.id, p.materiaId) }
+            val materia = vmMateria(sorgente, p.materiaId, chiave, esempio, elimina)
+            CartellaScreen(
+                vm,
+                AzioniCartella(
+                    indietro = indietro,
+                    aggiungi = { aggiungi(RichiestaAggiunta(p.materiaId, PassoAggiunta.SCEGLI, TipoMateriale.APPUNTI, cartellaId = p.id)) },
+                    apriMateriale = { vai(nav.apri(Pagina.TestoMateriale(it))) },
+                    eliminata = { frase ->
+                        // Si torna alla materia, con la riga conferma (aspetto.md §42.5).
+                        materia.conferma(frase)
+                        val senza = nav.pagine.filterNot { it == p }
+                        vai(Navigazione(nav.scheda, if (senza.lastOrNull() is Pagina.Materia) senza else senza + Pagina.Materia(p.materiaId)))
+                    },
+                ),
+                esempio, offline,
+                ricarica = giroAggiunte,
             )
         }
         is Pagina.ModificaScheda -> {
@@ -612,6 +660,13 @@ private fun Pagine(
             val vm: SchemaViewModel = viewModel(key = "schema-${p.id}-$chiave") { SchemaViewModel(sorgente, p.id) }
             val capito: NonHoCapitoViewModel = viewModel(key = "capito-schema-${p.id}-$chiave") { NonHoCapitoViewModel(sorgente) }
             val statoAudio by lettore.stato.collectAsStateWithLifecycle()
+            // Arrivati da "Riassunto" nel foglio Nuovo: il foglio dei riassunti si apre da solo, una volta.
+            LaunchedEffect(p.id, riassuntiDa) {
+                if (riassuntiDa == p.id) {
+                    vm.chiediRiassunti()
+                    segnaRiassunti(null)
+                }
+            }
             LetturaSchemaScreen(
                 vm, capito,
                 AzioniSchema(

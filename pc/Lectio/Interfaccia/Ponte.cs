@@ -130,8 +130,13 @@ public sealed class Ponte
                 if (metodo != "POST") return Rifiuto(405);
                 var q = Query(uri.Query);
                 long? materia = long.TryParse(q.GetValueOrDefault("materia_id"), NumberStyles.None, CultureInfo.InvariantCulture, out var m) ? m : null;
+                // Contratto §27: la cartella scelta (facoltativa). Scritta male vale 0, che il motore rifiuta: mai un file
+                // in un posto diverso da quello scelto.
+                long? cartella = Vuoto(q.GetValueOrDefault("cartella_id")) is string testoCartella
+                    ? long.TryParse(testoCartella, NumberStyles.None, CultureInfo.InvariantCulture, out var c) ? c : 0
+                    : null;
                 return await motore.CaricaFileAsync(materia, Vuoto(q.GetValueOrDefault("tipo")), Vuoto(q.GetValueOrDefault("titolo")),
-                    Vuoto(q.GetValueOrDefault("data")), q.GetValueOrDefault("nome"), corpo).ConfigureAwait(false);
+                    Vuoto(q.GetValueOrDefault("data")), q.GetValueOrDefault("nome"), corpo, cartella).ConfigureAwait(false);
             }
             if (nome == "diagnosi-corpo" && motore.Diagnosi)
             {

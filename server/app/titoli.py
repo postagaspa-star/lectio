@@ -20,6 +20,8 @@ PAROLE_VUOTE = {
     "oppure", "ovvero", "cioe", "loro", "essere", "avere", "lezione", "lezioni", "verifica", "verifiche",
     "interrogazione", "capitolo", "pagina", "pagine", "parte", "parti", "argomento", "ripasso", "domande",
     "domanda", "spiegazione", "appunti", "libro", "tema", "temi",
+    # le preposizioni con l'apostrofo ("dell'opera" → "dell")
+    "dell", "nell", "sull", "dall", "quell", "quest", "tutt",
 }
 _PAROLA = re.compile(r"[a-z]{4,}")
 _FOTOCAMERE = re.compile(
@@ -68,15 +70,16 @@ def titolo_automatico(titolo: str | None, nome_file: str | None) -> bool:
 
 
 def suggeriti(argomento: str, materiali: list[dict]) -> dict:
-    """`materiali`: [{"id", "titolo", "testo"}] (solo quelli pronti). Restituisce le parole usate,
-    gli id suggeriti (nell'ordine dei materiali) e i punti di ognuno (solo quelli sopra zero)."""
+    """`materiali`: [{"id", "titolo", "testo", "cartella"}] (solo quelli pronti; "cartella" = nome della
+    cartella o None, conta come il titolo). Restituisce le parole usate, gli id suggeriti (nell'ordine dei
+    materiali) e i punti di ognuno (solo quelli sopra zero)."""
     voci = list(dict.fromkeys(parole(argomento)))
     radici = list(dict.fromkeys(radice(p) for p in voci))
     if not radici or not materiali:
         return {"argomento": argomento, "parole": voci, "suggeriti": [], "punti": {}}
     analisi = []
     for m in materiali:
-        nel_titolo = {radice(p) for p in parole(m.get("titolo") or "")}
+        nel_titolo = {radice(p) for p in parole((m.get("titolo") or "") + " " + (m.get("cartella") or ""))}
         nel_testo = Counter(radice(p) for p in parole(m.get("testo") or ""))
         analisi.append((m["id"], nel_titolo, nel_testo))
     # Le parole che stanno quasi dappertutto ("scultura" in Storia dell'Arte) non distinguono niente.

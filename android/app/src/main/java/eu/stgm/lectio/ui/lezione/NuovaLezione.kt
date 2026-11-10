@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import eu.stgm.lectio.dati.Cartella
 import eu.stgm.lectio.dati.Evento
 import eu.stgm.lectio.dati.Lezione
 import eu.stgm.lectio.dati.Materia
@@ -124,6 +125,8 @@ data class StatoNuovaLezione(
     val eventoId: Long? = null,
     /** Tutto il materiale della materia, anche quello in lettura o in errore. */
     val materiale: List<Materiale> = emptyList(),
+    /** Le cartelle della materia (pillole CARTELLE, aspetto.md §42.7). */
+    val cartelle: List<Cartella> = emptyList(),
     /** Gli id che il server dice che parlano dell'argomento. */
     val suggeriti: Set<Long> = emptySet(),
     /**
@@ -255,6 +258,7 @@ class NuovaLezioneViewModel(
             val materie = async { sorgente.materie() }
             val eventi = async { sorgente.eventi() }
             val materiale = async { sorgente.materiale(materiaId) }
+            val cartelle = async { sorgente.cartelle(materiaId) }
             val voci = async { sorgente.voci() }
             val imp = async { sorgente.impostazioni() }
             val giorno = oggi().toString()
@@ -275,6 +279,7 @@ class NuovaLezioneViewModel(
                     argomento = it.argomento.ifBlank { argomentoIniziale.ifBlank { evento?.argomento ?: "" } },
                     sceltiAMano = if (it.pronto) it.sceltiAMano else materialiIniziali?.toSet(),
                     materiale = materiale.await().dato ?: it.materiale,
+                    cartelle = cartelle.await().dato ?: it.cartelle,
                     durata = if (it.pronto) it.durata else i?.durataPredefinita?.takeIf { d -> d in DURATE } ?: 20,
                     saltabili = if (it.pronto) it.saltabili else i?.domandeSaltabili ?: false,
                     voci = vociDisp,
@@ -360,6 +365,16 @@ class NuovaLezioneViewModel(
 
     fun nessuno() {
         _stato.update { it.copy(sceltiAMano = emptySet()) }
+        forseStima()
+    }
+
+    /** Una pillola CARTELLE (aspetto.md §42.7): spunta o toglie tutto il suo materiale pronto; conta come un tocco. */
+    fun cartella(id: Long) {
+        _stato.update { s ->
+            val ids = s.pronti.filter { it.cartellaId == id }.map { it.id }
+            if (ids.isEmpty()) return@update s
+            s.copy(sceltiAMano = SceltaMateriale.alternaCartella(s.scelti, ids))
+        }
         forseStima()
     }
 
@@ -509,7 +524,7 @@ fun NuovaLezioneScreen(vm: NuovaLezioneViewModel, onIndietro: () -> Unit, onCrea
                 modifier = Modifier.semantics { heading() },
             )
             SezioneSuCosa(s.argomento, vm::argomento, s.eventi, s.eventoId, vm::evento)
-            SezioneMateriale(s.materiale, s.pronti, s.scelti, s.suggeriti, s.auto, s.cerca, vm::cerca, vm::tocca, vm::sullArgomento, vm::tutti, vm::nessuno)
+            SezioneMateriale(s.materiale, s.pronti, s.scelti, s.suggeriti, s.auto, s.cerca, vm::cerca, vm::tocca, vm::sullArgomento, vm::tutti, vm::nessuno, s.cartelle, vm::cartella)
             ComeLaVuoi(s, vm)
             SezioneVoce(s, vm)
             Riepilogo(s)
@@ -558,10 +573,15 @@ fun SezioneMateriale(
     onSull: () -> Unit,
     onTutti: () -> Unit,
     onNessuno: () -> Unit,
+    /** v1.6 (aspetto.md §42.7): le cartelle della materia, per le pillole CARTELLE e le righe. */
+    cartelle: List<Cartella> = emptyList(),
+    onCartella: (Long) -> Unit = {},
 ) {
     val c = L.colori
     val n = scelti.size
     val totale = pronti.size
+    val nomi = cartelle.associate { it.id to it.nome }
+    val nomeCartella: (Materiale) -> String? = { m -> m.cartellaId?.let { nomi[it] } }
     SezioneNumerata(
         2, "Da quale materiale",
         destra = { Text("$n di $totale scelti", style = L.testi.pillola, color = c.tenue, maxLines = 1) },
@@ -570,6 +590,21 @@ fun SezioneMateriale(
             PillolaOpzione("Sull'argomento", auto, onSull)
             PillolaOpzione("Tutti", !auto && n == totale && totale > 0, onTutti)
             PillolaOpzione("Nessuno", !auto && n == 0, onNessuno)
+        }
+        val conPronti = SceltaMateriale.cartelleConPronti(cartelle, pronti)
+        if (conPronti.isNotEmpty()) {
+            Etichetta("Cartelle")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                conPronti.forEach { (cartella, ids) ->
+                    PillolaOpzione(
+                        cartella.nome,
+                        accesa = ids.all { it in scelti },
+                        onClick = { onCartella(cartella.id) },
+                        ruolo = Role.Checkbox,
+                        dopo = " · ${ids.size}",
+                    )
+                }
+            }
         }
         val visibili = materiale.filter(SceltaMateriale::visibile)
         if (visibili.size > 4) {
@@ -583,14 +618,23 @@ fun SezioneMateriale(
                 descrizione = "Cerca nel materiale",
             )
         }
-        val filtrati = SceltaMateriale.filtra(visibili, cerca)
-        GruppoMateriale("Appunti e libro", "Nessuno ancora", visibili.filterNot(SceltaMateriale::delProf), filtrati.filterNot(SceltaMateriale::delProf), scelti, suggeriti, onTocca)
-        GruppoMateriale("Verifiche e interrogazioni del prof", "Nessuna ancora", visibili.filter(SceltaMateriale::delProf), filtrati.filter(SceltaMateriale::delProf), scelti, suggeriti, onTocca)
+        val filtrati = SceltaMateriale.filtra(visibili, cerca, nomeCartella)
+        GruppoMateriale("Appunti e libro", "Nessuno ancora", visibili.filterNot(SceltaMateriale::delProf), filtrati.filterNot(SceltaMateriale::delProf), scelti, suggeriti, nomeCartella, onTocca)
+        GruppoMateriale("Verifiche e interrogazioni del prof", "Nessuna ancora", visibili.filter(SceltaMateriale::delProf), filtrati.filter(SceltaMateriale::delProf), scelti, suggeriti, nomeCartella, onTocca)
     }
 }
 
 @Composable
-private fun GruppoMateriale(titolo: String, vuoto: String, tutti: List<Materiale>, mostrati: List<Materiale>, scelti: Set<Long>, suggeriti: Set<Long>, onTocca: (Long) -> Unit) {
+private fun GruppoMateriale(
+    titolo: String,
+    vuoto: String,
+    tutti: List<Materiale>,
+    mostrati: List<Materiale>,
+    scelti: Set<Long>,
+    suggeriti: Set<Long>,
+    nomeCartella: (Materiale) -> String?,
+    onTocca: (Long) -> Unit,
+) {
     val c = L.colori
     Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Etichetta(titolo)
@@ -598,7 +642,7 @@ private fun GruppoMateriale(titolo: String, vuoto: String, tutti: List<Materiale
             tutti.isEmpty() -> Text(vuoto, style = L.testi.testoMedio.copy(fontWeight = FontWeight.Medium), color = c.tenue)
             mostrati.isEmpty() -> Text("Niente con questo nome", style = L.testi.testoMedio.copy(fontWeight = FontWeight.Medium), color = c.tenue)
             else -> mostrati.forEach { m ->
-                RigaScelta(m, m.id in scelti, m.id in suggeriti && SceltaMateriale.pronto(m)) { onTocca(m.id) }
+                RigaScelta(m, m.id in scelti, m.id in suggeriti && SceltaMateriale.pronto(m), nomeCartella(m)) { onTocca(m.id) }
             }
         }
     }
@@ -606,34 +650,73 @@ private fun GruppoMateriale(titolo: String, vuoto: String, tutti: List<Materiale
 
 /**
  * Una riga del materiale (aspetto.md §6): casella 22 raggio 7, titolo 15 / 700 su una riga,
- * sotto "Appunti · foto · 4 novembre", a destra "argomento" se è tra i suggeriti.
+ * sotto "Appunti · foto · 4 novembre" (con la cartella dopo il tipo, §42.7), a destra
+ * "argomento" se è tra i suggeriti.
  */
 @Composable
-private fun RigaScelta(m: Materiale, scelto: Boolean, suggerito: Boolean, onTocca: () -> Unit) {
+private fun RigaScelta(m: Materiale, scelto: Boolean, suggerito: Boolean, cartella: String?, onTocca: () -> Unit) {
+    val c = L.colori
+    val inLettura = !SceltaMateriale.pronto(m)
+    RigaCasella(
+        titolo = m.titolo.ifBlank { m.nomeFile ?: "Materiale" },
+        sotto = if (inLettura) "Lo sto leggendo" else SceltaMateriale.sotto(m, cartella = cartella),
+        scelto = scelto,
+        onTocca = onTocca,
+        abilitato = !inLettura,
+        descrizioneStato = if (suggerito) (if (scelto) "Scelto" else "Non scelto") + ", sull'argomento" else null,
+        destra = if (!suggerito) null else {
+            {
+                Text(
+                    "argomento",
+                    maxLines = 1,
+                    style = L.testi.etichetta.copy(letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold),
+                    color = c.accentoTesto,
+                    modifier = Modifier.clip(CircleShape).background(c.accentoTenue).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        },
+    )
+}
+
+/**
+ * La riga di scelta con la casella (aspetto.md §6), usata anche da "Metti dei file qui"
+ * (§42.4). [attenuata] = mezza trasparente (il materiale ancora in lettura).
+ */
+@Composable
+fun RigaCasella(
+    titolo: String,
+    sotto: String,
+    scelto: Boolean,
+    onTocca: () -> Unit,
+    modifier: Modifier = Modifier,
+    abilitato: Boolean = true,
+    attenuata: Boolean = !abilitato,
+    descrizioneStato: String? = null,
+    destra: (@Composable () -> Unit)? = null,
+) {
     val c = L.colori
     val forma = RoundedCornerShape(14.dp)
-    val inLettura = !SceltaMateriale.pronto(m)
     val bordo by animateColorAsState(if (scelto) c.bordoScelto else c.riga, morbido(200), label = "bordo")
     val fondo by animateColorAsState(if (scelto) c.fondoScelto else c.superficie, morbido(200), label = "fondo")
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(forma)
             .background(fondo)
             .border(2.dp, bordo, forma)
-            .toggleable(scelto, enabled = !inLettura, role = Role.Checkbox) { onTocca() }
-            .semantics { if (suggerito) stateDescription = (if (scelto) "Scelto" else "Non scelto") + ", sull'argomento" }
-            .alpha(if (inLettura) 0.55f else 1f)
+            .toggleable(scelto, enabled = abilitato, role = Role.Checkbox) { onTocca() }
+            .semantics { if (descrizioneStato != null) stateDescription = descrizioneStato }
+            .alpha(if (attenuata) 0.55f else 1f)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Casella(scelto)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(m.titolo.ifBlank { m.nomeFile ?: "Materiale" }, style = L.testi.testoMedio.copy(fontWeight = FontWeight.Bold, lineHeight = 20.sp), color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(titolo, style = L.testi.testoMedio.copy(fontWeight = FontWeight.Bold, lineHeight = 20.sp), color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (inLettura) "Lo sto leggendo" else SceltaMateriale.sotto(m),
+                sotto,
                 style = L.testi.piccolo.copy(fontWeight = FontWeight.Medium),
                 color = c.tenue,
                 // Sui telefoni stretti la data va a capo invece di sparire nei puntini.
@@ -641,15 +724,7 @@ private fun RigaScelta(m: Materiale, scelto: Boolean, suggerito: Boolean, onTocc
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (suggerito) {
-            Text(
-                "argomento",
-                maxLines = 1,
-                style = L.testi.etichetta.copy(letterSpacing = 0.sp, fontWeight = FontWeight.ExtraBold),
-                color = c.accentoTesto,
-                modifier = Modifier.clip(CircleShape).background(c.accentoTenue).padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-        }
+        destra?.invoke()
     }
 }
 

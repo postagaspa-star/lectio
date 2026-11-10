@@ -126,6 +126,8 @@ suspend fun novitaDaMostrare(novita: suspend (Long) -> Esito<List<Novita>>, memo
         when (n.tipo) {
             "lezione_pronta", "lezione_errore" -> n.lezioneId != null && n.lezioneId !in avvisate
             "tetto_vicino", "materiale_errore", "scheda_aggiornata", "materiale_letto",
+            // v1.6 (contratto §11, aspetto.md §42.8): come materiale_letto.
+            "materiale_in_cartella",
             "schema_pronto", "schema_errore", "riassunto_pronto", "riassunto_errore",
             "simulata_pronta", "simulata_corretta", "simulata_errore",
             -> true

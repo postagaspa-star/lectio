@@ -314,43 +314,63 @@
     const simulate = h('div', { class: 'elenco nascosto', 'data-elenco': 'simulate' }, h('div', { class: 'riga' }, h('div', { class: 'segnaposto riga-finta' })));
     const binario = h('div', { class: 'segmenti binario', role: 'group', 'aria-label': 'Lezioni, schemi e verifiche simulate' });
     binario.style.setProperty('--n', '3');
-    const fisso = h('div', { class: 'fondo-fisso' });
-    // Si parte da Lezioni; da un avviso dal segmento giusto; tornando indietro da dov'eri (§31.2).
+    // §43.2 Il pulsante fisso in basso è sempre Nuovo, qualunque segmento sia aperto: apre "Cosa vuoi fare?".
+    let elencoSchemi = null;
+    const nuovo = h('button', {
+      type: 'button', class: 'pulsante pieno medio', 'data-azione': 'nuovo', 'data-visita': 'nuovo',
+      onclick: () => { if (A.visitaEvento) A.visitaEvento('nuovo'); A.apriNuovo(A.materiaDi(id) || m, { schemi: elencoSchemi }); },
+    }, icona('piu'), 'Nuovo');
+    const fisso = h('div', { class: 'fondo-fisso' }, nuovo);
+    function aggiornaNuovo() {
+      nuovo.disabled = L.nuovoSpento({ senzaRete: !!S.senzaRete, schedeSalvate: false });
+    }
+    // Si parte da Lezioni; da un avviso dal segmento giusto; tornando indietro da dov'eri (§31.2). Il binario è solo
+    // per guardare quello che c'è (§43.1).
     let segmento = rotta.segmento || (S.verso === 'indietro' && S.segmentoAperto && S.segmentoAperto.id === id ? S.segmentoAperto.segmento : 'lezioni');
     const SEGMENTI = [
-      { nome: 'lezioni', testo: 'Lezioni', azione: 'nuova-lezione', pulsante: 'Nuova lezione', box: lezioni, fai: () => { if (A.visitaEvento) A.visitaEvento('nuova-lezione'); A.nuovaLezione(m.id); } },
-      { nome: 'schemi', testo: 'Schemi', azione: 'nuovo-schema', pulsante: 'Nuovo schema', box: schemi, fai: () => { if (A.visitaEvento) A.visitaEvento('nuovo-schema'); A.nuovoSchema(m.id); } },
-      { nome: 'simulate', testo: 'Simulate', azione: 'nuova-simulata', pulsante: 'Nuova verifica simulata', box: simulate, fai: () => A.nuovaSimulata(m.id) },
+      { nome: 'lezioni', testo: 'Lezioni', box: lezioni },
+      { nome: 'schemi', testo: 'Schemi', box: schemi },
+      { nome: 'simulate', testo: 'Simulate', box: simulate },
     ];
-    function disegnaSegmento(cambio) {
+    function disegnaSegmento() {
       S.segmentoAperto = { id, segmento };
       svuota(binario, SEGMENTI.map((x) => h('button', {
         type: 'button', 'aria-pressed': x.nome === segmento ? 'true' : 'false', 'data-segmento': x.nome,
-        onclick: () => { if (A.visitaEvento) A.visitaEvento('segmento-' + x.nome); if (segmento !== x.nome) { segmento = x.nome; disegnaSegmento(true); } },
+        onclick: () => { if (A.visitaEvento) A.visitaEvento('segmento-' + x.nome); if (segmento !== x.nome) { segmento = x.nome; disegnaSegmento(); } },
       }, x.testo)));
       const s = SEGMENTI.find((x) => x.nome === segmento);
       SEGMENTI.forEach((x) => x.box.classList.toggle('nascosto', x !== s));
-      svuota(fisso, h('button', { type: 'button', class: 'pulsante pieno medio' + (cambio ? ' dissolve-corta' : ''), 'data-azione': s.azione, 'data-visita': s.azione, onclick: s.fai }, icona('piu'), s.pulsante));
       if (A.visitaDopoDisegno) A.visitaDopoDisegno();
     }
-    const pag = h('div', { class: 'pagina' },
-      h('div', { class: 'griglia-materia' }, scheda,
-        h('div', { class: 'colonna-destra' }, zona,
-          h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Materiale'),
-            h('button', { type: 'button', class: 'pulsante tenue piccolo', 'data-azione': 'aggiungi-materiale', 'data-visita': 'aggiungi', onclick: () => { A.apriAggiungi(m); if (A.visitaEvento) A.visitaEvento('foglio-aggiungi'); } }, 'Aggiungi')), materiale))),
-      h('div', { class: 'griglia-materia' },
-        h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Prossime'),
-          h('button', { type: 'button', class: 'pulsante testo', onclick: () => apriAggiungiData(m) }, 'Aggiungi data')), prossime),
-        h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Da ripassare')), h('div', { class: 'colonna-ripasso' }, lampo, ripasso))),
+    // §43.1 Prima fila: Cosa chiede il prof | Prossime e sotto Da ripassare. Seconda: il binario a tutta larghezza.
+    // Terza: Materiale | Trascina qui i file. Sotto i 900 px una colonna sola, nello stesso ordine del telefono.
+    const pag = h('div', { class: 'pagina pagina-materia' },
+      h('div', { class: 'griglia-materia', 'data-fila': 'prof' }, scheda,
+        h('div', { class: 'colonna-destra' },
+          h('div', { class: 'sezione', 'data-sezione': 'prossime' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Prossime'),
+            h('button', { type: 'button', class: 'pulsante testo', onclick: () => apriAggiungiData(m) }, 'Aggiungi data')), prossime),
+          h('div', { class: 'sezione', 'data-sezione': 'ripasso' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Da ripassare')), h('div', { class: 'colonna-ripasso' }, lampo, ripasso)))),
       h('div', { class: 'sezione', 'data-sezione': 'binario' }, binario, lezioni, schemi, simulate),
+      h('div', { class: 'griglia-materia', 'data-fila': 'materiale' },
+        h('div', { class: 'sezione', 'data-sezione': 'materiale' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Materiale'),
+          h('button', { type: 'button', class: 'pulsante tenue piccolo', 'data-azione': 'aggiungi-materiale', 'data-visita': 'aggiungi', onclick: () => { A.apriAggiungi(m); if (A.visitaEvento) A.visitaEvento('foglio-aggiungi'); } }, 'Aggiungi')), materiale),
+        h('div', { class: 'colonna-zona' }, zona)),
       fisso);
     svuota(box, testata, pag);
-    disegnaSegmento(false);
+    disegnaSegmento();
+    aggiornaNuovo();
+
+    // §43.1 La zona Trascina qui è alta quanto serve, ma non più dell'elenco: con un elenco corto si fa compatta.
+    function adattaZona() {
+      const alto = materiale.offsetHeight;
+      zona.classList.toggle('bassa', alto > 0 && alto < 170);
+    }
 
     function disegnaLampo() {
       const att = A.materiaDi(id) || m;
       const n = Number((att.conteggi || {}).lampo) || 0;
       svuota(lampo, A.schedaLampo(n, L.minutiLampo(n), () => { if (A.visitaEvento) A.visitaEvento('lampo-apri'); A.apriLampo({ materiaId: id }); }, 'Niente per oggi'));
+      aggiornaNuovo();
     }
     let timerSchemi = null;
     let timerSimulate = null;
@@ -358,8 +378,10 @@
       clearTimeout(timerSchemi);
       const r = await A.api.get('/server/api/schemi?materia_id=' + id);
       if (!vivo()) return;
+      aggiornaNuovo();
       if (!r.ok) { svuota(schemi, A.erroreConRiprova(r, caricaSchemi)); return; }
       const lista = r.dati || [];
+      elencoSchemi = lista;
       svuota(schemi, lista.length ? lista.map((x) => A.rigaSchema(x, m, caricaSchemi)) : h('div', { class: 'riga' }, h('span', { class: 'secondario', stile: { fontSize: '15px' } }, 'Nessuno schema ancora')));
       if (lista.some((x) => x.stato === 'in_coda' || x.stato === 'in_preparazione')) timerSchemi = setTimeout(() => { if (vivo()) caricaSchemi(); }, T.stato);
     }
@@ -380,13 +402,22 @@
       disegnaScheda(scheda, r.dati, m, caricaScheda);
     }
     async function caricaMateriale() {
-      const r = await A.api.get('/server/api/materie/' + id + '/materiale');
+      const [r, rc] = await Promise.all([A.api.get('/server/api/materie/' + id + '/materiale'), A.cartelle.carica(id)]);
       if (!vivo()) return;
       if (!r.ok) { svuota(materiale, A.erroreConRiprova(r, caricaMateriale)); return; }
+      // Senza le cartelle la pagina non saprebbe quali file stanno fuori: errore e Riprova (un server senza cartelle = nessuna).
+      if (!rc.ok && rc.stato !== 404) { svuota(materiale, A.erroreConRiprova(rc, caricaMateriale)); return; }
       const lista = r.dati || [];
-      S.materialeAperto = { materiaId: id, lista };
-      if (!lista.length) svuota(materiale, h('div', { class: 'riga' }, h('span', { class: 'secondario' }, 'Ancora niente: aggiungi una verifica corretta o gli appunti.')));
-      else svuota(materiale, lista.map((x) => rigaMateriale(x, m, caricaMateriale)));
+      const cartelle = rc.ok ? rc.dati : [];
+      S.materialeAperto = { materiaId: id, lista, cartelle };
+      // §42.1: prima le cartelle, poi "Nuova cartella" (sempre), poi il materiale fuori dalle cartelle.
+      const fuori = L.materialeFuori(lista);
+      svuota(materiale,
+        cartelle.map((c) => A.rigaCartella(c, m)),
+        A.rigaNuovaCartella(m),
+        fuori.map((x) => rigaMateriale(x, m, caricaMateriale)),
+        lista.length ? null : h('div', { class: 'riga' }, h('span', { class: 'secondario' }, 'Ancora niente: aggiungi una verifica corretta o gli appunti.')));
+      adattaZona();
       if (lista.some((x) => x.stato === 'in_lettura')) ripeti(vivo, () => { caricaMateriale(); caricaScheda(); }, T.lettura);
     }
     async function caricaEventi() {
@@ -421,6 +452,9 @@
     S.aggiornaPagina = () => { caricaMateriale(); caricaScheda(); caricaEventi(); caricaRipasso(); caricaSchemi(); caricaSimulate(); A.caricaMaterie().then(() => { if (vivo()) disegnaLampo(); }); };
     disegnaLampo();
     await Promise.all([caricaScheda(), caricaMateriale(), caricaEventi(), caricaRipasso(), caricaSchemi(), caricaSimulate(), A.caricaMaterie().then(() => { if (vivo()) disegnaLampo(); })]);
+    if (!vivo()) return;
+    aggiornaNuovo();
+    adattaZona();
     if (A.visitaDopoDisegno) A.visitaDopoDisegno();
   };
 
@@ -455,8 +489,10 @@
     svuota(box, parti);
   }
 
+  /** Una riga del materiale (§4). Nella pagina di una cartella (§42.2) si dice se ce l'ha messo Lectio. */
   function rigaMateriale(x, m, ricarica) {
-    const sotto = (L.NOMI_TIPO_MATERIALE[x.tipo] || 'Materiale') + (x.data ? ' · ' + L.dataBreve(x.data) : '');
+    const daLectio = x.cartella_id != null && x.cartella_da === 'lectio' ? ' · messo qui da Lectio' : '';
+    const sotto = (L.NOMI_TIPO_MATERIALE[x.tipo] || 'Materiale') + (x.data ? ' · ' + L.dataBreve(x.data) : '') + daLectio;
     if (x.stato === 'in_lettura') {
       return h('div', { class: 'riga riga-materiale in-lettura nuovo' }, h('span', { class: 'segnaposto', 'aria-hidden': 'true' }),
         h('div', { class: 'testi' }, h('span', { class: 'forte' }, x.titolo || x.nome_file || 'File'), h('span', { class: 'secondario' }, 'Lo sto leggendo…')));
@@ -472,6 +508,7 @@
         // §15.5: il server dice se ha letto solo una parte (per esempio le prime pagine).
         x.avviso ? h('span', { class: 'avviso-materiale', 'data-avviso': 'materiale' }, x.avviso) : null));
   }
+  A.rigaMateriale = rigaMateriale;
 
   async function eliminaMateriale(x, ricarica) {
     const ok = await A.conferma({ titolo: 'Eliminare "' + (x.titolo || 'questo materiale') + '"?', testo: 'Le prossime lezioni non lo useranno più.', si: 'Elimina', pericolo: true });
@@ -508,7 +545,19 @@
    */
   A.apriMateriale = function (x, m, ricarica) {
     let salvato = Object.assign({}, x);
-    const st = { tipo: x.tipo, invio: false, tutto: false, timer: null };
+    const st = { tipo: x.tipo, cartella: x.cartella_id == null ? null : x.cartella_id, invio: false, tutto: false, timer: null };
+    const materiaId = x.materia_id || (m && m.id);
+    // §42.6: CARTELLA (Fuori e una pillola per cartella), solo se la materia ha almeno una cartella.
+    const cartellaBox = h('div', { class: 'campo-gruppo', 'data-campo': 'cartella', stile: { display: 'none' } });
+    function disegnaCartella() {
+      const lista = A.cartelle.lista(materiaId) || [];
+      if (!lista.length) { svuota(cartellaBox); cartellaBox.style.display = 'none'; return; }
+      cartellaBox.style.display = '';
+      const daLectio = salvato.cartella_da === 'lectio' && salvato.cartella_id != null && st.cartella === salvato.cartella_id;
+      svuota(cartellaBox, h('span', { class: 'etichetta' }, 'Cartella'),
+        A.pilloleCartella(lista, st.cartella, 'Fuori', (id) => { st.cartella = id; torna(); disegnaCartella(); }),
+        daLectio ? h('span', { class: 'mat-nota', 'data-nota': 'cartella' }, 'Messo qui da Lectio') : null);
+    }
     const titolo = h('input', { class: 'mat-titolo', id: 'mat-titolo', maxlength: '120', value: x.titolo || '', placeholder: 'Scrivi un titolo', autocomplete: 'off' });
     const nota = h('span', { class: 'mat-nota', 'data-nota': 'titolo' });
     const erroreTitolo = h('span', { class: 'errore-campo', role: 'alert' });
@@ -539,7 +588,7 @@
     async function salvaOra() {
       if (st.invio) return;
       if (!L.pulisciTitolo(titolo.value)) { erroreTitolo.textContent = 'Scrivi un titolo.'; titolo.focus(); return; }
-      const campi = L.campiCambiati(salvato, { titolo: titolo.value, tipo: st.tipo });
+      const campi = L.campiCambiati(salvato, { titolo: titolo.value, tipo: st.tipo, cartella_id: st.cartella });
       svuota(esito);
       if (!Object.keys(campi).length) { salvatoPer2s(); return; }
       st.invio = true;
@@ -554,7 +603,9 @@
       }
       salvato = Object.assign({}, salvato, campi, r.dati || {});
       titolo.value = salvato.titolo || '';
+      st.cartella = salvato.cartella_id == null ? null : salvato.cartella_id;
       disegnaNota();
+      disegnaCartella();
       salvatoPer2s();
       // Un tipo cambiato da o verso verifica rifà la scheda del prof: si ridisegna tutta la materia.
       if (campi.tipo && S.aggiornaPagina) S.aggiornaPagina();
@@ -573,12 +624,15 @@
           h('button', { type: 'button', class: 'tondo', 'aria-label': 'Chiudi', onclick: () => c.chiudi() }, icona('chiudi'))),
         h('label', { class: 'campo-gruppo', for: 'mat-titolo' }, h('span', { class: 'etichetta' }, 'Titolo'), titolo, nota, erroreTitolo),
         h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Che cos\'è'), famiglie),
+        cartellaBox,
         letto,
         esito,
         h('div', { class: 'mat-piede' }, salva, h('span', { class: 'spazio' }), elimina))),
     });
     ctl.tipo = 'materiale';
     disegnaNota();
+    disegnaCartella();
+    if (materiaId) A.cartelle.carica(materiaId).then(() => { if (!ctl.chiuso) disegnaCartella(); });
     elimina.addEventListener('click', async () => { if (await eliminaMateriale(salvato, ricarica)) ctl.chiudi(); });
 
     async function caricaTesto() {
@@ -639,19 +693,23 @@
 
   // ================================================================== Aggiungi materiale (§5) e file
 
-  function scegliFile(m, accetta, tipo) {
+  /** Sceglie i file dal computer. `cartellaId` = la cartella già scelta (Aggiungi aperto da una cartella, §42.6). */
+  function scegliFile(m, accetta, tipo, cartellaId) {
     const input = h('input', { type: 'file', accept: accetta, multiple: true, class: 'sr' });
     input.addEventListener('change', () => {
       const file = Array.from(input.files || []);
       input.remove();
-      if (file.length) A.flussoFile(file, { materia: m, tipo });
+      if (file.length) A.flussoFile(file, { materia: m, tipo, cartellaId });
     });
     document.body.append(input);
     input.click();
   }
   A.scegliFile = scegliFile;
 
-  /** Il foglio "Aggiungi a Storia" (§5): Testo per Gemini, Trascina qui, File, Appunti, Interrogazione orale, Foto. */
+  /**
+   * Il foglio "Aggiungi a Storia" (§5): Testo per Gemini, Trascina qui, File, Appunti, Interrogazione orale, Foto.
+   * `opzioni.cartellaId`: aperto dalla pagina di una cartella, quella cartella è già scelta (§42.6).
+   */
   A.apriAggiungi = function (m, opzioni) {
     const o = opzioni || {};
     const ctl = A.apriFoglio({
@@ -663,23 +721,56 @@
           h('button', { type: 'button', class: 'riga-gemini', 'data-visita': 'gemini-riga', 'data-fuoco': true, onclick: () => { ctl2.chiudi(); A.vai('#gemini'); } }, icona('gemini'), h('span', null, 'Testo per Gemini'), icona('freccia')),
           h('div', { class: 'zona-trascina compatta', 'data-visita': 'trascina-foglio' }, h('span', { class: 'titolo-zona' }, 'Trascina qui il file')),
           h('div', null,
-            riga('file', 'File', null, () => scegliFile(m, '.pdf,.docx,.odt,.rtf,.txt,.md', o.tipo), { 'data-riga': 'file' }),
-            riga('appunti', 'Appunti', null, () => scritto(ctl2, m, 'appunti'), { 'data-riga': 'appunti' }),
-            riga('interrogazione', 'Interrogazione orale', null, () => scritto(ctl2, m, 'interrogazione'), { 'data-riga': 'orale' }),
-            riga('foto', 'Foto', 'circa 0,4 cent a foto', () => scegliFile(m, '.jpg,.jpeg,.png,.webp', o.tipo), { 'data-riga': 'foto' })));
+            riga('file', 'File', null, () => scegliFile(m, '.pdf,.docx,.odt,.rtf,.txt,.md', o.tipo, o.cartellaId), { 'data-riga': 'file' }),
+            riga('appunti', 'Appunti', null, () => scritto(ctl2, m, 'appunti', o.cartellaId), { 'data-riga': 'appunti' }),
+            riga('interrogazione', 'Interrogazione orale', null, () => scritto(ctl2, m, 'interrogazione', o.cartellaId), { 'data-riga': 'orale' }),
+            riga('foto', 'Foto', 'circa 0,4 cent a foto', () => scegliFile(m, '.jpg,.jpeg,.png,.webp', o.tipo, o.cartellaId), { 'data-riga': 'foto' })));
       },
     });
     ctl.accettaFile = true;
-    ctl.riceviFile = (file) => { ctl.chiudi(true); A.flussoFile(file, { materia: m, tipo: o.tipo }); };
+    ctl.riceviFile = (file) => { ctl.chiudi(true); A.flussoFile(file, { materia: m, tipo: o.tipo, cartellaId: o.cartellaId }); };
+    // Le cartelle della materia: servono dopo, per la scelta CARTELLA.
+    A.cartelle.carica(m.id);
     return ctl;
   };
 
-  /** Appunti scritti o interrogazione orale raccontata: testo → POST JSON (§6). */
-  function scritto(ctl, m, tipo) {
+  /**
+   * CARTELLA nei fogli di caricamento (§42.6): Decide Lectio (null: non si manda cartella_id) e una pillola per cartella.
+   * Solo se la materia ha almeno una cartella; le cartelle arrivano anche dopo (si ridisegna).
+   */
+  function sceltaCartellaCarica(st, materiaDi) {
+    const box = h('div', { class: 'campo-gruppo', 'data-campo': 'cartella' });
+    let materiaVista = null;
+    function disegna() {
+      const m = materiaDi();
+      const nota = m ? A.cartelle.lista(m.id) : null;
+      const lista = nota || [];
+      // Una cartella scelta che non c'è (più, o è di un'altra materia) torna a Decide Lectio.
+      if (nota && st.cartellaId != null && !nota.some((c) => c.id === st.cartellaId)) st.cartellaId = null;
+      if (!lista.length) { svuota(box); box.style.display = 'none'; return; }
+      box.style.display = '';
+      svuota(box, h('span', { class: 'etichetta' }, 'Cartella'), A.pilloleCartella(lista, st.cartellaId, 'Decide Lectio', (id) => { st.cartellaId = id; disegna(); }));
+    }
+    function aggiorna() {
+      const m = materiaDi();
+      disegna();
+      if (m && m.id !== materiaVista) {
+        materiaVista = m.id;
+        A.cartelle.carica(m.id).then(disegna);
+      }
+    }
+    aggiorna();
+    return { el: box, aggiorna };
+  }
+
+  /** Appunti scritti o interrogazione orale raccontata: testo → POST JSON (§6), con la cartella se scelta (§42.6). */
+  function scritto(ctl, m, tipo, cartellaId) {
     ctl.titolo(tipo === 'appunti' ? 'Appunti di ' + m.nome : 'Interrogazione orale');
     const titolo = h('input', { class: 'campo', maxlength: '120', value: '', placeholder: 'Lo scrive Lectio' });
     const data = h('input', { class: 'campo', type: 'date', value: L.iso() });
     const esito = h('div');
+    const st = { cartellaId: cartellaId == null ? null : cartellaId };
+    const cartella = sceltaCartellaCarica(st, () => m);
     const area = (ph, id) => h('textarea', { class: 'campo', placeholder: ph, id, rows: '4' });
     const campi = tipo === 'appunti'
       ? [area('Scrivi o incolla gli appunti', 'testo-appunti')]
@@ -692,6 +783,8 @@
       // §16.3: il titolo si manda solo se Andrea l'ha scritto; altrimenti lo sceglie Lectio leggendo.
       const corpo = { tipo, data: data.value || null, testo };
       if (L.pulisciTitolo(titolo.value)) corpo.titolo = L.pulisciTitolo(titolo.value);
+      // §27: con la cartella scelta va lì (numero nel JSON); con Decide Lectio non si manda.
+      if (st.cartellaId != null) corpo.cartella_id = st.cartellaId;
       const r = await A.api.post('/server/api/materie/' + m.id + '/materiale', corpo);
       aggiungi.disabled = false;
       if (!r.ok) { svuota(esito, A.messaggio('errore', r.errore)); return; }
@@ -700,7 +793,7 @@
       if (S.aggiornaPagina) S.aggiornaPagina();
     });
     svuota(ctl.corpo, h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Titolo'), titolo),
-      h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Data'), data), campi, esito, aggiungi);
+      h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Data'), data), cartella.el, campi, esito, aggiungi);
     setTimeout(() => campi[0].focus(), 30);
   }
 
@@ -721,6 +814,8 @@
     if (sopra && sopra.riceviFile) { sopra.riceviFile(file); return; }
     const v = S.rotta.vista;
     if ((v === 'materia' || v === 'scheda') && A.materiaDi(S.rotta.id)) { A.flussoFile(file, { materia: A.materiaDi(S.rotta.id) }); return; }
+    // Nella pagina di una cartella i file vanno in quella cartella (si può cambiare nel foglio).
+    if (v === 'cartella' && A.materiaDi(S.rotta.id)) { A.flussoFile(file, { materia: A.materiaDi(S.rotta.id), cartellaId: S.rotta.cartella }); return; }
     A.flussoFile(file, { tipo: 'verifica' });
   };
 
@@ -734,13 +829,15 @@
     const problemi = file.map((f) => L.controllaFile(f.name, f.size)).filter(Boolean);
     const buoni = file.filter((f) => !L.controllaFile(f.name, f.size));
     if (!buoni.length) { A.avviso(problemi[0]); return null; }
-    const st = { materia: o.materia || null, tipo: o.tipo || 'appunti', invio: false };
+    const st = { materia: o.materia || null, tipo: o.tipo || 'appunti', cartellaId: o.cartellaId == null ? null : o.cartellaId, invio: false };
     const ctl = A.apriFoglio({
       titolo: st.materia ? 'Aggiungi a ' + st.materia.nome : 'Manda il file a Lectio',
       corpo: (c, ctl2) => {
         const materie = h('div', { class: 'pillole', role: 'radiogroup', 'aria-label': 'In quale materia?' });
         const foto = buoni.filter((f) => L.eImmagine(f.name)).length;
         const tipi = A.cheCosE(st.tipo, (t) => { st.tipo = t; });
+        // §42.6: sotto "Che cos'è" la CARTELLA; con più file vale per tutti.
+        const cartella = sceltaCartellaCarica(st, () => st.materia);
         const titolo = buoni.length === 1 ? h('input', { class: 'campo', id: 'carica-titolo', maxlength: '120', value: '', placeholder: foto ? 'Lo scrive Lectio leggendo la foto' : 'Lo scrive Lectio leggendo il file' }) : null;
         const data = h('input', { class: 'campo', type: 'date', value: L.iso() });
         const esito = h('div');
@@ -752,6 +849,7 @@
           }, m.nome)));
           aggiungi.textContent = st.invio ? 'Mando il file…' : buoni.length > 1 ? 'Aggiungi ' + buoni.length + ' file' : 'Aggiungi';
           aggiungi.disabled = !st.materia || st.invio || S.senzaRete;
+          cartella.aggiorna();
         }
         aggiungi.addEventListener('click', async () => {
           if (!st.materia) return;
@@ -765,7 +863,7 @@
             if (!byte) { svuota(esito, A.messaggio('errore', 'Non riesco a leggere "' + f.name + '" dal computer.')); break; }
             // §16.3: niente titolo se Andrea non l'ha scritto: lo scrive Lectio leggendo il file.
             const scritto = titolo ? L.pulisciTitolo(titolo.value) : '';
-            const r = await A.api.carica(byte, { materia_id: st.materia.id, tipo: st.tipo, titolo: scritto || undefined, data: data.value || '', nome: f.name });
+            const r = await A.api.carica(byte, { materia_id: st.materia.id, tipo: st.tipo, titolo: scritto || undefined, data: data.value || '', nome: f.name, cartella_id: st.cartellaId == null ? undefined : st.cartellaId });
             if (!r.ok) {
               svuota(esito, A.messaggio('errore', (buoni.length > 1 ? f.name + ': ' : '') + r.errore, [h('button', { type: 'button', class: 'pulsante bianco', onclick: () => aggiungi.click() }, 'Riprova')]));
               break;
@@ -777,7 +875,7 @@
           if (andati === buoni.length) {
             ctl2.chiudi();
             A.avviso(andati > 1 ? andati + ' file aggiunti a ' + st.materia.nome + '.' : 'Aggiunto a ' + st.materia.nome + '. Lo sto leggendo.');
-            if (S.rotta.vista === 'materia' && S.rotta.id === st.materia.id && S.aggiornaPagina) S.aggiornaPagina();
+            if ((S.rotta.vista === 'materia' || S.rotta.vista === 'cartella') && S.rotta.id === st.materia.id && S.aggiornaPagina) S.aggiornaPagina();
             else if (S.rotta.vista !== 'materia') A.vai('#materia/' + st.materia.id);
           }
         });
@@ -786,6 +884,7 @@
           problemi.length ? A.messaggio('avviso', problemi[0]) : null,
           st.materia ? null : h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'In quale materia?'), (S.materie || []).length ? materie : h('span', { class: 'secondario' }, 'Prima aggiungi una materia.')),
           h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Che cos\'è'), tipi),
+          cartella.el,
           titolo ? h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Titolo'), titolo) : null,
           h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Data'), data),
           foto ? h('span', { class: 'moltotenue' }, 'Le foto si leggono a pagamento: circa 0,4 cent a foto.') : null,

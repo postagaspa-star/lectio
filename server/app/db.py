@@ -378,12 +378,31 @@ def _semina_4(conn: sqlite3.Connection) -> None:
             (r["materia_id"], f"lezione:{r['id']}", r["testo"], r["risposta"], giorno, clock.adesso()))
 
 
+# 1.3.0 (10/11): le cartelle dentro la materia (un livello solo) per raggruppare il materiale.
+# cartella_da: 'utente' (l'ha messo Andrea), 'lectio' (l'ha messo Lectio), 'attesa' (Lectio deciderà dopo
+# averlo letto), 'nessuna' (Lectio non ha trovato una cartella chiara), NULL (materiale di prima: si lascia stare).
+SCHEMA_5 = """
+CREATE TABLE cartelle (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL COLLATE NOCASE,
+    creata_il TEXT NOT NULL,
+    UNIQUE (materia_id, nome)
+);
+ALTER TABLE materiali ADD COLUMN cartella_id INTEGER REFERENCES cartelle(id) ON DELETE SET NULL;
+ALTER TABLE materiali ADD COLUMN cartella_da TEXT;
+ALTER TABLE materiali ADD COLUMN cartella_il TEXT;
+CREATE INDEX materiali_cartella ON materiali (cartella_id)
+"""
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
     (2, SCHEMA_2, _semina_2),
     (3, SCHEMA_3, _semina_3),
     (4, SCHEMA_4, _semina_4),
+    (5, SCHEMA_5, None),
 ]
 
 

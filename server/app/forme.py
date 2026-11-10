@@ -66,6 +66,9 @@ def materiale(conn: sqlite3.Connection, r: sqlite3.Row, con_testo: bool = False)
         "origine": r["origine"],
         "nome_file": r["nome_file"],
         "titolo_da": TITOLO_DA.get(r["titolo_da"], "utente"),
+        # Contratto 27: la cartella e chi ce l'ha messo ("utente" o "lectio"; null se è fuori o non si sa).
+        "cartella_id": r["cartella_id"],
+        "cartella_da": r["cartella_da"] if r["cartella_id"] is not None and r["cartella_da"] in ("utente", "lectio") else None,
         "caratteri": len(r["testo"] or ""),
         "stato": r["stato"],
         "errore": r["errore"] if r["stato"] == "errore" else None,

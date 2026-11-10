@@ -131,6 +131,25 @@ public class PonteTest
         Assert.Equal("/api/materie/3/materiale", q.Percorso);
         Assert.Contains("filename=augusto.md", q.Corpo);
         Assert.Contains("TESTO: la domanda parola per parola", q.Corpo);
+        Assert.DoesNotContain("cartella_id", q.Corpo);
+    }
+
+    [Fact]
+    public async Task Carica_porta_la_cartella_scelta_e_una_cartella_scritta_male_non_parte()
+    {
+        using var b = new Banco(_ => (201, "{\"id\":42,\"stato\":\"in_lettura\"}"));
+        var ponte = new Ponte(b.Motore);
+        var byteFile = Encoding.UTF8.GetBytes("Mirone e il Discobolo");
+        var r = await ponte.GestisciAsync("POST", new Uri(Base, "locale/carica?materia_id=3&tipo=appunti&nome=arte.md&cartella_id=12"), byteFile);
+        Assert.Equal(201, r.Stato);
+        var q = Assert.Single(b.Finto.Ricevute);
+        Assert.Contains("name=cartella_id", q.Corpo);
+        Assert.Contains("12", q.Corpo);
+
+        // Scritta male: non va da nessun'altra parte, si ferma prima di partire.
+        var male = await ponte.GestisciAsync("POST", new Uri(Base, "locale/carica?materia_id=3&tipo=appunti&nome=arte.md&cartella_id=dodici"), byteFile);
+        Assert.Equal(422, male.Stato);
+        Assert.Single(b.Finto.Ricevute);
     }
 
     [Fact]

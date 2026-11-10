@@ -591,9 +591,21 @@
     };
   }
 
-  /** "Appunti · foto · 4 novembre" sotto il titolo di una riga del materiale. */
-  function sottoMateriale(x) {
+  /** Il nome della cartella di un materiale (null se è fuori o se la cartella non si conosce). */
+  function nomeCartellaDi(x, cartelle) {
+    if (!x || x.cartella_id == null) return null;
+    const c = (cartelle || []).find((y) => y && y.id === x.cartella_id);
+    return c ? c.nome : null;
+  }
+
+  /**
+   * "Appunti · foto · 4 novembre" sotto il titolo di una riga del materiale. Con le cartelle (§42.7) il nome della
+   * cartella va dopo il tipo: "Appunti · Arte greca · foto · 4 novembre".
+   */
+  function sottoMateriale(x, cartelle) {
     const parti = [NOMI_TIPO_BREVE[x.tipo] || 'Materiale'];
+    const cartella = nomeCartellaDi(x, cartelle);
+    if (cartella) parti.push(cartella);
     if (x.origine === 'foto') parti.push('foto');
     else if (x.origine === 'file') parti.push('file');
     else if (x.origine === 'scritto') parti.push('scritto');
@@ -602,11 +614,114 @@
     return parti.join(' · ');
   }
 
-  /** Filtra per titolo (senza badare a maiuscole e accenti). */
-  function filtraPerTitolo(lista, cerca) {
+  /** Filtra per titolo (senza badare a maiuscole e accenti); con le cartelle anche per il nome della cartella (§42.7). */
+  function filtraPerTitolo(lista, cerca, cartelle) {
     const f = normalizza(cerca).trim();
     if (!f) return lista || [];
-    return (lista || []).filter((x) => normalizza(x.titolo || x.nome_file || '').includes(f));
+    return (lista || []).filter((x) => normalizza(x.titolo || x.nome_file || '').includes(f) || normalizza(nomeCartellaDi(x, cartelle) || '').includes(f));
+  }
+
+  // --- Cartelle (§42, contratto §27) -----------------------------------------------------------------
+
+  /** "8 file", "1 file", "Vuota". */
+  function contaFile(n) {
+    const k = Number(n) || 0;
+    return k ? k + ' file' : 'Vuota';
+  }
+
+  /** "2 messi ora da Lectio", "1 messo ora da Lectio", '' se nessuno. */
+  function messiDaLectio(n) {
+    const k = Number(n) || 0;
+    if (!k) return '';
+    return k === 1 ? '1 messo ora da Lectio' : k + ' messi ora da Lectio';
+  }
+
+  /** Il materiale fuori dalle cartelle (null = fuori) e quello dentro una cartella. */
+  function materialeFuori(lista) {
+    return (lista || []).filter((x) => x && x.cartella_id == null);
+  }
+  function materialeDentro(lista, cartellaId) {
+    return (lista || []).filter((x) => x && x.cartella_id != null && x.cartella_id === cartellaId);
+  }
+
+  /**
+   * "Metti dei file qui" (§42.4): tutto il materiale che non è già in questa cartella, in due gruppi: fuori dalle
+   * cartelle e in altre cartelle (nell'ordine del server).
+   */
+  function gruppiMetti(lista, cartellaId) {
+    const altro = (lista || []).filter((x) => x && x.cartella_id !== cartellaId);
+    return { fuori: altro.filter((x) => x.cartella_id == null), altre: altro.filter((x) => x.cartella_id != null) };
+  }
+
+  /** Sotto una riga di "Metti dei file qui": "Appunti · 4 novembre" oppure "In Arte romana · Appunti". */
+  function sottoMetti(x, cartelle) {
+    const tipo = NOMI_TIPO_BREVE[x.tipo] || 'Materiale';
+    const cartella = nomeCartellaDi(x, cartelle);
+    if (x.cartella_id != null) return 'In ' + (cartella || 'un\'altra cartella') + ' · ' + tipo;
+    const d = dataBreve(x.data || x.creato_il);
+    return d ? tipo + ' · ' + d : tipo;
+  }
+
+  /** "Metti qui 1 file", "Metti qui 3 file". */
+  function fraseMettiQui(n) {
+    return 'Metti qui ' + (Number(n) || 0) + ' file';
+  }
+
+  /** La riga conferma dopo lo spostamento: "Fatto: 3 file in Arte greca". */
+  function fraseFattoMetti(n, nome) {
+    return 'Fatto: ' + (Number(n) || 0) + ' file in ' + nome;
+  }
+
+  /** L'articolo davanti a un numero, come si legge: "gli 8", "gli 11", "i 3", "i 20". */
+  function articoloNumero(n) {
+    const s = String(Number(n) || 0);
+    return s.charAt(0) === '8' || s === '11' ? 'gli' : 'i';
+  }
+
+  /** §42.5 "Elimina anche gli 8 file" ("Elimina anche il file" se è uno solo). */
+  function fraseEliminaConFile(n) {
+    const k = Number(n) || 0;
+    return k === 1 ? 'Elimina anche il file' : 'Elimina anche ' + articoloNumero(k) + ' ' + k + ' file';
+  }
+
+  /** "Dentro ci sono 8 file." / "Dentro c'è 1 file." */
+  function fraseDentro(n) {
+    const k = Number(n) || 0;
+    return k === 1 ? 'Dentro c\'è 1 file.' : 'Dentro ci sono ' + k + ' file.';
+  }
+
+  /** Dopo l'eliminazione: "Cartella eliminata" o "Cartella e 8 file eliminati". */
+  function fraseCartellaEliminata(fileEliminati) {
+    const k = Number(fileEliminati) || 0;
+    return k ? 'Cartella e ' + k + ' file eliminati' : 'Cartella eliminata';
+  }
+
+  /** Il nome di una cartella come lo vuole il server: spazi in più tolti, al massimo 40 caratteri. */
+  function pulisciNomeCartella(t) {
+    return String(t || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * Le pillole CARTELLE della scelta del materiale (§42.7): una per cartella che ha materiale pronto, con gli id del
+   * suo materiale pronto, nell'ordine delle cartelle (alfabetico, dal server).
+   */
+  function cartelleConPronti(materiale, cartelle) {
+    const pronti = (materiale || []).filter(prontoDaUsare);
+    return (cartelle || []).map((c) => ({ id: c.id, nome: c.nome, ids: pronti.filter((x) => x.cartella_id === c.id).map((x) => x.id) }))
+      .filter((c) => c.ids.length > 0);
+  }
+
+  /** Una pillola cartella è scelta quando tutto il suo materiale pronto è spuntato. */
+  function cartellaTuttaScelta(spuntati, ids) {
+    return (ids || []).length > 0 && ids.every((id) => (spuntati || []).includes(id));
+  }
+
+  /** Il tocco su una pillola cartella: se era tutto spuntato lo toglie, altrimenti lo spunta tutto. */
+  function alternaCartella(spuntati, ids) {
+    const ora = (spuntati || []).slice();
+    if (cartellaTuttaScelta(ora, ids)) return ora.filter((id) => !ids.includes(id));
+    for (const id of ids || []) if (!ora.includes(id)) ora.push(id);
+    return ora;
   }
 
   /**
@@ -646,12 +761,20 @@
     return da;
   }
 
-  /** PATCH /api/materiale/{id}: solo i campi cambiati ({} se niente). */
+  /**
+   * PATCH /api/materiale/{id}: solo i campi cambiati ({} se niente). `cartella_id` si manda solo se c'è in `ora` ed è
+   * cambiata; null vuol dire fuori dalle cartelle e si manda davvero (contratto §27).
+   */
   function campiCambiati(originale, ora) {
     const c = {};
     const t = pulisciTitolo(ora.titolo);
     if (ora.titolo != null && t !== pulisciTitolo(originale.titolo)) c.titolo = t;
     if (ora.tipo && ora.tipo !== originale.tipo) c.tipo = ora.tipo;
+    if (Object.prototype.hasOwnProperty.call(ora, 'cartella_id')) {
+      const prima = originale.cartella_id == null ? null : originale.cartella_id;
+      const dopo = ora.cartella_id == null ? null : ora.cartella_id;
+      if (prima !== dopo) c.cartella_id = dopo;
+    }
     return c;
   }
 
@@ -854,6 +977,8 @@
       case 'materia':
         if (id(parti[1]) == null) return { vista: 'materie' };
         if (parti[2] === 'scheda') return { vista: 'scheda', id: id(parti[1]) };
+        // §42.2: la pagina di una cartella sta dentro la sua materia (#materia/1/cartella/3).
+        if (parti[2] === 'cartella' && id(parti[3]) != null) return { vista: 'cartella', id: id(parti[1]), cartella: id(parti[3]) };
         // §31.2: da un avviso si parte dal segmento giusto (Schemi o Simulate).
         if (parti[2] === 'schemi' || parti[2] === 'simulate') return { vista: 'materia', id: id(parti[1]), segmento: parti[2] };
         return { vista: 'materia', id: id(parti[1]) };
@@ -1225,6 +1350,51 @@
     return evento ? (evento.tipo === 'orale' ? 'L\'interrogazione di ' : 'La verifica di ') + dataLunga(evento.data) : 'Nessuna data';
   }
 
+  // --- Il pulsante Nuovo e "Cosa vuoi fare?" (guida §43) ------------------------------------------
+
+  /** §43.3 Le cinque cose che Lectio sa fare, nell'ordine del foglio. `icona` = nome dell'icona del PC. */
+  const SCELTE_NUOVO = [
+    { scelta: 'lezione', nome: 'Lezione da ascoltare', frase: 'Te la spiego a voce, con le domande lungo la strada', icona: 'lezioni' },
+    { scelta: 'schema', nome: 'Schema', frase: 'Da leggere: i punti chiave, con le immagini', icona: 'testo' },
+    { scelta: 'riassunto', nome: 'Riassunto', frase: 'Da uno schema già pronto: per punti o discorsivo', icona: 'riassunto' },
+    { scelta: 'simulata', nome: 'Verifica simulata', frase: 'Come quella del prof, poi la correggo', icona: 'verifica' },
+    { scelta: 'lampo', nome: 'Ripasso lampo', frase: '', icona: 'lampo' },
+  ];
+
+  /** §43.3 Gli schemi pronti di una materia, i più recenti prima (passo 2 di Riassunto). */
+  function schemiPronti(lista) {
+    return (lista || []).filter((x) => x && x.stato === 'pronto')
+      .sort((a, b) => String(b.creato_il || '').localeCompare(String(a.creato_il || '')) || (Number(b.id) || 0) - (Number(a.id) || 0));
+  }
+
+  /**
+   * §43.3 Le righe di "Cosa vuoi fare?" con la frase e, se sono spente, il perché nella frase.
+   * o.lampo = schede del Ripasso lampo di oggi; o.pronti = quanti schemi pronti (null = non si sa ancora: Riassunto
+   * aspetta spento); o.senzaRete; o.schedeSalvate = Ripasso lampo possibile senza rete (sul PC mai: §35.5).
+   */
+  function righeNuovo(o) {
+    const x = o || {};
+    const lampo = Number(x.lampo) || 0;
+    return SCELTE_NUOVO.map((s) => {
+      const r = { scelta: s.scelta, nome: s.nome, frase: s.frase, icona: s.icona, spenta: false };
+      if (s.scelta === 'lampo') {
+        r.frase = lampo > 0 ? fraseLampo(lampo) : 'Niente per oggi';
+        r.spenta = !(lampo > 0);
+        if (x.senzaRete && !x.schedeSalvate) { r.spenta = true; r.frase = 'Serve la rete'; }
+        return r;
+      }
+      if (x.senzaRete) { r.spenta = true; r.frase = 'Serve la rete'; return r; }
+      if (s.scelta === 'riassunto' && x.pronti === 0) { r.spenta = true; r.frase = 'Prima serve uno schema pronto'; }
+      else if (s.scelta === 'riassunto' && x.pronti == null) r.spenta = true;
+      return r;
+    });
+  }
+
+  /** §43.2 Nuovo è spento solo se nel foglio non si potrebbe toccare niente (senza rete e senza schede salvate). */
+  function nuovoSpento(o) {
+    return righeNuovo(Object.assign({}, o, { pronti: 1, lampo: 1 })).every((r) => r.spenta);
+  }
+
   return {
     GIORNI, MESI, DURATE, VELOCITA, COLORI, ORDINE_COLORI, NOMI_COLORI, coloreUsatoDa, ESTENSIONI, MASSIMO_BYTE, FAMIGLIE_MATERIALE, NOMI_TIPO_MATERIALE, NOMI_TIPO_BREVE, NOMI_TIPI_DOMANDA, FASI,
     TIPI_LEZIONE, SPUNTI, MASSIMO_INDICAZIONI,
@@ -1235,6 +1405,8 @@
     esitoRisposta, rispostaValida, primoColoreLibero, azioneTastoPlay, modoSalto, domandaAperta, prontoDaUsare,
     normalizza, finaliSpiegazione, struttura, titoloLezione, alternaSpunto, riepilogoIndicazioni, riepilogoMateriale, riepilogoPer, etichettaEvento,
     gruppiMateriale, sottoMateriale, filtraPerTitolo, materialiSpuntati, famigliaDi, pulisciTitolo, notaTitolo, campiCambiati,
+    nomeCartellaDi, contaFile, messiDaLectio, materialeFuori, materialeDentro, gruppiMetti, sottoMetti, fraseMettiQui, fraseFattoMetti,
+    articoloNumero, fraseEliminaConFile, fraseDentro, fraseCartellaEliminata, pulisciNomeCartella, cartelleConPronti, cartellaTuttaScelta, alternaCartella,
     LIMITI_SCHEDA, schedaDaMandare, controllaScheda,
     creaSequenza, voceDi, statoVoci, sceltaVoce, etichettaPrepara, prontaIn,
     estensione, controllaFile, eImmagine, righe, testoInterrogazione, codiceValido, prof, plurale, sottoMateria, basataSu, leggiRotta,
@@ -1244,5 +1416,6 @@
     ESITI_LAMPO, minutiLampo, fraseLampo, fraseFineRipasso,
     DURATE_SIMULATA, esitoSimulata, voto, statoRigaSimulata, testoTempo, riassuntoSimulata, contaRisposte, unisciRisposte, frasePunti, fraseOltreTempo, puntiDomanda, riepilogoData,
     FORME_RIASSUNTO, riassuntoDellaForma, statoFormaRiassunto, fraseParole, ultimoRiassunto,
+    SCELTE_NUOVO, schemiPronti, righeNuovo, nuovoSpento,
   };
 });

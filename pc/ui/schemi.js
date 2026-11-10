@@ -80,6 +80,9 @@
 
     const indietro = () => A.tornaIndietroDa(s && s.materia_id, 'schemi');
     S.aggiornaPagina = () => { if (!s || s.stato !== 'pronto') carica(); };
+    // §43.3 Da "Cosa vuoi fare?" → Riassunto: la lettura si apre col foglio dei riassunti già aperto (una volta sola).
+    let conRiassunto = S.riassuntoDaAprire != null && Number(S.riassuntoDaAprire) === Number(id);
+    S.riassuntoDaAprire = null;
 
     async function carica() {
       const [r] = await Promise.all([A.api.get('/server/api/schemi/' + id), S.materie ? null : A.caricaMaterie(), S.salute ? null : A.caricaSalute()]);
@@ -98,6 +101,7 @@
     }
 
     function disegna() {
+      if (s.stato !== 'pronto') conRiassunto = false;
       if (inLavoro(s)) {
         svuota(pag, A.vistaLavoro({
           materia: m, titolo: s.titolo || s.argomento, frase: s.stato === 'in_coda' ? 'In coda' : s.frase || 'In preparazione', percentuale: s.stato === 'in_coda' ? 0 : L.percentualeLavoro(s), indietro,
@@ -402,6 +406,10 @@
           });
         };
         contenitore.addEventListener('scroll', suScorri, { passive: true });
+      }
+      if (conRiassunto) {
+        conRiassunto = false;
+        if (s.riassunti) A.apriSceltaRiassunto(s, m);
       }
       if (A.visitaDopoDisegno) A.visitaDopoDisegno();
     }

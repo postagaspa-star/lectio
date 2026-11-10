@@ -78,6 +78,9 @@ object Icone {
     val Calendario = icona("calendario", 2f, listOf(rettangolo(3.5f, 5f, 17f, 15f, 3f), "M3.5 10h17M8 3v4M16 3v4"))
     val Apri = icona("apri", 2f, listOf("M14 4h6v6", "M10 14L20 4", "M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"))
 
+    /** Cartella a contorno (aspetto.md §42; percorso di Feather, licenza MIT). */
+    val Cartella = icona("cartella", 2f, listOf("M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"))
+
     // Schemi, Non ho capito, Ripasso lampo, Verifica simulata, Riassunti (aspetto.md §40).
     val Lampo = icona("lampo", 2f, listOf("M13 2 3 14h9l-1 8 10-12h-9z"))
     val Domanda = icona("domanda", 2f, listOf("M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z", "M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3", "M12 17h.01"))

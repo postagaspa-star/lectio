@@ -99,17 +99,22 @@
     }
   }
 
-  /** Mette un file (byte) in una materia: /locale/carica?materia_id=…&tipo=…&titolo=…&data=…&nome=… */
+  /**
+   * Mette un file (byte) in una materia: /locale/carica?materia_id=…&tipo=…&titolo=…&data=…&nome=…&cartella_id=…
+   * (cartella_id solo se Andrea ha scelto la cartella: senza, la sceglie Lectio dopo averlo letto, contratto §27).
+   */
   function carica(byte, campi) {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(campi || {})) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
     if (esempio) {
       // In esempio il file non va da nessuna parte: diventa una riga finta della materia.
       const foto = /\.(jpe?g|png|webp)$/i.test(campi.nome || '');
-      return daEsempio('POST', '/server/api/materie/' + campi.materia_id + '/materiale', {
+      const corpo = {
         tipo: campi.tipo, titolo: campi.titolo, data: campi.data, nome_file: campi.nome || null, origine: foto ? 'foto' : 'file',
         testo: 'x'.repeat(Math.min(5000, byte ? byte.byteLength : 0)),
-      });
+      };
+      if (campi.cartella_id != null && campi.cartella_id !== '') corpo.cartella_id = Number(campi.cartella_id);
+      return daEsempio('POST', '/server/api/materie/' + campi.materia_id + '/materiale', corpo);
     }
     return chiama('POST', '/locale/carica?' + q.toString(), undefined, { byte });
   }

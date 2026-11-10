@@ -173,6 +173,7 @@ conferma che dice cosa sparisce ("verifiche, appunti, lezioni e audio di Storia"
   con parola e colore, lezione). Tocco → apre il lettore fermo su quella domanda per rispondere di nuovo.
 - **Lezioni** della materia.
 - Pulsante pieno fisso in basso: **Nuova lezione**.
+- (v1.3.0: ordine delle sezioni e pulsante **Nuovo** cambiati, vedi §43.)
 
 **Il materiale si carica SOLO qui**, nella materia (o con "Condividi" scegliendo la materia): ogni lezione di
 quella materia lo usa da sola. Nella creazione di una lezione non si carica niente.
@@ -473,9 +474,8 @@ min" 14/500 tenue (da `lampo.da_fare` e `lampo.minuti`, "1 scheda" al singolare)
   anche senza domande da ripassare.
 - La sezione **Lezioni** diventa un binario a tre segmenti uguali, alto 48: **Lezioni** · **Schemi** · **Simulate**.
   Si parte da Lezioni; da una notifica si parte dal segmento giusto.
-- Il pulsante pieno fisso in basso segue il segmento: **Nuova lezione** · **Nuovo schema** · **Nuova verifica
-  simulata**
-  (dissolvenza 200 ms).
+- ~~Il pulsante pieno fisso in basso segue il segmento~~ (sostituito dalla v1.3.0: il pulsante è **Nuovo** e apre la
+  scelta, §43).
 - **Riga di uno schema** (come le righe delle lezioni): piastrella con icona `testo` color pieno della materia, titolo
   16/700 (al massimo 2 righe), sotto 14/500 tenue secondo lo stato:
   pronto "A capitoli · Completo" (forma "A capitoli" o "Schede per opera", `auto` non si scrive; la lista non porta il
@@ -1153,3 +1153,159 @@ selezionare e copiare.
 - **Senza rete:** un riassunto aperto almeno una volta resta sul dispositivo e si legge; Scarica PDF, Rifai, Elimina e
   le forme non ancora fatte spente, con la pillola "Senza rete" in alto. Se non è mai stato aperto: "Si apre quando torna
   la rete." e **Riprova**.
+
+## 42. Cartelle (v1.3.0)
+
+Cartelle dentro la materia per raggruppare il materiale. Campi e indirizzi: `docs/contratto-api.md` §27. Scelte di
+Andrea: un livello solo; ogni cartella ha la sua pagina; quando la elimina sceglie ogni volta se tenere i file;
+i file nuovi li mette Lectio nella cartella giusta. Nelle cartelle va solo il materiale.
+
+Principi: la cartella si comporta come una cartella vera (si apre, si torna indietro); spostare tanti file si fa da
+dentro la cartella, scegliendoli da un elenco già spuntato; nessuna modalità di selezione nascosta (niente pressione
+lunga); le stesse righe del materiale di sempre.
+
+Icona nuova **`cartella`**: cartella a contorno, stesso tratto delle altre icone (24, tratto 2, angoli arrotondati).
+
+### 42.1 Nella pagina della materia
+
+Sezione **Materiale** (titolo e **Aggiungi** come prima). Nella scheda, in quest'ordine:
+1. **le cartelle** in ordine alfabetico. Riga alta almeno 56: icona `cartella` 22 nel colore testo della materia,
+   nome (Forte, una riga con i puntini), sotto in secondario "8 file" / "1 file" / "Vuota"; se `messi_da_lectio` > 0
+   si aggiunge " · 2 messi ora da Lectio" (1: "1 messo ora da Lectio") in accento testo 600. A destra la freccia
+   `avanti` 20 tenue. Tocco → pagina della cartella (42.2).
+2. **riga "Nuova cartella"**: icona `piu` 20 e testo "Nuova cartella" in accento testo 700, alta 48, tutta
+   toccabile → foglio Nuova cartella (42.3). C'è sempre, anche senza materiale (la scheda si mostra comunque).
+3. **il materiale fuori dalle cartelle** (`cartella_id` null), con la riga di sempre (§4), più recente prima.
+Tra i tre gruppi la riga divisoria di sempre. Il materiale dentro le cartelle qui non compare.
+
+### 42.2 Pagina della cartella
+
+Pagina vera (telefono: schermata nuova con Indietro; PC: nella zona contenuto, come la pagina della materia, con la
+freccia che torna alla materia).
+- **Testata** col fondo tenue della materia, come la pagina della materia ma senza i tre numeri: tondo Indietro, a
+  destra il menu puntini (**Rinomina**, **Elimina cartella**). Sotto: icona `cartella` 28 nel colore testo della
+  materia e il nome (titolo pagina 30/800, colore testo della materia, va a capo), poi "Storia dell'Arte · 8 file"
+  (15/600 colore testo della materia).
+- **File**: titolo sezione "File" e a destra **Aggiungi** (pulsante secondario 40, come nella materia) che apre il
+  foglio Aggiungi con la cartella già scelta (42.6). Sotto la scheda con le righe del materiale di sempre (tocco = un
+  materiale, §5.1). Se `cartella_da` è `lectio` la riga sotto aggiunge " · messo qui da Lectio" (tenue).
+- Vuota: al posto della scheda "Ancora nessun file in questa cartella." (testo medio 500 tenue).
+- **In basso, fisso**: pulsante pieno **Metti dei file qui** (icona `piu`) → foglio 42.4. Spento se la materia non ha
+  altro materiale fuori da questa cartella.
+- Si ricarica come la materia (ogni 4 s mentre un suo file è in lettura).
+- Senza rete: come la materia (errore con Riprova); Aggiungi, Metti dei file qui, Rinomina ed Elimina spenti.
+
+### 42.3 Nuova cartella e Rinomina
+
+Foglio dal basso (telefono) o finestra (PC), X sempre visibile. Titolo "Nuova cartella" / "Rinomina cartella" 21/800.
+Campo **NOME** 52, testo 17/600, segnaposto "Per esempio Arte greca", massimo 40 caratteri, maiuscola all'inizio. Sotto
+il campo l'errore del server ("C'è già una cartella con questo nome in questa materia."). Pulsante pieno **Crea
+cartella** / **Salva**, spento finché il nome è vuoto o uguale a prima. Invio sulla tastiera = il pulsante.
+Dopo **Crea cartella** si apre subito la pagina della nuova cartella (così si riempie).
+
+### 42.4 Metti dei file qui
+
+Foglio dal basso alto (telefono, fino al 90% dello schermo) o finestra 640 (PC). Titolo "Metti in Arte greca" 21/800
+(nome della cartella), a destra del titolo "3 scelti" (pillola 14/700 tenue).
+- Campo **Cerca nel materiale** se gli elementi sono più di 6 (cerca nel titolo e nel nome della cartella).
+- Gruppo **FUORI DALLE CARTELLE** (etichetta 12/700 maiuscola) e poi **IN ALTRE CARTELLE**: le righe di scelta di
+  §6 (casella 22 raggio 7, titolo 15/700 una riga, sotto "Appunti · 4 novembre" o, nel secondo gruppo, "In Arte
+  romana · Appunti"). Materiale in lettura: si può scegliere comunque (sotto "Lo sto leggendo").
+- All'apertura sono già spuntati i `proposti` del server (`GET /api/cartelle/{id}/proposti`); finché arrivano, le
+  caselle sono spente per un attimo. Nessuna scritta in più: Andrea toglie la spunta da quelli che non vuole.
+- In fondo pulsante pieno **Metti qui 3 file** ("Metti qui 1 file"), spento a 0 → `POST /api/materie/{id}/sposta`,
+  chiude il foglio, la pagina si aggiorna e per 4 s compare "Fatto: 3 file in Arte greca" (riga conferma, come le altre).
+- Se non c'è altro materiale: "Tutto il materiale della materia è già qui." e niente pulsante.
+
+### 42.5 Eliminare una cartella
+
+Dal menu puntini della pagina della cartella.
+- **Vuota**: conferma semplice "Eliminare la cartella «Arte greca»?" / "È vuota." / **Elimina**.
+- **Con file**: finestra con titolo "Eliminare la cartella «Arte greca»?", testo "Dentro ci sono 8 file." e tre
+  pulsanti uno sotto l'altro, larghi quanto la finestra, alti 52:
+  1. **Elimina solo la cartella** (secondario) con sotto, 13/500 tenue, "I file restano nella materia";
+  2. **Elimina anche gli 8 file** (testo rosso errore, fondo errore tenue: è l'unica cosa che non si può disfare);
+  3. **Annulla** (pulsante testo).
+Dopo: si torna alla pagina della materia con la riga conferma "Cartella eliminata" o "Cartella e 8 file eliminati".
+
+### 42.6 Dove si sceglie la cartella di un file
+
+- **Aggiungi** (§5): se la materia ha almeno una cartella, sotto "Che cos'è" c'è **CARTELLA** con le pillole
+  **Decide Lectio** (prima, scelta se si apre dalla materia) e una per cartella (scelta quella da cui si apre).
+  Decide Lectio = non si manda `cartella_id`: Lectio la sceglie dopo averlo letto (contratto 27.1). Vale per file,
+  foto, appunti scritti e interrogazione orale; con più foto insieme vale per tutte.
+- **Un materiale** (§5.1): se la materia ha almeno una cartella, tra CHE COS'È e COSA HO LETTO c'è **CARTELLA** con le
+  pillole **Fuori** e una per cartella (pillole che vanno a capo); scelta quella attuale. Se `cartella_da` è
+  `lectio`, sotto 13/600 tenue "Messo qui da Lectio". **Salva** manda anche `cartella_id` se è cambiata.
+- Pillole come quelle di "Che cos'è" (bordo 2 accento e fondo accento tenue se scelta), alte 48 sul telefono, 40 sul PC.
+
+### 42.7 Scelta del materiale (Nuova lezione, Nuovo schema, Nuova verifica simulata)
+
+Nella sezione "Da quale materiale", sotto le pillole Sull'argomento · Tutti · Nessuno, se ci sono cartelle con materiale
+pronto: etichetta **CARTELLE** e una pillola per cartella "Arte greca · 8" (8 = il suo materiale pronto), che vanno a
+capo. Pillola scelta (bordo 2 accento, fondo accento tenue) quando tutto il suo materiale pronto è spuntato. Tocco:
+se era tutto spuntato lo toglie, altrimenti lo spunta tutto; conta come un tocco di Andrea (le caselle smettono di
+seguire i suggeriti, come in §6). Nelle righe il nome della cartella va dopo il tipo: "Appunti · Arte greca · 4
+novembre". **Cerca nel materiale** cerca anche nel nome della cartella. Il riepilogo non cambia.
+
+### 42.8 Novità
+
+`materiale_in_cartella` si mostra come `materiale_letto` (telefono: all'apertura dell'app; PC: niente avviso di
+Windows).
+
+### 42.9 Esempio e visita guidata
+
+I dati di esempio hanno una cartella nella materia di esempio con due file, così l'esempio mostra la riga cartella e
+la sua pagina. Nessun passo nuovo nella visita guidata.
+
+## 43. Il pulsante Nuovo e l'ordine della pagina della materia (v1.3.0)
+
+Richiesta di Andrea (10/11): la lezione da ascoltare non deve essere la strada principale, e gli schemi stavano in un
+posto poco intuitivo. Il pulsante in basso deve far scegliere prima tra tutto quello che Lectio sa fare; il materiale
+(le fonti) va sotto lezioni, schemi e simulate.
+
+### 43.1 Ordine delle sezioni
+
+- **Telefono**, dall'alto: testata, Cosa chiede il prof, Prossime, Da ripassare, binario **Lezioni · Schemi ·
+  Simulate** con il suo elenco, **Materiale** (cartelle, Nuova cartella, file: §42.1) in fondo.
+- **PC**: prima fila a due colonne: a sinistra **Cosa chiede il prof**, a destra **Prossime** e sotto **Da ripassare**.
+  Seconda fila a tutta larghezza: il binario con il suo elenco. Terza fila a due colonne: a sinistra **Materiale**
+  (titolo, **Aggiungi**, la scheda con cartelle e file), a destra la zona **Trascina qui i file** (alta quanto serve,
+  non più dell'elenco). Sotto i 900 px di larghezza tutto in una colonna, nello stesso ordine del telefono.
+- Il binario resta per guardare quello che c'è: si parte da Lezioni, da una notifica dal segmento giusto.
+
+### 43.2 Il pulsante
+
+Pulsante pieno fisso in basso (dove prima c'era Nuova lezione): **Nuovo**, con l'icona `piu`. È sempre lo stesso,
+qualunque segmento sia aperto (niente più dissolvenza). Spento solo se non si può creare niente e non c'è Ripasso
+lampo (senza rete e senza schede salvate). Tocco → foglio **Cosa vuoi fare?**.
+
+### 43.3 Il foglio "Cosa vuoi fare?"
+
+Foglio dal basso (telefono) o finestra larga 560 (PC), X sempre visibile, Esc chiude. Titolo "Cosa vuoi fare?" 21/800 e
+accanto la pillola della materia (sul telefono sotto i 400 dp la pillola non c'è: il titolo resta su una riga). Cinque righe una sotto l'altra, Superficie 2, raggio 16, alte almeno 72, tutte
+toccabili, 8 tra una e l'altra. A sinistra piastrella 44 (raggio 12, fondo tenue della materia, icona 22 colore testo
+della materia), poi nome 17/700 e frase 14/500 tenue, a destra la freccia `avanti` 20 tenue.
+
+| Nome | Frase | Icona | Cosa apre |
+|---|---|---|---|
+| **Lezione da ascoltare** | Te la spiego a voce, con le domande lungo la strada | `cuffie` (quella di Lezioni nel menu) | Nuova lezione (§6) |
+| **Schema** | Da leggere: i punti chiave, con le immagini | `testo` | Nuovo schema (§32) |
+| **Riassunto** | Da uno schema già pronto: per punti o discorsivo | `riassunto` | passo 2 qui sotto |
+| **Verifica simulata** | Come quella del prof, poi la correggo | `verifica` | Nuova verifica simulata (§36.1) |
+| **Ripasso lampo** | "5 schede · circa 2 min" (come la scheda di §31.2) | `lampo` | Ripasso lampo della materia (§35) |
+
+- Lezione, Schema e Verifica simulata partono con la prossima data della materia già scelta, come prima.
+- **Riga spenta** (opacità 0,55, non si tocca, la frase dice perché): Ripasso lampo con 0 schede "Niente per oggi";
+  Riassunto senza schemi pronti "Prima serve uno schema pronto"; senza rete Lezione, Schema, Riassunto e Verifica
+  simulata "Serve la rete" (il Ripasso lampo resta acceso se ci sono schede salvate, §35.5).
+- **Riassunto, passo 2**: nello stesso foglio, con la freccia indietro in alto a sinistra, titolo "Da quale schema?" e
+  le righe degli schemi pronti della materia (come le righe di §31.2: piastrella `testo`, titolo, "A capitoli ·
+  Completo"), più recenti prima. Tocco → si apre la lettura di quello schema con il foglio dei riassunti (§41.2) già
+  aperto. Se c'è un solo schema pronto si salta il passo 2.
+- Il foglio si chiude da solo quando si apre la pagina scelta. Entrata e uscita come gli altri fogli (§13).
+
+### 43.4 Visita guidata
+
+I passi che indicavano **Nuova lezione** o **Nuovo schema** ora indicano **Nuovo**, poi la riga giusta del foglio
+(Lezione da ascoltare, Schema). Il testo dei passi cambia solo dove nomina il vecchio pulsante.

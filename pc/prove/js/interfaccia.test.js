@@ -58,7 +58,7 @@ test('primo avvio: abbinamento con l\'indirizzo Tailscale già scritto, Collega 
   // Collegato: le pagine vere, e la visita guidata parte da sola la prima volta.
   await p.aspetta(() => p.q('.menu .voce-menu'));
   await p.aspetta(() => p.q('.visita-fumetto'));
-  assert.match(p.q('.visita-fumetto').textContent, /1 di 8/);
+  assert.match(p.q('.visita-fumetto').textContent, /1 di 9/);
 });
 
 test('Oggi: la prossima verifica con la sua lezione, Riprendi, Dopo la verifica, Più avanti e la spesa nel menu', opz, async () => {
@@ -345,9 +345,12 @@ test('Nuova lezione: stime che si accavallano, vince l\'ultima durata scelta; il
   // La stima dei 15 minuti arriva DOPO quella dei 45: deve vincere comunque la 45 (l'ultima chiesta).
   p.s.ritardo = (m, percorso, corpo) => (percorso === '/server/api/lezioni/stima' ? (corpo.durata_min === 15 ? 150 : 5) : 1);
   p.A.vai('#materia/1');
-  await p.aspetta(() => p.q('[data-azione="nuova-lezione"]'));
-  p.clic(p.q('[data-azione="nuova-lezione"]'));
+  // 1.3.0 (§43): Nuovo, poi "Lezione da ascoltare".
+  await p.aspetta(() => p.q('[data-azione="nuovo"]'));
+  p.clic(p.q('[data-azione="nuovo"]'));
+  p.clic(await p.aspetta(() => p.q('[data-scelta="lezione"]')));
   await p.aspetta(() => p.q('[data-durata="15"]') && /0,25 €/.test(p.q('[data-azione="prepara"]').textContent));
+  assert.equal(p.q('.finestra-nuovo'), null, 'la scelta si è chiusa');
   assert.equal(p.q('[data-azione="prepara"]').textContent, 'Prepara la lezione · 0,25 €');
   p.clic(p.q('[data-durata="15"]'));
   p.clic(p.q('[data-durata="45"]'));
@@ -895,38 +898,49 @@ test('visita guidata: avanza solo con l\'azione giusta, in modalità esempio, se
   const prima = p.s.log.length;
   await p.A.avviaVisita(false);
   const fumetto = () => p.q('.visita-fumetto').textContent;
-  await p.aspetta(() => /1 di 8/.test(fumetto()));
+  await p.aspetta(() => /1 di 9/.test(fumetto()));
   assert.ok(p.q('[data-stato="esempio"]'), 'pillola Esempio');
   assert.match(fumetto(), /La prossima verifica/);
   assert.ok(p.q('[data-visita-azione="salta"]'));
   // Passo 1: da leggere → Avanti.
   p.clic(p.q('[data-visita-azione="avanti"]'));
-  await p.aspetta(() => /2 di 8/.test(fumetto()));
+  await p.aspetta(() => /2 di 9/.test(fumetto()));
   // Passo 2 è pratico: niente Avanti, e cliccare altrove non serve.
   assert.equal(p.q('[data-visita-azione="avanti"]'), null);
   p.clic(p.q('[data-blocco="alto"]'));
   p.clic(p.q('[data-azione="ascolta-prossima"]') || p.q('.voce-menu'));
   await B.dorme(500);
-  assert.match(fumetto(), /2 di 8/);
+  assert.match(fumetto(), /2 di 9/);
   // L'azione giusta: clic su Storia.
   p.clic(p.q('[data-visita="pillola-prossima"]'));
-  await p.aspetta(() => /3 di 8/.test(fumetto()));
+  await p.aspetta(() => /3 di 9/.test(fumetto()));
   p.clic(p.q('[data-visita-azione="avanti"]'));
-  await p.aspetta(() => /4 di 8/.test(fumetto()));
+  await p.aspetta(() => /4 di 9/.test(fumetto()));
   p.clic(p.q('[data-visita="aggiungi"]'));
-  await p.aspetta(() => /5 di 8/.test(fumetto()) && p.q('[data-visita="gemini-riga"]'));
+  await p.aspetta(() => /5 di 9/.test(fumetto()) && p.q('[data-visita="gemini-riga"]'));
   // Indietro torna al passo 4 (foglio chiuso), poi di nuovo avanti con l'azione.
   p.clic(p.q('[data-visita-azione="indietro"]'));
-  await p.aspetta(() => /4 di 8/.test(fumetto()) && !p.q('.foglio'));
+  await p.aspetta(() => /4 di 9/.test(fumetto()) && !p.q('.foglio'));
   p.clic(p.q('[data-visita="aggiungi"]'));
-  await p.aspetta(() => /5 di 8/.test(fumetto()));
+  await p.aspetta(() => /5 di 9/.test(fumetto()));
   p.clic(p.q('[data-visita-azione="avanti"]'));
-  await p.aspetta(() => /6 di 8/.test(fumetto()) && !p.q('.foglio'));
-  p.clic(p.q('[data-visita="nuova-lezione"]'));
-  await p.aspetta(() => /7 di 8/.test(fumetto()));
+  // §43.4: prima Nuovo, poi la riga "Lezione da ascoltare" di "Cosa vuoi fare?".
+  await p.aspetta(() => /6 di 9/.test(fumetto()) && !p.q('.foglio'));
+  assert.match(fumetto(), /Fai clic su Nuovo\./);
+  assert.equal(p.q('[data-visita-azione="avanti"]'), null);
+  p.clic(p.q('[data-visita="nuovo"]'));
+  await p.aspetta(() => /7 di 9/.test(fumetto()) && p.q('[data-visita="scelta-lezione"]'));
+  assert.match(fumetto(), /Lezione da ascoltare/);
+  // Indietro chiude la scelta e torna a Nuovo; rifatto il clic si torna qui.
+  p.clic(p.q('[data-visita-azione="indietro"]'));
+  await p.aspetta(() => /6 di 9/.test(fumetto()) && !p.q('.finestra-nuovo'));
+  p.clic(p.q('[data-visita="nuovo"]'));
+  await p.aspetta(() => /7 di 9/.test(fumetto()) && p.q('[data-visita="scelta-lezione"]'));
+  p.clic(p.q('[data-visita="scelta-lezione"]'));
+  await p.aspetta(() => /8 di 9/.test(fumetto()) && !p.q('.finestra-nuovo'));
   await p.aspetta(() => p.q('[data-visita-azione="avanti"]') && !p.q('[data-visita-azione="avanti"]').disabled);
   p.clic(p.q('[data-visita-azione="avanti"]'));
-  await p.aspetta(() => /8 di 8/.test(fumetto()) && p.q('#risposta-domanda'), 4000);
+  await p.aspetta(() => /9 di 9/.test(fumetto()) && p.q('#risposta-domanda'), 4000);
   assert.match(fumetto(), /Scrivi la tua risposta e premi Invia/);
   assert.match(p.q('.tasto-disegnato').textContent, /Ctrl.*Invio/);
   // Una parola sola basta (correzione finta).

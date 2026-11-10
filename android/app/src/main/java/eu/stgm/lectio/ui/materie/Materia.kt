@@ -1,7 +1,5 @@
 package eu.stgm.lectio.ui.materie
 
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import eu.stgm.lectio.dati.Cartella
 import eu.stgm.lectio.dati.DaRipassare
 import eu.stgm.lectio.dati.DocumentoPdf
 import eu.stgm.lectio.dati.Evento
@@ -61,11 +61,15 @@ import eu.stgm.lectio.dati.Simulata
 import eu.stgm.lectio.dati.Sorgente
 import eu.stgm.lectio.logica.Esiti
 import eu.stgm.lectio.logica.Formati
+import eu.stgm.lectio.logica.SceltaMateriale
+import eu.stgm.lectio.logica.SceltaNuovo
+import eu.stgm.lectio.logica.TestiCartelle
 import eu.stgm.lectio.logica.TestiLampo
 import eu.stgm.lectio.logica.TestiSchema
 import eu.stgm.lectio.logica.TestiSimulata
 import eu.stgm.lectio.logica.TipoMateriale
 import eu.stgm.lectio.logica.ToniEsito
+import eu.stgm.lectio.logica.VoceNuovo
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.messaggio
 import eu.stgm.lectio.ui.Barra
@@ -84,6 +88,7 @@ import eu.stgm.lectio.ui.PulsanteSecondario
 import eu.stgm.lectio.ui.PulsanteTesto
 import eu.stgm.lectio.ui.PulsanteTondo
 import eu.stgm.lectio.ui.Riga
+import eu.stgm.lectio.ui.RigaConferma
 import eu.stgm.lectio.ui.RigaErrore
 import eu.stgm.lectio.ui.Scheda
 import eu.stgm.lectio.ui.Segmenti
@@ -95,7 +100,6 @@ import eu.stgm.lectio.ui.lezioni.RigaLezione
 import eu.stgm.lectio.ui.materiale.CampoData
 import eu.stgm.lectio.ui.studio.SchedaLampo
 import eu.stgm.lectio.ui.tema.L
-import eu.stgm.lectio.ui.tema.LocalMovimenti
 import eu.stgm.lectio.ui.tema.materia
 import eu.stgm.lectio.visita.Bersagli
 import eu.stgm.lectio.visita.LocalVisita
@@ -131,7 +135,17 @@ data class StatoMateria(
     val segmento: Int = 0,
     /** Ci sono schede già sul telefono: Inizia funziona anche senza rete. */
     val lampoDisponibile: Boolean = false,
-)
+    /** Le cartelle della materia (contratto §27, aspetto.md §42.1). */
+    val cartelle: List<Cartella> = emptyList(),
+    /** La riga conferma per 4 s ("Cartella eliminata", aspetto.md §42.5). */
+    val conferma: String? = null,
+) {
+    /** Il materiale fuori dalle cartelle: solo questo si vede nella scheda Materiale. */
+    val sciolti: List<Materiale> get() = materiale.filter { it.cartellaId == null }
+
+    /** Le cartelle in ordine alfabetico, come le dà il server. */
+    val cartelleInOrdine: List<Cartella> get() = cartelle.sortedBy { SceltaMateriale.normalizza(it.nome) }
+}
 
 class MateriaViewModel(
     private val sorgente: Sorgente,
@@ -153,6 +167,7 @@ class MateriaViewModel(
             val lezioni = sorgente.lezioni(materiaId)
             val schemi = sorgente.schemi(materiaId)
             val simulate = sorgente.simulate(materiaId)
+            val cartelle = sorgente.cartelle(materiaId)
             // Le schede di oggi si tengono sul telefono: così Ripasso lampo parte anche senza rete.
             val quante = materie.dato?.firstOrNull { m -> m.id == materiaId }?.conteggi?.lampo ?: 0
             val lampo = if (quante > 0) sorgente.lampo(materiaId) else null
@@ -172,6 +187,7 @@ class MateriaViewModel(
                     prossime = prossime,
                     lezioniEventi = lezioni.dato.orEmpty().associateBy { l -> l.id },
                     materiale = materiale.dato ?: it.materiale,
+                    cartelle = cartelle.dato ?: it.cartelle,
                     ripassare = ripassare.dato ?: it.ripassare,
                     lezioni = lezioni.dato ?: it.lezioni,
                     errore = listOf(materie, scheda, materiale).firstNotNullOfOrNull { l -> l.errore.takeIf { l.dato == null } },
@@ -264,6 +280,29 @@ class MateriaViewModel(
 
     fun messaggioVisto() = _stato.update { it.copy(messaggio = null) }
 
+    /**
+     * "Nuova cartella" (aspetto.md §42.3): [fatto] riceve l'errore del server (null = riuscita);
+     * se riesce, [aperta] apre subito la pagina della cartella nuova.
+     */
+    fun creaCartella(nome: String, fatto: (String?) -> Unit, aperta: (Cartella) -> Unit) {
+        viewModelScope.launch {
+            val e = sorgente.creaCartella(materiaId, TestiCartelle.pulisciNome(nome))
+            fatto(e.messaggio)
+            if (e is Esito.Ok) {
+                carica()
+                aperta(e.dato)
+            }
+        }
+    }
+
+    /** Una riga conferma da mostrare per 4 s (dopo "Elimina cartella" nella sua pagina). */
+    fun conferma(frase: String) {
+        _stato.update { it.copy(conferma = frase) }
+        carica()
+    }
+
+    fun confermaVista() = _stato.update { it.copy(conferma = null) }
+
     /** Per i test: crea la materia nel finto (non usato dall'app). */
     suspend fun crea(nuova: NuovaMateria) = sorgente.creaMateria(nuova)
 }
@@ -283,13 +322,20 @@ data class AzioniMateria(
     val apriSimulata: (Simulata) -> Unit = {},
     val pdf: (DocumentoPdf, String) -> Unit = { _, _ -> },
     val inLavoro: () -> Unit = {},
+    /** La pagina di una cartella (aspetto.md §42.2). */
+    val apriCartella: (Long) -> Unit = {},
+    /** "Riassunto" dal foglio Nuovo: la lettura dello schema col foglio dei riassunti già aperto (§43.3). */
+    val apriRiassunti: (Schema) -> Unit = {},
 )
 
-/** La pagina della materia (aspetto.md §4, prototipo Materia.dc.html). */
+/**
+ * La pagina della materia (aspetto.md §4, prototipo Materia.dc.html). [ricarica] cambia quando
+ * qualcosa è stato aggiunto da fuori (il foglio Aggiungi): la pagina rilegge tutto.
+ */
 @Composable
-fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean, senzaRete: Boolean, scaricate: Set<Long>) {
+fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean, senzaRete: Boolean, scaricate: Set<Long>, ricarica: Int = 0) {
     val s by vm.stato.collectAsStateWithLifecycle()
-    LaunchedEffect(vm) { vm.carica() }
+    LaunchedEffect(vm, ricarica) { vm.carica() }
     LaunchedEffect(s.materiale, s.scheda, s.schemi, s.simulate) {
         while (vm.inAttesa) {
             delay(4_000)
@@ -303,6 +349,13 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
             vm.messaggioVisto()
         }
     }
+    LaunchedEffect(s.conferma) {
+        if (s.conferma != null) {
+            delay(4_000)
+            vm.confermaVista()
+        }
+    }
+    var nuovaCartella by remember { mutableStateOf(false) }
     val c = L.colori
     val m = s.materia
     val colori = materia(m?.colore)
@@ -311,18 +364,62 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
     var evento by remember { mutableStateOf<Evento?>(null) }
     var nuovoEvento by remember { mutableStateOf(false) }
     var daEliminare by remember { mutableStateOf<Any?>(null) }
-    val muove = LocalMovimenti.current
     val puoCreare = !senzaRete || esempio
     val prossimaData = s.prossime.firstOrNull()?.id
+    val schede = m?.conteggi?.lampo ?: 0
 
-    // Visita guidata: ogni passo trova il segmento giusto, anche tornando indietro.
+    // Il pulsante Nuovo e il suo foglio "Cosa vuoi fare?" (aspetto.md §43.2, §43.3).
+    var foglioNuovo by rememberSaveable { mutableStateOf(false) }
+    var passo2 by rememberSaveable { mutableStateOf(false) }
+    val schemiPronti = SceltaNuovo.schemiPronti(s.schemi)
+    val righeNuovo = SceltaNuovo.righe(puoCreare, schemiPronti.size, schede, s.lampoDisponibile)
+    val scegliNuovo: (VoceNuovo) -> Unit = { voce ->
+        if (visita != null && visita.attiva) {
+            // Nella visita conta solo la riga del passo: la pagina dopo la apre la visita.
+            val id = when (voce) {
+                VoceNuovo.LEZIONE -> Bersagli.RIGA_LEZIONE
+                VoceNuovo.SCHEMA -> Bersagli.RIGA_SCHEMA
+                else -> null
+            }
+            if (id != null && visita.azione(id)) foglioNuovo = false
+        } else {
+            // Il foglio si chiude da solo quando si apre la pagina scelta.
+            when (voce) {
+                VoceNuovo.LEZIONE -> { foglioNuovo = false; azioni.nuovaLezione(prossimaData) }
+                VoceNuovo.SCHEMA -> { foglioNuovo = false; azioni.nuovoSchema(prossimaData) }
+                VoceNuovo.SIMULATA -> { foglioNuovo = false; azioni.nuovaSimulata(prossimaData) }
+                VoceNuovo.LAMPO -> { foglioNuovo = false; azioni.lampo() }
+                // Con un solo schema pronto il passo 2 non serve.
+                VoceNuovo.RIASSUNTO -> {
+                    val solo = schemiPronti.singleOrNull()
+                    if (solo != null) {
+                        foglioNuovo = false
+                        azioni.apriRiassunti(solo)
+                    } else {
+                        passo2 = true
+                    }
+                }
+            }
+        }
+    }
+
+    // Visita guidata: ogni passo trova il segmento giusto, anche tornando indietro;
+    // a ogni passo il foglio Nuovo si richiude (si riapre toccando Nuovo).
     if (visita != null) {
         LaunchedEffect(visita.attiva, visita.indice) {
             if (!visita.attiva) return@LaunchedEffect
+            foglioNuovo = false
             when (visita.corrente.bersaglio) {
-                Bersagli.NUOVA_LEZIONE, Bersagli.SEGMENTO_SCHEMI -> vm.segmento(0)
-                Bersagli.NUOVO_SCHEMA, Bersagli.SEGMENTO_SIMULATE -> vm.segmento(1)
+                Bersagli.SEGMENTO_SCHEMI -> vm.segmento(0)
+                Bersagli.SEGMENTO_SIMULATE -> vm.segmento(1)
             }
+        }
+        // Col foglio aperto il riflettore passa da Nuovo alla riga da toccare (§43.4).
+        DisposableEffect(foglioNuovo, passo2, visita.attiva, visita.indice) {
+            val passo = visita.corrente
+            val riga = passo.poi.takeIf { foglioNuovo && !passo2 && visita.attiva && passo.bersaglio == Bersagli.NUOVO }
+            if (riga != null) visita.bersaglioTemporaneo = riga
+            onDispose { if (riga != null && visita.bersaglioTemporaneo == riga) visita.bersaglioTemporaneo = null }
         }
     }
 
@@ -354,6 +451,7 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
             Column(Modifier.padding(MARGINE), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 s.errore?.let { RigaErrore(it, onRiprova = vm::carica) }
                 s.messaggio?.let { RigaErrore(it) }
+                s.conferma?.let { RigaConferma(it) }
                 SchedaDelProf(s.scheda, m?.colore, senzaRete, azioni, vm::aggiornaScheda, Modifier.bersaglio(Bersagli.SCHEDA_PROF))
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -384,7 +482,6 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     TitoloSezione("Da ripassare")
-                    val schede = m?.conteggi?.lampo ?: 0
                     SchedaLampo(schede, TestiLampo.minuti(schede), puoCreare || s.lampoDisponibile, "Niente per oggi", azioni.lampo)
                     if (s.ripassare.isNotEmpty()) {
                         Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) {
@@ -407,29 +504,7 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TitoloSezione("Materiale", Modifier.weight(1f))
-                        PulsanteSecondario(
-                            "Aggiungi",
-                            {
-                                visita?.azione(Bersagli.AGGIUNGI)
-                                if (visita?.attiva != true) azioni.aggiungi(null)
-                            },
-                            Modifier.bersaglio(Bersagli.AGGIUNGI), altezza = 40.dp, raggio = 12.dp,
-                            abilitato = !senzaRete || esempio,
-                        )
-                    }
-                    if (s.materiale.isNotEmpty()) {
-                        Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) {
-                            s.materiale.forEachIndexed { i, mat ->
-                                if (i > 0) Riga()
-                                RigaMateriale(mat, colori.testo, s.oggi, { azioni.apriMateriale(mat.id) }, { vm.riprovaMateriale(mat.id) })
-                            }
-                        }
-                    }
-                }
-
+                // aspetto.md §43.1: il binario con il suo elenco, poi il materiale in fondo.
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Binario(
                         listOf("Lezioni", "Schemi", "Simulate"), s.segmento,
@@ -468,37 +543,83 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
                         }
                     }
                 }
-            }
-        }
-        eu.stgm.lectio.ui.ZonaPulsanteFisso(Modifier.align(Alignment.BottomCenter)) {
-            // Il pulsante segue il segmento (aspetto.md §31.2).
-            Crossfade(s.segmento, animationSpec = tween(if (muove) 200 else 0), label = "pulsante") { segmento ->
-                when (segmento) {
-                    0 -> PulsantePieno(
-                        "Nuova lezione",
-                        {
-                            visita?.azione(Bersagli.NUOVA_LEZIONE)
-                            if (visita?.attiva != true) azioni.nuovaLezione(prossimaData)
-                        },
-                        Modifier.bersaglio(Bersagli.NUOVA_LEZIONE), icona = Icone.Piu, abilitato = puoCreare,
-                    )
-                    1 -> PulsantePieno(
-                        "Nuovo schema",
-                        {
-                            visita?.azione(Bersagli.NUOVO_SCHEMA)
-                            if (visita?.attiva != true) azioni.nuovoSchema(prossimaData)
-                        },
-                        Modifier.bersaglio(Bersagli.NUOVO_SCHEMA), icona = Icone.Piu, abilitato = puoCreare,
-                    )
-                    else -> PulsantePieno("Nuova verifica simulata", { azioni.nuovaSimulata(prossimaData) }, icona = Icone.Piu, abilitato = puoCreare)
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TitoloSezione("Materiale", Modifier.weight(1f))
+                        PulsanteSecondario(
+                            "Aggiungi",
+                            {
+                                visita?.azione(Bersagli.AGGIUNGI)
+                                if (visita?.attiva != true) azioni.aggiungi(null)
+                            },
+                            Modifier.bersaglio(Bersagli.AGGIUNGI), altezza = 40.dp, raggio = 12.dp,
+                            abilitato = !senzaRete || esempio,
+                        )
+                    }
+                    // aspetto.md §42.1: prima le cartelle, poi "Nuova cartella", poi il materiale fuori.
+                    // La scheda c'è sempre, anche senza materiale, per la riga "Nuova cartella".
+                    Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) {
+                        s.cartelleInOrdine.forEach { cartella ->
+                            RigaCartella(cartella, colori.testo) { azioni.apriCartella(cartella.id) }
+                            Riga()
+                        }
+                        RigaNuovaCartella(abilitato = puoCreare) { nuovaCartella = true }
+                        s.sciolti.forEach { mat ->
+                            Riga()
+                            RigaMateriale(mat, colori.testo, s.oggi, { azioni.apriMateriale(mat.id) }, { vm.riprovaMateriale(mat.id) })
+                        }
+                    }
                 }
             }
         }
+        eu.stgm.lectio.ui.ZonaPulsanteFisso(Modifier.align(Alignment.BottomCenter)) {
+            // Sempre lo stesso, qualunque segmento sia aperto (aspetto.md §43.2): spento solo
+            // se nel foglio non c'è niente da fare (senza rete e senza schede salvate).
+            PulsantePieno(
+                "Nuovo",
+                {
+                    passo2 = false
+                    foglioNuovo = true
+                },
+                Modifier.bersaglio(Bersagli.NUOVO), icona = Icone.Piu, abilitato = SceltaNuovo.pulsanteAcceso(righeNuovo),
+            )
+        }
+    }
+
+    if (foglioNuovo) {
+        FoglioNuovo(
+            materia = m,
+            righe = righeNuovo,
+            schemi = schemiPronti,
+            passo2 = passo2,
+            onPasso2 = { passo2 = it },
+            onScegli = scegliNuovo,
+            onSchema = { schema ->
+                foglioNuovo = false
+                azioni.apriRiassunti(schema)
+            },
+            onChiudi = { foglioNuovo = false },
+        )
     }
 
     when (val x = daEliminare) {
         is Schema -> Conferma("Eliminare lo schema?", "Sparisce anche dal server di casa. Non si può tornare indietro.", "Elimina", { daEliminare = null; vm.eliminaSchema(x.id) }, { daEliminare = null })
         is Simulata -> Conferma("Eliminare la verifica simulata?", "Sparisce anche dal server di casa. Non si può tornare indietro.", "Elimina", { daEliminare = null; vm.eliminaSimulata(x.id) }, { daEliminare = null })
+    }
+    if (nuovaCartella) {
+        FoglioNomeCartella(
+            titolo = "Nuova cartella",
+            iniziale = "",
+            pulsante = "Crea cartella",
+            onSalva = { nome, fatto ->
+                vm.creaCartella(nome, fatto) { nuova ->
+                    nuovaCartella = false
+                    azioni.apriCartella(nuova.id)
+                }
+            },
+            onChiudi = { nuovaCartella = false },
+        )
     }
     if (foglioMateria && m != null) {
         FoglioMateria(
@@ -754,8 +875,9 @@ fun iconaMateriale(tipo: String): ImageVector = when (tipo) {
     else -> Icone.File
 }
 
+/** La riga del materiale (aspetto.md §4); [nota] va dopo la data ("messo qui da Lectio", §42.2). */
 @Composable
-private fun RigaMateriale(m: Materiale, colore: Color, oggi: LocalDate, onApri: () -> Unit, onRiprova: () -> Unit) {
+internal fun RigaMateriale(m: Materiale, colore: Color, oggi: LocalDate, onApri: () -> Unit, onRiprova: () -> Unit, nota: String? = null) {
     val c = L.colori
     Row(
         Modifier.fillMaxWidth().clickable(enabled = m.stato == "pronto", role = Role.Button, onClick = onApri).padding(vertical = 12.dp),
@@ -776,7 +898,8 @@ private fun RigaMateriale(m: Materiale, colore: Color, oggi: LocalDate, onApri: 
                 }
                 else -> {
                     Text(m.titolo, style = L.testi.forte, color = c.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(Formati.data(m.data)?.let { Formati.giornoBreve(it, oggi) } ?: TipoMateriale.da(m.tipo).etichetta, style = L.testi.secondario, color = c.tenue)
+                    val quando = Formati.data(m.data)?.let { Formati.giornoBreve(it, oggi) } ?: TipoMateriale.da(m.tipo).etichetta
+                    Text(if (nota != null) "$quando · $nota" else quando, style = L.testi.secondario, color = c.tenue)
                     m.avviso?.takeIf { it.isNotBlank() }?.let { Text(it, style = L.testi.secondario, color = c.avvisoTesto) }
                 }
             }

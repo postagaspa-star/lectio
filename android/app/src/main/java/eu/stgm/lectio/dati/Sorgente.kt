@@ -46,7 +46,8 @@ interface Sorgente {
 
     suspend fun materiale(materiaId: Long): Lettura<List<Materiale>>
     suspend fun materialeDettaglio(id: Long): Esito<Materiale>
-    suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?): Esito<Materiale>
+    /** [cartellaId]: v1.6 §27, null = la sceglie Lectio dopo averlo letto. */
+    suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?, cartellaId: Long? = null): Esito<Materiale>
     suspend fun caricaTesto(materiaId: Long, scritto: MaterialeScritto): Esito<Materiale>
     suspend fun eliminaMateriale(id: Long): Esito<Unit>
     suspend fun riprovaMateriale(id: Long): Esito<Unit>
@@ -54,6 +55,18 @@ interface Sorgente {
     suspend fun modificaMateriale(id: Long, cambi: JsonObject): Esito<Materiale>
     /** v1.4 §16.2: il materiale che parla dell'argomento. */
     suspend fun suggeriti(materiaId: Long, argomento: String): Esito<Suggeriti>
+
+    // --- v1.6 §27: cartelle dentro la materia ---------------------------------------------------
+
+    suspend fun cartelle(materiaId: Long): Lettura<List<Cartella>>
+    suspend fun creaCartella(materiaId: Long, nome: String): Esito<Cartella>
+    suspend fun rinominaCartella(id: Long, nome: String): Esito<Cartella>
+    /** [conIFile] false = i file restano nella materia, fuori dalle cartelle. */
+    suspend fun eliminaCartella(id: Long, conIFile: Boolean): Esito<CartellaEliminata>
+    /** [cartellaId] null = fuori dalle cartelle. */
+    suspend fun sposta(materiaId: Long, materiali: List<Long>, cartellaId: Long?): Esito<Spostati>
+    /** Gli id da spuntare già in "Metti dei file qui". */
+    suspend fun proposti(cartellaId: Long): Esito<List<Long>>
 
     suspend fun eventi(): Lettura<List<Evento>>
     suspend fun creaEvento(materiaId: Long, nuovo: NuovoEvento): Esito<Evento>
@@ -166,13 +179,21 @@ class SorgenteServer(
     override suspend fun materiale(materiaId: Long) =
         segna(leggiConCache(cache, "materiale-$materiaId", ListSerializer(Materiale.serializer())) { client.materiale(materiaId) })
     override suspend fun materialeDettaglio(id: Long) = segna(client.materialeDettaglio(id))
-    override suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?) =
-        segna(client.caricaFile(materiaId, file, tipo, titolo, data))
+    override suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?, cartellaId: Long?) =
+        segna(client.caricaFile(materiaId, file, tipo, titolo, data, cartellaId))
     override suspend fun caricaTesto(materiaId: Long, scritto: MaterialeScritto) = segna(client.caricaTesto(materiaId, scritto))
     override suspend fun eliminaMateriale(id: Long) = segna(client.eliminaMateriale(id))
     override suspend fun riprovaMateriale(id: Long) = segna(client.riprovaMateriale(id))
     override suspend fun modificaMateriale(id: Long, cambi: JsonObject) = segna(client.modificaMateriale(id, cambi))
     override suspend fun suggeriti(materiaId: Long, argomento: String) = segna(client.suggeriti(materiaId, argomento))
+
+    override suspend fun cartelle(materiaId: Long) =
+        segna(leggiConCache(cache, "cartelle-$materiaId", ListSerializer(Cartella.serializer())) { client.cartelle(materiaId) })
+    override suspend fun creaCartella(materiaId: Long, nome: String) = segna(client.creaCartella(materiaId, nome))
+    override suspend fun rinominaCartella(id: Long, nome: String) = segna(client.rinominaCartella(id, nome))
+    override suspend fun eliminaCartella(id: Long, conIFile: Boolean) = segna(client.eliminaCartella(id, conIFile))
+    override suspend fun sposta(materiaId: Long, materiali: List<Long>, cartellaId: Long?) = segna(client.sposta(materiaId, materiali, cartellaId))
+    override suspend fun proposti(cartellaId: Long) = segna(client.proposti(cartellaId)).mappa { it.proposti }
 
     override suspend fun eventi() =
         segna(leggiConCache(cache, "eventi", ListSerializer(Evento.serializer())) { client.eventi() })

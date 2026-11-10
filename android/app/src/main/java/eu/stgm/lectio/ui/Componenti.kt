@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -678,6 +679,28 @@ fun RigaErrore(testo: String, modifier: Modifier = Modifier, onRiprova: (() -> U
     }
 }
 
+/**
+ * La riga conferma (aspetto.md §42.4-42.5): un esito andato bene, calmo, che resta qualche
+ * secondo ("Fatto: 3 file in Arte greca", "Cartella eliminata"). Spunta nel verde "fatto".
+ */
+@Composable
+fun RigaConferma(testo: String, modifier: Modifier = Modifier) {
+    val c = L.colori
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(c.fattoTenue)
+            .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icone.Spunta, contentDescription = null, tint = c.fatto, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(testo, style = L.testi.secondario.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = c.testo, modifier = Modifier.weight(1f))
+    }
+}
+
 /** Un avviso calmo (80% del tetto, dati vecchi). */
 @Composable
 fun RigaAvviso(testo: String, modifier: Modifier = Modifier) {
@@ -784,6 +807,8 @@ fun PillolaOpzione(
     icona: ImageVector? = null,
     abilitato: Boolean = true,
     ruolo: Role = Role.RadioButton,
+    /** Un pezzo che non si taglia mai dopo il testo (" · 8"): se non ci sta, i puntini vanno sul testo. */
+    dopo: String? = null,
 ) {
     val c = L.colori
     val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -810,7 +835,13 @@ fun PillolaOpzione(
                 Icon(icona, contentDescription = null, tint = if (accesa) c.accentoTesto else c.tenue, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
             }
-            Text(testo, style = L.testi.pillola, color = if (accesa) c.accentoTesto else c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val colore = if (accesa) c.accentoTesto else c.testo
+            if (dopo == null) {
+                Text(testo, style = L.testi.pillola, color = colore, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else {
+                Text(testo, style = L.testi.pillola, color = colore, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(dopo, style = L.testi.pillola, color = colore, maxLines = 1)
+            }
         }
     }
 }
@@ -909,12 +940,16 @@ fun CampoBordato(
     fondo: Color = L.colori.superficie,
     bordoSpento: Color = L.colori.superficie2,
     abilitato: Boolean = true,
+    /** Il tasto Invio della tastiera (per esempio = il pulsante del foglio). */
+    azioniTastiera: androidx.compose.foundation.text.KeyboardActions = androidx.compose.foundation.text.KeyboardActions.Default,
+    /** Il bordo resta di questo colore anche quando si scrive (un errore sotto il campo). */
+    bordoFisso: Color? = null,
 ) {
     val c = L.colori
     val forma = RoundedCornerShape(14.dp)
     val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val acceso by interazione.collectIsFocusedAsState()
-    val bordo by animateColorAsState(if (acceso) c.accento else bordoSpento, morbido(200), label = "bordo")
+    val bordo by animateColorAsState(bordoFisso ?: if (acceso) c.accento else bordoSpento, morbido(200), label = "bordo")
     androidx.compose.foundation.text.BasicTextField(
         value = valore,
         onValueChange = onCambia,
@@ -927,6 +962,7 @@ fun CampoBordato(
         minLines = righe,
         textStyle = stile.copy(color = c.testo),
         keyboardOptions = tastiera,
+        keyboardActions = azioniTastiera,
         interactionSource = interazione,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(c.accento),
         decorationBox = { campo ->
@@ -1053,10 +1089,16 @@ fun FoglioFermo(
     titolo: String,
     scorrimento: androidx.compose.foundation.ScrollState? = null,
     piede: (@Composable ColumnScope.() -> Unit)? = null,
+    /** Quanto sale al massimo, in frazione dello schermo ("Metti dei file qui": 0,9). */
+    altezzaMassima: Float = 0.88f,
+    /** Qualcosa accanto al titolo, prima della X ("3 scelti"). */
+    accanto: (@Composable () -> Unit)? = null,
+    /** Qualcosa prima del titolo, in alto a sinistra (la freccia indietro di un secondo passo). */
+    prima: (@Composable () -> Unit)? = null,
     contenuto: @Composable ColumnScope.() -> Unit,
 ) {
     val chiudi by androidx.compose.runtime.rememberUpdatedState(onChiudi)
-    SopraTutto { CorpoFoglioFermo(chiudi, titolo, scorrimento, piede, contenuto) }
+    SopraTutto { CorpoFoglioFermo(chiudi, titolo, scorrimento, piede, altezzaMassima, accanto, prima, contenuto) }
 }
 
 @Composable
@@ -1065,6 +1107,9 @@ private fun CorpoFoglioFermo(
     titolo: String,
     scorrimento: androidx.compose.foundation.ScrollState?,
     piede: (@Composable ColumnScope.() -> Unit)?,
+    altezzaMassima: Float,
+    accanto: (@Composable () -> Unit)?,
+    prima: (@Composable () -> Unit)?,
     contenuto: @Composable ColumnScope.() -> Unit,
 ) {
     val c = L.colori
@@ -1075,7 +1120,7 @@ private fun CorpoFoglioFermo(
     val scorre = scorrimento ?: rememberScrollState()
     androidx.activity.compose.BackHandler(onBack = onChiudi)
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        val massimo = maxHeight * 0.88f
+        val massimo = maxHeight * altezzaMassima
         Box(
             Modifier.fillMaxSize().background(c.velo)
                 .clickable(interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onChiudi),
@@ -1109,8 +1154,17 @@ private fun CorpoFoglioFermo(
                 ) {
                     Box(Modifier.width(40.dp).height(5.dp).clip(CircleShape).background(c.superficie2))
                 }
-                Row(Modifier.fillMaxWidth().padding(start = MARGINE, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = if (prima != null) 12.dp else MARGINE, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (prima != null) {
+                        prima()
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(titolo, style = L.testi.titoloFoglio, color = c.testo, modifier = Modifier.weight(1f).semantics { heading() })
+                    if (accanto != null) {
+                        Spacer(Modifier.width(8.dp))
+                        accanto()
+                        Spacer(Modifier.width(8.dp))
+                    }
                     PulsanteTondo(Icone.Chiudi, "Chiudi", onChiudi, dimensione = 48.dp, dimensioneIcona = 18.dp)
                 }
                 androidx.compose.runtime.CompositionLocalProvider(LocalDentroFoglio provides true) {

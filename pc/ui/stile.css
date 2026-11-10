@@ -413,7 +413,8 @@ textarea.campo { height: auto; min-height: 104px; padding: 12px 14px; line-heigh
 .testata-materia .tondo { background: rgba(255, 255, 255, .7); color: var(--m-testo); }
 :root[data-tema="scuro"] .testata-materia .tondo { background: rgba(255, 255, 255, .08); }
 @media (prefers-color-scheme: dark) { :root:not([data-tema="chiaro"]) .testata-materia .tondo { background: rgba(255, 255, 255, .08); } }
-.griglia-materia { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start; }
+/* §43.1 Le file a due colonne della materia (sotto i 900 px una colonna sola, in "Finestre più strette"). */
+.griglia-materia { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .tipi-domanda { display: flex; flex-direction: column; gap: 8px; }
 .tipi-domanda .divisa { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; }
 .tipi-domanda .divisa span { background: var(--m-pieno); transition: width .35s; }
@@ -423,7 +424,11 @@ textarea.campo { height: auto; min-height: 104px; padding: 12px 14px; line-heigh
 .tipi-domanda .legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; font-weight: 600; color: var(--tenue); }
 .elenco-breve { display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.45; }
 .note-mie { background: var(--fondo); border-radius: 16px; padding: 12px 14px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
-.colonna-destra { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.colonna-destra { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+/* La zona Trascina qui comincia all'altezza della scheda del Materiale (sotto il titolo e Aggiungi), alta quanto serve. */
+.colonna-zona { padding-top: 50px; min-width: 0; }
+.zona-trascina.bassa { padding: 14px 16px; gap: 8px; }
+.zona-trascina.bassa > svg.icona { display: none; }
 
 .zona-trascina {
   border: 2px dashed var(--acc-tratteggio); background: var(--acc-zona); border-radius: 22px; padding: 22px; display: flex; flex-direction: column;
@@ -433,6 +438,47 @@ textarea.campo { height: auto; min-height: 104px; padding: 12px 14px; line-heigh
 .zona-trascina svg.icona { width: 28px; height: 28px; color: var(--acc-tenue-testo); }
 .zona-trascina.accesa { background: var(--acc-zona-accesa); border-color: var(--acc); transform: scale(1.01); }
 .zona-trascina.compatta { padding: 16px; }
+
+/* Cartelle (§42): righe nella materia, pagina della cartella, finestre. Nomi lunghi: una riga con i puntini nelle
+   righe, a capo nelle testate e nelle pillole (§38). */
+.riga-cartella { min-height: 56px; }
+.riga-cartella .nome-cartella { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.riga-cartella .messi-lectio { color: var(--acc-tenue-testo); font-weight: 600; }
+.riga-cartella .freccia-riga { color: var(--tenue); width: 20px; height: 20px; }
+.riga-nuova-cartella { min-height: 48px; padding: 10px 0; color: var(--acc-tenue-testo); font-size: 16px; font-weight: 700; }
+.riga-nuova-cartella:hover:not(:disabled) span { text-decoration: underline; }
+.riga-nuova-cartella:disabled { color: var(--moltotenue); }
+.testata-cartella .dentro { flex-direction: column; align-items: stretch; gap: 14px; }
+.testata-cartella .comandi-cartella { display: flex; align-items: center; gap: 10px; }
+.testata-cartella .comandi-cartella .spazio { flex-grow: 1; }
+.testata-cartella .nome-con-icona { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.testata-cartella .icona-cartella { width: 28px; height: 28px; color: var(--m-testo); margin-top: 4px; }
+.testata-cartella h1 { font-size: 30px; overflow-wrap: anywhere; min-width: 0; }
+.vuota-cartella { font-size: 16px; font-weight: 500; color: var(--tenue); }
+.pillole-cartella { display: flex; flex-wrap: wrap; gap: 8px; }
+.pillole-cartella .nl-pillola { height: auto; min-height: 40px; padding: 8px 14px; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.finestra-materiale .pillole-cartella .nl-pillola:not([aria-pressed="true"]) { background: var(--sup); }
+.nl-cartelle-box:empty { display: none; }
+.nl-cartelle { display: flex; flex-direction: column; gap: 8px; }
+.titolo-finestra { font-size: 21px; flex-grow: 1; min-width: 0; overflow-wrap: anywhere; }
+.campo.campo-cartella { font-size: 17px; font-weight: 600; }
+.finestra.finestra-metti { width: min(640px, 100%); }
+.finestra-metti .corpo { gap: 16px; }
+/* Il corpo scorre: senza questo il campo Cerca si schiaccia quando l'elenco è lungo. */
+.finestra-metti .corpo > * { flex-shrink: 0; }
+.finestra-metti .conta-scelti { color: var(--tenue); font-variant-numeric: tabular-nums; }
+.finestra-metti .cerca-metti { width: 100%; background: var(--fondo); }
+.gruppi-metti { display: flex; flex-direction: column; gap: 18px; }
+.gruppo-metti { display: flex; flex-direction: column; gap: 8px; }
+.esito-metti:empty { display: none; }
+.elimina-cartella .testo-elimina { font-size: 15px; }
+.scelte-elimina { display: flex; flex-direction: column; gap: 10px; }
+.scelta-elimina { display: flex; flex-direction: column; gap: 6px; }
+.scelte-elimina .pulsante { height: auto; min-height: 52px; border-radius: 16px; white-space: normal; text-align: center; }
+.nota-elimina { font-size: 13px; font-weight: 500; color: var(--tenue); text-align: center; }
+/* §42.5: l'unica cosa che non si può disfare, quindi l'unico pulsante rosso. */
+.pulsante.rosso-tenue { padding: 0 22px; background: var(--err-tenue); color: var(--err-testo); font-size: 16px; }
+.pulsante.rosso-tenue:hover:not(:disabled) { filter: brightness(.97); }
 
 .riga-materiale.in-lettura .forte { color: var(--tenue); }
 .avviso-materiale { font-size: 13px; font-weight: 600; color: var(--avv-testo); }
@@ -919,7 +965,23 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 
 /* §31.2 Binario e righe della materia */
 .segmenti.binario button { height: 40px; }
-.dissolve-corta { animation: appare .2s ease-out; }
+
+/* §43.3 "Cosa vuoi fare?": cinque righe alte almeno 72, Superficie 2, raggio 16, 8 tra una e l'altra. */
+.finestra-nuovo .corpo { gap: 16px; }
+/* Un nome di materia lungo non spinge fuori la X: la pillola si accorcia con i puntini (§38). */
+.finestra-nuovo .testa-finestra .pillola-materia { display: inline-block; flex-shrink: 1; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.finestra-nuovo .testa-finestra .pillola-materia .pallino { vertical-align: 1px; margin-right: 8px; }
+.finestra-nuovo .testa-finestra .tondo { flex-shrink: 0; }
+.nuovo-righe { display: flex; flex-direction: column; gap: 8px; }
+.nuovo-riga { display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 12px 14px 12px 12px; border: none; border-radius: 16px; background: var(--sup2); color: var(--testo); text-align: left; width: 100%; }
+.nuovo-riga:hover:not(:disabled) { filter: brightness(.97); }
+.nuovo-riga:disabled { opacity: .55; cursor: default; }
+.nuovo-piastrella { width: 44px; height: 44px; border-radius: 12px; background: var(--m-tenue); color: var(--m-testo); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nuovo-piastrella svg.icona { width: 22px; height: 22px; }
+.nuovo-riga .testi { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nuovo-riga .n { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nuovo-riga .f { font-size: 14px; font-weight: 500; color: var(--tenue); }
+.nuovo-riga > svg.icona { width: 20px; height: 20px; color: var(--tenue); flex-shrink: 0; }
 .fondo-fisso { position: sticky; bottom: 16px; display: flex; justify-content: flex-end; pointer-events: none; z-index: 4; margin-top: -6px; }
 .fondo-fisso .pulsante { pointer-events: auto; }
 .riga-studio { position: relative; }
@@ -1248,6 +1310,10 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 @media (max-width: 1100px) {
   .lettore, .griglia-gemini { grid-template-columns: minmax(0, 1fr); }
   .lettore .sinistra { position: static; }
+}
+@media (max-width: 899px) {
+  .griglia-materia { grid-template-columns: minmax(0, 1fr); }
+  .colonna-zona { padding-top: 0; }
 }
 @media (max-width: 980px) {
   .griglia-oggi { grid-template-columns: minmax(0, 1fr); }

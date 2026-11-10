@@ -425,8 +425,9 @@ public class RevisioneTest
         var css = File.ReadAllText(Pc("ui", "stile.css"));
         foreach (var (sel, corpo) in Regole(css).Where(r => r.Corpo.Contains("var(--err", StringComparison.Ordinal)))
         {
-            // docs/aspetto.md §5.1 (v1.4): l'unica eccezione è Elimina nella finestra del materiale (con conferma).
-            Assert.True(Regex.IsMatch(sel, @"errore|\.err\b") || sel == ".pulsante.testo.elimina", "rosso fuori dagli errori: " + sel);
+            // docs/aspetto.md §5.1 (v1.4): eccezione è Elimina nella finestra del materiale (con conferma);
+            // §42.5: e "Elimina anche gli N file" quando si elimina una cartella, l'unica cosa che non si può disfare.
+            Assert.True(Regex.IsMatch(sel, @"errore|\.err\b") || sel == ".pulsante.testo.elimina" || sel == ".pulsante.rosso-tenue", "rosso fuori dagli errori: " + sel);
         }
         Assert.DoesNotContain(Regole(css), r => r.Selettore.Contains("pericolo", StringComparison.Ordinal) && r.Corpo.Contains("--err", StringComparison.Ordinal));
     }

@@ -143,21 +143,27 @@ test('selettore: 16 cerchi, il colore già usato lo dice senza vietarlo', opz, a
   await p.aspetta(() => /Lo usa già|già/.test(p.q('[data-colore-usato]').textContent));
 });
 
-test('materia: tre segmenti, il pulsante segue il segmento, gli schemi si chiedono una volta sola', opz, async () => {
+test('materia: tre segmenti per guardare, il pulsante in basso è sempre Nuovo (1.3.0, §43.2)', opz, async () => {
   const p = await apri('#materia/1');
   await p.aspetta(() => p.q('[data-segmento="schemi"]'));
   assert.deepEqual(p.tutti('[data-segmento]').map((b) => b.getAttribute('data-segmento')), ['lezioni', 'schemi', 'simulate']);
-  assert.ok(p.q('[data-azione="nuova-lezione"], [data-visita="nuova-lezione"]'));
+  const nuovo = () => p.tutti('.fondo-fisso button');
+  assert.equal(nuovo().length, 1);
+  assert.equal(nuovo()[0].textContent.trim(), 'Nuovo');
+  assert.equal(nuovo()[0].getAttribute('data-azione'), 'nuovo');
+  assert.ok(nuovo()[0].querySelector('svg.icona'), 'icona più');
   p.clic(p.q('[data-segmento="schemi"]'));
   await p.aspetta(() => p.q('[data-elenco="schemi"] [data-schema="3"]'));
-  assert.ok(p.q('[data-azione="nuovo-schema"]'));
+  assert.equal(nuovo()[0].textContent.trim(), 'Nuovo');
+  assert.equal(p.q('.fondo-fisso .dissolve-corta'), null, 'niente più dissolvenza');
   assert.match(p.q('[data-elenco="schemi"]').textContent, /In preparazione|Scrivo|Leggo|Cerco|Preparo/);
   p.clic(p.q('[data-segmento="simulate"]'));
   await p.aspetta(() => p.q('[data-elenco="simulate"] [data-simulata="4"]'));
-  assert.ok(p.q('[data-azione="nuova-simulata"]'));
+  assert.equal(nuovo()[0].textContent.trim(), 'Nuovo');
   assert.match(p.q('[data-elenco="simulate"]').textContent, /A metà/);
   assert.match(p.q('[data-elenco="simulate"]').textContent, /Corretta · stima circa 6,5/);
   assert.equal(p.q('[data-elenco="schemi"]').classList.contains('nascosto'), true);
+  for (const vecchio of ['nuova-lezione', 'nuovo-schema', 'nuova-simulata']) assert.equal(p.q('.pagina [data-azione="' + vecchio + '"]'), null, vecchio);
 });
 
 test('nuovo schema: stima del costo prima di partire e richiesta col contratto giusto', opz, async () => {
@@ -177,6 +183,27 @@ test('nuovo schema: stima del costo prima di partire e richiesta col contratto g
   assert.equal(c.corpo.materia_id, 1);
   assert.ok(c.corpo.forma);
   assert.ok(c.corpo.livello);
+});
+
+test('nuovo schema e nuova verifica simulata: la pillola cartella (1.3.0, §42.7) spunta tutto il suo materiale e va nella stima', opz, async () => {
+  const p = await apri('#materia/1');
+  await p.aspetta(() => p.q('[data-segmento="schemi"]'));
+  for (const [apriFinestra, stima] of [[() => p.A.nuovoSchema(1), '/server/api/schemi/stima'], [() => p.A.nuovaSimulata(1), '/server/api/simulate/stima']]) {
+    p.A.chiudiTuttiIVeli();
+    apriFinestra();
+    await p.aspetta(() => p.q('[data-cartella-pillola="1"]') && p.q('[data-scelta="10"]'));
+    const pillola = p.q('[data-cartella-pillola="1"]');
+    assert.equal(pillola.textContent, 'La Repubblica · 2');
+    assert.match(p.q('[data-scelta="7"] .s').textContent, /^Verifica · La Repubblica · /);
+    p.clic(pillola);
+    assert.equal(p.q('[data-cartella-pillola="1"]').getAttribute('aria-pressed'), 'true');
+    assert.equal(p.q('[data-scelta="10"]').getAttribute('aria-checked'), 'true');
+    assert.equal(p.q('[data-scelta="7"]').getAttribute('aria-checked'), 'true');
+    assert.equal(p.q('[data-modo="argomento"]').getAttribute('aria-pressed'), 'false', 'conta come un tocco di Andrea');
+    await p.aspetta(() => p.s.chiamate('POST', stima).some((c) => c.corpo.materiali.includes(10) && c.corpo.materiali.includes(7)));
+    p.scrivi(p.q('#nl-cerca'), 'repubblica');
+    assert.deepEqual(p.tutti('.nl-mat').map((x) => x.dataset.scelta).sort(), ['10', '7']);
+  }
 });
 
 test('lettura dello schema: tutti i blocchi, grassetto vero, fonti, indice, niente asterischi', opz, async () => {
@@ -451,7 +478,7 @@ test('dopo l\'aggiornamento parte una volta la visita delle cose nuove, e si ric
   const p = await B.pagina(s, { tempi: TEMPI });
   await p.aspetta(() => p.A.S.visita, 5000);
   assert.equal(p.A.S.visita.modo, 'novita');
-  assert.equal(p.A.S.visita.passi.length, 15);
+  assert.equal(p.A.S.visita.passi.length, 16);
   await p.aspetta(() => p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   p.clic(p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   await p.aspetta(() => s.chiamate('POST', '/locale/tutorial-novita-visto').length === 1);
@@ -466,7 +493,7 @@ test('la visita delle cose nuove trova il suo bersaglio a ogni passo', opz, asyn
   await p.A.avviaVisita(false, 'novita');
   await p.aspetta(() => p.A.S.visita && !p.A.S.visita.preparando);
   const passi = p.A.S.visita.passi;
-  assert.equal(passi.length, 15);
+  assert.equal(passi.length, 16);
   for (let i = 0; i < passi.length - 1; i++) {
     await p.A.visitaVai(i);
     const trovato = await p.aspetta(() => passi[i].bersaglio.some((b) => p.q(b)), 3000).catch(() => false);

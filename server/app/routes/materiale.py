@@ -77,11 +77,16 @@ def _valori(tipo, titolo, data_testo, testo: str | None, nome_file: str | None, 
 
 def _inserisci(conn: sqlite3.Connection, materia_id: int, tipo: str, titolo: str, data: str, origine: str,
                nome_file: str | None, formato: str | None, pagine: int | None, testo: str, stato: str,
-               titolo_da: str = "utente") -> int:
+               titolo_da: str = "utente", cartella_id: int | None = None) -> int:
+    """Contratto 27: con la cartella scelta da Andrea il file va lì; senza, Lectio la sceglie dopo averlo letto."""
+    if cartella_id is not None:
+        cartella_della_materia(conn, materia_id, cartella_id)
+    adesso = clock.adesso()
     cur = conn.execute(
         "INSERT INTO materiali (materia_id, tipo, titolo, data, origine, nome_file, formato, pagine, testo, stato,"
-        " creato_il, titolo_da) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (materia_id, tipo, titolo, data, origine, nome_file, formato, pagine, testo, stato, clock.adesso(), titolo_da),
+        " creato_il, titolo_da, cartella_id, cartella_da, cartella_il) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (materia_id, tipo, titolo, data, origine, nome_file, formato, pagine, testo, stato, adesso, titolo_da,
+         cartella_id, "utente" if cartella_id is not None else "attesa", adesso if cartella_id is not None else None),
     )
     return cur.lastrowid
 
@@ -129,7 +134,7 @@ async def aggiungi(materia_id: int, request: Request, conn: sqlite3.Connection =
     tipo, titolo, data, titolo_da = _valori(corpo.tipo, corpo.titolo, corpo.data, testo, None, "scritto")
     with db.transazione(conn):
         nuovo = _inserisci(conn, materia_id, tipo, titolo, data, "scritto", None, None, None, testo, "pronto",
-                           titolo_da)
+                           titolo_da, corpo.cartella_id)
         if tipo in ("verifica", "interrogazione"):
             schede.segna_da_aggiornare(conn, materia_id)
     s.lavoro.sveglia("sfondo")
@@ -144,7 +149,7 @@ async def _da_file(materia_id: int, request: Request, conn: sqlite3.Connection, 
     if lunghezza > MASSIMO_BYTE_FILE + 512 * 1024:
         raise ErroreApi(413, TROPPO_GRANDE)
     # Senza Content-Length il limite lo fa LimiteCorpo mentre i byte arrivano.
-    form = await request.form(max_files=1, max_fields=10)
+    form = await request.form(max_files=1, max_fields=12)
     try:
         file = form.get("file")
         if not isinstance(file, UploadFile):
@@ -166,6 +171,14 @@ async def _da_file(materia_id: int, request: Request, conn: sqlite3.Connection, 
     data = _campo_form(form, "data")
     if data and not clock.data_valida(data):
         raise non_valido(FRASI_CAMPI["data"], campo="data")
+    cartella = _campo_form(form, "cartella_id")
+    if cartella is not None:
+        if not cartella.isdigit():
+            raise non_valido("Questa cartella non c'è nella materia.", campo="cartella_id")
+        cartella_id = int(cartella)
+        cartella_della_materia(conn, materia_id, cartella_id)  # prima di leggere il file (o pagare l'OCR)
+    else:
+        cartella_id = None
     est = lettura.estensione(nome_file)
     if est not in lettura.FORMATI:
         raise non_valido(f"Questo tipo di file non lo so leggere. Vanno bene: {lettura.FORMATI_IN_PAROLE}.",
@@ -189,7 +202,7 @@ async def _da_file(materia_id: int, request: Request, conn: sqlite3.Connection, 
                                             origine)
     with db.transazione(conn):
         nuovo = _inserisci(conn, materia_id, tipo, titolo, data, origine, nome_file, est, pagine,
-                           letto.testo if stato == "pronto" else "", stato, titolo_da)
+                           letto.testo if stato == "pronto" else "", stato, titolo_da, cartella_id)
         conn.execute("UPDATE materiali SET pagine_ocr = ?, avviso = ? WHERE id = ?",
                      (json.dumps(letto.pagine_ocr) if letto.pagine_ocr else None, letto.avviso, nuovo))
         relativo = Path("materiale") / str(materia_id) / f"{nuovo}.{est}"
@@ -212,13 +225,39 @@ def elenco(materia_id: int, conn: sqlite3.Connection = Depends(get_conn)):
 
 @router.get("/materie/{materia_id}/suggeriti")
 def suggeriti(materia_id: int, argomento: str = "", conn: sqlite3.Connection = Depends(get_conn)):
-    """Contratto 16.2: il materiale che parla dell'argomento (gratis, senza AI)."""
+    """Contratto 16.2: il materiale che parla dell'argomento (gratis, senza AI). Il nome della cartella
+    conta come il titolo (contratto 27): "Arte greca" sceglie i file della cartella Arte greca."""
     trova_materia(conn, materia_id)
     argomento = " ".join(argomento.split())[:200]
     righe = [dict(r) for r in conn.execute(
-        "SELECT id, titolo, testo FROM materiali WHERE materia_id = ? AND stato = 'pronto' ORDER BY creato_il DESC, id DESC",
+        "SELECT m.id, m.titolo, m.testo, c.nome AS cartella FROM materiali m LEFT JOIN cartelle c ON c.id = m.cartella_id"
+        " WHERE m.materia_id = ? AND m.stato = 'pronto' ORDER BY m.creato_il DESC, m.id DESC",
         (materia_id,))]
     return titoli.suggeriti(argomento, righe)
+
+
+def cartella_della_materia(conn: sqlite3.Connection, materia_id: int, cartella_id: int) -> sqlite3.Row:
+    r = conn.execute("SELECT * FROM cartelle WHERE id = ?", (cartella_id,)).fetchone()
+    if r is None or r["materia_id"] != materia_id:
+        raise non_valido("Questa cartella non c'è nella materia.", campo="cartella_id")
+    return r
+
+
+def metti_in_cartella(conn: sqlite3.Connection, materia_id: int, materiali: list[int], cartella_id: int | None) -> int:
+    """Dentro una transazione: sposta il materiale (della stessa materia) in una cartella o fuori (None).
+    È una scelta di Andrea: Lectio non lo sposterà più."""
+    if cartella_id is not None:
+        cartella_della_materia(conn, materia_id, cartella_id)
+    ids = list(dict.fromkeys(materiali))
+    segnaposti = ",".join("?" * len(ids))
+    trovati = conn.execute(f"SELECT COUNT(*) AS n FROM materiali WHERE materia_id = ? AND id IN ({segnaposti})",
+                           (materia_id, *ids)).fetchone()["n"]
+    if trovati != len(ids):
+        raise non_valido("Alcuni file non ci sono più o non sono di questa materia.", campo="materiali")
+    adesso = clock.adesso()
+    conn.execute(f"UPDATE materiali SET cartella_id = ?, cartella_da = 'utente', cartella_il = ? WHERE id IN ({segnaposti})",
+                 (cartella_id, adesso, *ids))
+    return len(ids)
 
 
 @router.patch("/materiale/{materiale_id}")
@@ -237,6 +276,9 @@ def cambia(materiale_id: int, corpo: MaterialePatch, conn: sqlite3.Connection = 
             conn.execute("DELETE FROM pezzi WHERE materiale_id = ?", (materiale_id,))  # cambia la priorità
             if r["stato"] == "pronto" and (corpo.tipo in DEL_PROF or r["tipo"] in DEL_PROF):
                 schede.segna_da_aggiornare(conn, r["materia_id"])
+        if "cartella_id" in corpo.model_fields_set:
+            # Contratto 27: spostato da Andrea (anche fuori dalle cartelle): Lectio non lo sposta più.
+            metti_in_cartella(conn, r["materia_id"], [materiale_id], corpo.cartella_id)
     s.lavoro.sveglia("sfondo")
     return forme.materiale(conn, trova_materiale(conn, materiale_id))
 
@@ -246,22 +288,37 @@ def uno(materiale_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     return forme.materiale(conn, trova_materiale(conn, materiale_id), con_testo=True)
 
 
+def togli_materiali(conn: sqlite3.Connection, righe: list[sqlite3.Row]) -> list[str]:
+    """Dentro una transazione: cancella il materiale e segna da rifare la scheda del prof se è andata
+    via una verifica o un'interrogazione. Torna i file da togliere dal disco dopo il database.
+
+    Le lezioni ristrette a questo materiale lo tengono nell'elenco: se non resta niente, la
+    preparazione si ferma con una frase chiara invece di allargarsi a tutto il materiale."""
+    da_rifare = set()
+    for r in righe:
+        conn.execute("DELETE FROM materiali WHERE id = ?", (r["id"],))
+        if r["stato"] == "pronto" and r["tipo"] in DEL_PROF:
+            da_rifare.add(r["materia_id"])
+    for materia_id in da_rifare:
+        schede.segna_da_aggiornare(conn, materia_id)
+    return [r["percorso"] for r in righe if r["percorso"]]
+
+
+def togli_file(s: Servizi, percorsi: list[str]) -> None:
+    for percorso in percorsi:
+        try:
+            (Path(s.settings.dati_dir) / percorso).unlink()
+        except OSError:
+            pass
+
+
 @router.delete("/materiale/{materiale_id}")
 def cancella(materiale_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     r = trova_materiale(conn, materiale_id)
-    # Le lezioni ristrette a questo materiale lo tengono nell'elenco: se non resta niente, la
-    # preparazione si ferma con una frase chiara invece di allargarsi a tutto il materiale.
     with db.transazione(conn):
-        conn.execute("DELETE FROM materiali WHERE id = ?", (materiale_id,))
-        # Una verifica o un'interrogazione in meno: la scheda del prof si rifà senza.
-        if r["stato"] == "pronto" and r["tipo"] in DEL_PROF:
-            schede.segna_da_aggiornare(conn, r["materia_id"])
+        percorsi = togli_materiali(conn, [r])
     s.lavoro.sveglia("sfondo")
-    if r["percorso"]:
-        try:
-            (Path(s.settings.dati_dir) / r["percorso"]).unlink()
-        except OSError:
-            pass
+    togli_file(s, percorsi)
     return {"ok": True}
 
 

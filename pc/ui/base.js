@@ -153,6 +153,8 @@
     confronta: 'M17 3l4 4-4 4 M3 7h18 M7 21l-4-4 4-4 M21 17H3',
     quasi: 'M5 12h14',
     riassunto: 'M21 6H3 M17 10H3 M21 14H3 M17 18H3',
+    // §42: cartella a contorno (Feather "folder", licenza MIT).
+    cartella: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z',
   };
   const PIENE = {
     play: 'M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z',
@@ -319,9 +321,9 @@
     const menu = S.dom.menu;
     if (!menu) return;
     const v = S.rotta.vista;
-    const dentroMateria = ['materia', 'scheda', 'schema', 'simulata', 'riassunto'].includes(v);
+    const dentroMateria = ['materia', 'scheda', 'cartella', 'schema', 'simulata', 'riassunto'].includes(v);
     // Da uno schema o da una verifica la materia accesa è la loro (l'id nella rotta è il loro, non della materia).
-    const materiaAccesa = v === 'materia' || v === 'scheda' ? S.rotta.id : dentroMateria ? S.materiaAperta : null;
+    const materiaAccesa = v === 'materia' || v === 'scheda' || v === 'cartella' ? S.rotta.id : dentroMateria ? S.materiaAperta : null;
     const attiva = (nome) => (nome === v || (nome === 'materie' && dentroMateria) || (nome === 'lezioni' && (v === 'lettore' || v === 'lezione')) || (nome === 'oggi' && v === 'racconta'));
     const voce = (nome, etichetta, icona_) => h('button', {
       type: 'button', class: 'voce-menu' + (attiva(nome) ? ' attiva' : ''), 'data-vista': nome, 'aria-current': attiva(nome) ? 'page' : null,
@@ -568,7 +570,7 @@
   // --- Trascinare i file (§2: nella pagina di una materia e in Per Gemini) -----------------------
 
   const conFile = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
-  const paginaConFile = () => ['materia', 'gemini', 'scheda'].includes(S.rotta.vista) && !S.velo.some((v) => !v.accettaFile);
+  const paginaConFile = () => ['materia', 'cartella', 'gemini', 'scheda'].includes(S.rotta.vista) && !S.velo.some((v) => !v.accettaFile);
   function accendi(si) {
     document.querySelectorAll('.zona-trascina').forEach((z) => z.classList.toggle('accesa', !!si));
   }

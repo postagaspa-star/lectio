@@ -16,7 +16,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import ai, db, lettura, memoria, prompt, riassunti, schema_ripasso, simulata, titoli
+from . import ai, cartelle, db, lettura, memoria, prompt, riassunti, schema_ripasso, simulata, titoli
 from . import scheda as schede
 from .ai import RispostaNonUsabile
 from .audio import ErroreMontaggio
@@ -167,6 +167,9 @@ class Lavoro:
                 lavori += [(("titolo", r["id"]), self.scrivi_titolo, r["id"]) for r in conn.execute(
                     "SELECT id FROM materiali WHERE stato = 'pronto' AND titolo_da = 'file' AND da_prova = 0"
                     " AND length(testo) >= ? ORDER BY id", (titoli.TITOLO_MINIMO_CARATTERI,))]
+            # Contratto 27: un file nuovo appena letto (e col suo titolo) va nella sua cartella, se è chiara.
+            lavori += [(("cartella", r["id"]), lambda mid: cartelle.sistema(self.db_path, mid), r["id"]) for r in conn.execute(
+                "SELECT id FROM materiali WHERE stato = 'pronto' AND cartella_da = 'attesa' ORDER BY id")]
             # La memoria sui documenti: prima i pezzi, poi i vettori.
             lavori += [(("memoria", r["id"]), self.indicizza, r["id"]) for r in conn.execute(memoria.SENZA_PEZZI + " ORDER BY m.id")]
             if self.ctx.vettori is not None and time.monotonic() >= self._vettori_dopo and conn.execute(

@@ -213,6 +213,7 @@ public class ClientContrattoTest
     [InlineData("tetto_vicino", true)]
     [InlineData("scheda_aggiornata", false)]
     [InlineData("materiale_letto", false)]
+    [InlineData("materiale_in_cartella", false)]
     public void Quali_novita_diventano_un_avviso_di_windows(string tipo, bool avviso)
     {
         var n = Motore.Motore.NotificaPer(new VoceNovita { Id = 1, Tipo = tipo, Testo = "x", LezioneId = 3 });
@@ -233,6 +234,32 @@ public class ClientContrattoTest
         Assert.Contains("name=tipo", q.Corpo);
         Assert.Contains("Verifica 12 ottobre", q.Corpo);
         Assert.Contains("2026-10-12", q.Corpo);
+        // Senza cartella scelta il campo non c'è: la sceglie Lectio dopo averlo letto (contratto §27).
+        Assert.DoesNotContain("cartella_id", q.Corpo);
+    }
+
+    [Fact]
+    public async Task Con_la_cartella_scelta_il_multipart_porta_cartella_id_come_testo()
+    {
+        using var b = new Banco(_ => (201, "{\"id\":41,\"stato\":\"in_lettura\",\"cartella_id\":3}"));
+        var r = await b.Motore.CaricaFileAsync(1, "appunti", null, null, "arte.txt", System.Text.Encoding.UTF8.GetBytes("Mirone e il Discobolo"), 3);
+        Assert.Equal(201, r.Stato);
+        var q = b.Finto.Ricevute.Single();
+        Assert.Equal("/api/materie/1/materiale", q.Percorso);
+        Assert.Contains("name=cartella_id", q.Corpo);
+        Assert.Matches(@"name=cartella_id\r?\n(?:[^\r\n]+\r?\n)*\r?\n3\r?\n", q.Corpo);
+    }
+
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(-4L)]
+    public async Task Una_cartella_che_non_puo_esserci_si_ferma_prima(long cartella)
+    {
+        using var b = new Banco(_ => Ok("{}"));
+        var r = await b.Motore.CaricaFileAsync(1, "appunti", null, null, "arte.txt", new byte[] { 65 }, cartella);
+        Assert.Equal(422, r.Stato);
+        Assert.Contains("cartella", Json.Testo(Json.Nodo(r.Json)!["errore"]));
+        Assert.Empty(b.Finto.Ricevute);
     }
 
     [Theory]

@@ -65,7 +65,7 @@ class VisitaTest {
     fun nelleNovitaSiAvanzaSoloFacendo() {
         val (v, _) = nuova()
         v.iniziaNovita()
-        assertFalse(v.azione(Bersagli.NUOVO_SCHEMA))
+        assertFalse(v.azione(Bersagli.RIGA_SCHEMA))
         assertEquals(0, v.indice)
         assertTrue(v.azione(Bersagli.SEGMENTO_SCHEMI))
         assertEquals(1, v.indice)
@@ -113,7 +113,9 @@ class VisitaTest {
         assertEquals(SchermataVisita.FOGLIO_AGGIUNGI, aperte.last())
         v.avanti() // testo per Gemini
         assertEquals(SchermataVisita.MATERIA, aperte.last())
-        v.azione(Bersagli.NUOVA_LEZIONE)
+        // Nuovo apre il foglio e basta: si va avanti toccando Lezione da ascoltare (aspetto.md §43.4).
+        assertFalse(v.azione(Bersagli.NUOVO))
+        assertTrue(v.azione(Bersagli.RIGA_LEZIONE))
         assertEquals(SchermataVisita.NUOVA_LEZIONE, aperte.last())
         assertEquals(Bersagli.RIEPILOGO, v.corrente.bersaglio)
         assertEquals("Come la vuoi", v.corrente.titolo)
@@ -171,12 +173,55 @@ class VisitaTest {
     fun ilPasso7IlluminaLaBarraDelRiepilogo() {
         val (v, _) = nuova()
         v.inizia()
-        repeat(6) { if (v.corrente.pratico) v.azione(v.corrente.bersaglio!!) else v.avanti() }
+        repeat(6) { if (v.corrente.pratico) v.azione(v.corrente.azioneGiusta!!) else v.avanti() }
         assertEquals(Bersagli.RIEPILOGO, v.corrente.bersaglio)
         assertEquals("Scegli materiale, tipo e indicazioni: qui vedi cosa esce e quanto costa.", v.corrente.frase)
         assertNull("prima che la barra si veda non c'è niente da illuminare", v.rettangolo())
         v.bersagli[Bersagli.PREPARA] = Rect(16f, 760f, 374f, 814f)
         v.bersagli[Bersagli.RIEPILOGO] = Rect(0f, 712f, 390f, 844f)
         assertEquals(Rect(0f, 712f, 390f, 844f), v.rettangolo())
+    }
+
+    /** aspetto.md §43.4: il passo indica Nuovo, poi (col foglio aperto) la riga giusta. */
+    @Test
+    fun ilPassoDellaLezioneIndicaNuovoEPoiLaRiga() {
+        val (v, aperte) = nuova()
+        v.inizia()
+        repeat(5) { if (v.corrente.pratico) v.azione(v.corrente.azioneGiusta!!) else v.avanti() }
+        val passo = v.corrente
+        assertEquals(Bersagli.NUOVO, passo.bersaglio)
+        assertEquals(Bersagli.RIGA_LEZIONE, passo.poi)
+        assertEquals("Tocca Nuovo, poi Lezione da ascoltare, per prepararne una.", passo.frase)
+        assertEquals(SchermataVisita.MATERIA, aperte.last())
+        // Prima il riflettore è su Nuovo.
+        v.bersagli[Bersagli.NUOVO] = Rect(16f, 770f, 374f, 828f)
+        v.bersagli[Bersagli.RIGA_LEZIONE] = Rect(16f, 300f, 374f, 380f)
+        assertEquals(Rect(16f, 770f, 374f, 828f), v.rettangolo())
+        // Col foglio aperto passa alla riga; toccare Nuovo o un'altra riga non fa avanzare.
+        v.bersaglioTemporaneo = passo.poi
+        assertEquals(Rect(16f, 300f, 374f, 380f), v.rettangolo())
+        assertFalse(v.azione(Bersagli.NUOVO))
+        assertFalse(v.azione(Bersagli.RIGA_SCHEMA))
+        assertEquals(5, v.indice)
+        assertTrue(v.azione(Bersagli.RIGA_LEZIONE))
+        assertEquals(SchermataVisita.NUOVA_LEZIONE, aperte.last())
+    }
+
+    @Test
+    fun ilPassoDelloSchemaIndicaNuovoEPoiSchema() {
+        val (v, aperte) = nuova()
+        v.iniziaNovita()
+        assertTrue(v.azione(Bersagli.SEGMENTO_SCHEMI))
+        assertEquals(Bersagli.NUOVO, v.corrente.bersaglio)
+        assertEquals(Bersagli.RIGA_SCHEMA, v.corrente.poi)
+        assertEquals("Si crea come una lezione.", v.corrente.frase)
+        assertFalse(v.azione(Bersagli.NUOVO))
+        assertFalse(v.azione(Bersagli.RIGA_LEZIONE))
+        assertTrue(v.azione(Bersagli.RIGA_SCHEMA))
+        assertEquals(SchermataVisita.NUOVO_SCHEMA, aperte.last())
+        // Tornando indietro si riparte dalla materia, col foglio chiuso.
+        v.indietro()
+        assertEquals(Bersagli.NUOVO, v.corrente.bersaglio)
+        assertEquals(SchermataVisita.MATERIA, aperte.last())
     }
 }

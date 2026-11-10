@@ -147,6 +147,8 @@ data class StatoSchema(
     val eliminato: Boolean = false,
     val erroreRiassunto: String? = null,
     val apriRiassunto: String? = null,
+    /** Arrivati da "Riassunto" nel foglio Nuovo della materia: il foglio dei riassunti si apre da solo (§43.3). */
+    val chiediRiassunti: Boolean = false,
 )
 
 class SchemaViewModel(private val sorgente: Sorgente, val schemaId: Long) : ViewModel() {
@@ -268,6 +270,12 @@ class SchemaViewModel(private val sorgente: Sorgente, val schemaId: Long) : View
     fun riassuntoAperto() = _stato.update { it.copy(apriRiassunto = null, erroreRiassunto = null) }
     fun erroreRiassuntoVisto() = _stato.update { it.copy(erroreRiassunto = null) }
 
+    /** Apri la lettura col foglio "Che riassunto vuoi?" già aperto (aspetto.md §43.3). */
+    fun chiediRiassunti() = _stato.update { it.copy(chiediRiassunti = true) }
+
+    /** Il foglio è aperto, o la pagina è stata chiusa prima: la richiesta non vale più. */
+    fun riassuntiChiesti() = _stato.update { it.copy(chiediRiassunti = false) }
+
     private companion object {
         const val LARGHEZZA_MASSIMA = 1400
     }
@@ -315,6 +323,8 @@ fun LetturaSchemaScreen(
             azioni.apriRiassunto(it)
         }
     }
+    // Se si esce prima che lo schema si apra, la prossima volta si parte normale.
+    DisposableEffect(vm) { onDispose { vm.riassuntiChiesti() } }
     val c = L.colori
     val m = materia(s.materia?.colore)
     val offline = senzaRete && !esempio
@@ -624,6 +634,12 @@ private fun Lettura(
         }
     }
     LaunchedEffect(s.apriRiassunto) { if (s.apriRiassunto != null) foglioRiassunto = false }
+    LaunchedEffect(s.chiediRiassunti) {
+        if (s.chiediRiassunti) {
+            foglioRiassunto = true
+            vm.riassuntiChiesti()
+        }
+    }
 }
 
 /** Il testo si ferma a 580 dp in orizzontale o su tablet (aspetto.md §33.1). */

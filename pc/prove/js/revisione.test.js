@@ -132,7 +132,7 @@ test('4. scheda del prof: un argomento nuovo ha esempio vuoto (mai null); righe 
 test('5. la visita guidata non scrive punti di ascolto sul computer (la lezione 12 vera resta pulita)', opz, async () => {
   const p = await apri();
   await p.A.avviaVisita(false);
-  for (let i = 1; i <= 7; i++) await p.A.visitaVai(i);
+  for (let i = 1; i <= 8; i++) await p.A.visitaVai(i);
   await p.aspetta(() => p.q('#risposta-domanda'), 4000);
   p.scrivi(p.q('#risposta-domanda'), 'Seiano');
   p.clic(p.q('[data-azione="invia-risposta"]'));

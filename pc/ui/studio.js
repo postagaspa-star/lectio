@@ -186,6 +186,78 @@
     return rigaStudio(m, 'verifica', { 'data-simulata': String(x.id) }, x.titolo || x.argomento, frase, () => A.vai('#simulata/' + x.id), destra, menu, st.tipo === 'lavoro' ? A.barra(st.percentuale, 'sottile') : null);
   };
 
+  // --- Il pulsante Nuovo: "Cosa vuoi fare?" (§43) ---------------------------------------------------------------
+
+  /**
+   * La finestra "Cosa vuoi fare?" della materia: cinque righe una sotto l'altra. Riassunto ha il passo 2 nella stessa
+   * finestra ("Da quale schema?"), saltato se lo schema pronto è uno solo. La finestra si chiude da sola quando si
+   * apre quello che si è scelto. `o.schemi` = gli schemi della materia se la pagina li ha già, altrimenti si chiedono.
+   */
+  A.apriNuovo = function (m, opzioni) {
+    const o = opzioni || {};
+    const st = { passo: 'scelta', schemi: Array.isArray(o.schemi) ? o.schemi : null };
+    const corpo = h('div', { class: 'corpo bianco' });
+    const ctl = A.apriFinestra({ stretta: true, etichetta: 'Cosa vuoi fare?', classe: 'finestra-nuovo ' + A.classeMateria(m.colore), disegna: (f) => svuota(f, corpo) });
+    ctl.tipo = 'cosa-fare';
+    const chiudi = () => h('button', { type: 'button', class: 'tondo', 'aria-label': 'Chiudi', 'data-azione': 'chiudi-nuovo', onclick: () => ctl.chiudi() }, icona('chiudi'));
+    const riga = (attributi, nomeIcona, nome, frase, fai) => h('button', Object.assign({ type: 'button', class: 'nuovo-riga', onclick: fai }, attributi),
+      h('span', { class: 'nuovo-piastrella', 'aria-hidden': 'true' }, icona(nomeIcona)),
+      h('span', { class: 'testi' }, h('span', { class: 'n' }, nome), h('span', { class: 'f' }, frase)),
+      icona('freccia'));
+
+    function apriSchemaConRiassunto(id) {
+      ctl.chiudi(true);
+      // §43.3: la lettura dello schema si apre con "Che riassunto vuoi?" già aperto (schemi.js lo legge e lo spegne).
+      S.riassuntoDaAprire = id;
+      A.vai('#schema/' + id);
+    }
+
+    function scegli(k) {
+      if (ctl.chiuso) return;
+      if (k === 'riassunto') {
+        const pronti = L.schemiPronti(st.schemi);
+        if (pronti.length === 1) { apriSchemaConRiassunto(pronti[0].id); return; }
+        st.passo = 'schema';
+        disegna();
+        return;
+      }
+      ctl.chiudi(true);
+      const att = A.materiaDi(m.id) || m;
+      // Lezione, schema e verifica simulata partono con la prossima data della materia già scelta, come prima.
+      if (k === 'lezione') { if (A.visitaEvento) A.visitaEvento('nuova-lezione'); A.nuovaLezione(att.id); }
+      else if (k === 'schema') { if (A.visitaEvento) A.visitaEvento('nuovo-schema'); A.nuovoSchema(att.id); }
+      else if (k === 'simulata') A.nuovaSimulata(att.id);
+      else if (k === 'lampo') A.apriLampo({ materiaId: att.id });
+    }
+
+    function disegna() {
+      const att = A.materiaDi(m.id) || m;
+      if (st.passo === 'schema') {
+        svuota(corpo,
+          h('div', { class: 'testa-finestra' }, A.frecciaIndietro(() => { st.passo = 'scelta'; disegna(); }), h('h2', { class: 'titolo-sezione titolo-finestra' }, 'Da quale schema?'), chiudi()),
+          h('div', { class: 'nuovo-righe', 'data-passo': 'schema' }, L.schemiPronti(st.schemi).map((x) => riga({ 'data-schema-scelto': String(x.id) }, 'testo', x.titolo || x.argomento, L.statoRigaSchema(x).frase, () => apriSchemaConRiassunto(x.id)))));
+        const primo = corpo.querySelector('.nuovo-riga');
+        if (primo) setTimeout(() => { if (!ctl.chiuso) primo.focus(); }, 30);
+        return;
+      }
+      const righe = L.righeNuovo({ lampo: (att.conteggi || {}).lampo, pronti: st.schemi ? L.schemiPronti(st.schemi).length : null, senzaRete: !!S.senzaRete, schedeSalvate: false });
+      svuota(corpo,
+        h('div', { class: 'testa-finestra' }, h('h2', { class: 'titolo-sezione titolo-finestra' }, 'Cosa vuoi fare?'), A.pillolaMateria(att), chiudi()),
+        h('div', { class: 'nuovo-righe', 'data-passo': 'scelta' }, righe.map((r) => riga({ 'data-scelta': r.scelta, 'data-visita': 'scelta-' + r.scelta, disabled: r.spenta ? true : null }, r.icona, r.nome, r.frase, () => scegli(r.scelta)))));
+    }
+
+    disegna();
+    setTimeout(() => { const b = corpo.querySelector('.nuovo-riga:not(:disabled)'); if (b && !ctl.chiuso) b.focus(); }, 30);
+    if (!st.schemi) {
+      A.api.get('/server/api/schemi?materia_id=' + m.id).then((r) => {
+        if (ctl.chiuso || !r.ok) return;
+        st.schemi = r.dati || [];
+        if (st.passo === 'scelta') disegna();
+      });
+    }
+    return ctl;
+  };
+
   // --- Nuovo schema e Nuova verifica simulata (§32, §36.1) ------------------------------------------------------
 
   const GENERI = {
@@ -208,7 +280,7 @@
     if (!m) { A.avviso('Questa materia non c\'è più.'); return null; }
     const st = {
       argomento: o.argomento || '', eventoId: o.eventoId !== undefined ? o.eventoId : undefined, indicazioni: o.indicazioni || '', forma: o.forma || 'auto', livello: o.livello || 'completo', minuti: o.minuti || 50,
-      eventi: [], materiale: [], erroreMateriale: null, auto: !Array.isArray(o.materiali), suggeriti: [], suggeritiArrivati: false, manuali: [], cerca: '',
+      eventi: [], materiale: [], cartelle: [], erroreMateriale: null, auto: !Array.isArray(o.materiali), suggeriti: [], suggeritiArrivati: false, manuali: [], cerca: '',
       stima: null, chiaveStima: null, erroreStima: null, invio: false, errore: null, chiusa: false,
     };
     const seqStima = L.creaSequenza();
@@ -229,14 +301,17 @@
     svuota(corpo, testa(), A.segnaposto(5));
 
     const oggi = L.iso();
-    const [, rm, re] = await Promise.all([
+    const [, rm, re, , rc] = await Promise.all([
       S.impostazioni ? null : A.caricaImpostazioni(),
       A.api.get('/server/api/materie/' + m.id + '/materiale'),
       A.api.get('/server/api/eventi?da=' + oggi),
       S.salute ? null : A.caricaSalute(),
+      A.cartelle.carica(m.id),
     ]);
     if (st.chiusa) return ctl;
     st.materiale = rm.ok ? rm.dati || [] : [];
+    // §42.7: le cartelle servono solo per le pillole e per il nome nelle righe; senza, si sceglie come prima.
+    st.cartelle = rc && rc.ok ? rc.dati || [] : [];
     if (!rm.ok) st.erroreMateriale = rm.errore;
     st.eventi = re.ok ? (re.dati || []).filter((e) => e.materia_id === m.id && L.giorniFra(oggi, e.data) >= 0).sort((a, b) => a.data.localeCompare(b.data)) : [];
     if (st.eventoId === undefined) st.eventoId = st.eventi.length ? st.eventi[0].id : null;
@@ -256,6 +331,7 @@
     el.per = h('div', { class: 'nl-riga-per', role: 'group', 'aria-label': 'Per' });
     el.conta = h('span', { class: 'nl-conta', 'data-conta': 'materiale' });
     el.modi = h('div', { class: 'nl-modi' });
+    el.cartelle = h('div', { class: 'nl-cartelle-box' });
     el.cerca = h('input', { class: 'nl-cerca', id: 'nl-cerca', type: 'search', placeholder: 'Cerca nel materiale', 'aria-label': 'Cerca nel materiale', autocomplete: 'off' });
     el.cerca.addEventListener('input', () => { st.cerca = el.cerca.value; disegnaRighe(); });
     el.studio = h('div', { class: 'nl-righe', 'data-gruppo': 'studio' });
@@ -284,7 +360,7 @@
       h('div', { class: 'nl-griglia' },
         h('div', { class: 'nl-sezioni' },
           sezione(1, 'Su cosa', null, h('label', { class: 'campo-gruppo', for: 'nl-argomento' }, etichetta('Argomento'), el.argomento), el.per),
-          sezione(2, 'Da quale materiale', el.conta, el.modi,
+          sezione(2, 'Da quale materiale', el.conta, el.modi, el.cartelle,
             st.erroreMateriale ? A.messaggio('errore', st.erroreMateriale) : null,
             etichetta('Appunti e libro'), el.studio, h('span', { class: 'etichetta nl-gruppo' }, 'Verifiche e interrogazioni del prof'), el.prof),
           sezione(3, G.sezione3, null,
@@ -369,6 +445,14 @@
       dopoCambioMateriale();
     }
 
+    /** §42.7: una pillola cartella spunta o toglie tutto il suo materiale pronto; conta come un tocco di Andrea. */
+    function toccaCartella(ids) {
+      const ora = spuntati();
+      st.auto = false;
+      st.manuali = L.alternaCartella(ora, ids);
+      dopoCambioMateriale();
+    }
+
     function modo(quale) {
       if (quale === 'auto') {
         st.auto = true;
@@ -413,6 +497,7 @@
         pillola('Tutti', !st.auto && tot > 0 && n === tot, () => modo('tutti'), { 'data-modo': 'tutti' }),
         pillola('Nessuno', !st.auto && n === 0, () => modo('nessuno'), { 'data-modo': 'nessuno' }),
         h('span', { class: 'spazio' }), el.cerca);
+      svuota(el.cartelle, A.pilloleCartelleScelta(st.materiale, st.cartelle, spuntati(), toccaCartella));
       disegnaRighe();
     }
 
@@ -426,11 +511,11 @@
         return h('button', { type: 'button', class: 'nl-mat', role: 'checkbox', 'aria-checked': si ? 'true' : 'false', 'data-scelta': String(x.id), disabled: pronto ? null : true, title: x.titolo || null, onclick: () => tocca(x.id) },
           h('span', { class: 'nl-casella', 'aria-hidden': 'true' }, icona('spunta')),
           h('span', { class: 'testi' }, h('span', { class: 't' }, x.titolo || x.nome_file || 'Materiale'),
-            pronto ? h('span', { class: 's' }, L.sottoMateriale(x)) : h('span', { class: 's leggo' }, 'Lo sto leggendo')),
+            pronto ? h('span', { class: 's' }, L.sottoMateriale(x, st.cartelle)) : h('span', { class: 's leggo' }, 'Lo sto leggendo')),
           pronto && sugg.includes(x.id) ? h('span', { class: 'nl-sugg' }, 'argomento') : null);
       };
       const elenco = (box, lista, vuoto) => {
-        const visti = L.filtraPerTitolo(lista, st.cerca);
+        const visti = L.filtraPerTitolo(lista, st.cerca, st.cartelle);
         svuota(box, visti.length ? visti.map(riga) : h('span', { class: 'nl-vuoto' }, lista.length ? 'Nessun titolo con queste parole' : vuoto));
       };
       elenco(el.studio, g.studio, 'Nessuno ancora');

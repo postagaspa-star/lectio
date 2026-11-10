@@ -74,12 +74,28 @@ object SceltaMateriale {
     fun normalizza(t: String): String =
         Normalizer.normalize(t.lowercase(Locale.ITALIAN), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
-    /** Il filtro di "Cerca nel materiale": per titolo, senza badare ad accenti e maiuscole. */
-    fun filtra(elenco: List<Materiale>, cerca: String): List<Materiale> {
+    /**
+     * Il filtro di "Cerca nel materiale": per titolo e (v1.6, aspetto.md §42.7) per nome della
+     * cartella, senza badare ad accenti e maiuscole.
+     */
+    fun filtra(elenco: List<Materiale>, cerca: String, nomeCartella: (Materiale) -> String? = { null }): List<Materiale> {
         val f = normalizza(cerca.trim())
         if (f.isEmpty()) return elenco
-        return elenco.filter { normalizza(it.titolo).contains(f) }
+        return elenco.filter { normalizza(it.titolo).contains(f) || nomeCartella(it)?.let { n -> normalizza(n).contains(f) } == true }
     }
+
+    /**
+     * Le pillole CARTELLE (aspetto.md §42.7): le cartelle con materiale pronto, ognuna con gli
+     * id del suo materiale pronto, in ordine alfabetico.
+     */
+    fun cartelleConPronti(cartelle: List<eu.stgm.lectio.dati.Cartella>, pronti: List<Materiale>): List<Pair<eu.stgm.lectio.dati.Cartella, List<Long>>> =
+        cartelle.sortedBy { normalizza(it.nome) }
+            .map { c -> c to pronti.filter { it.cartellaId == c.id }.map { it.id } }
+            .filter { it.second.isNotEmpty() }
+
+    /** Il tocco su una pillola cartella: se era tutto spuntato lo toglie, altrimenti lo spunta tutto. */
+    fun alternaCartella(scelti: Set<Long>, ids: List<Long>): Set<Long> =
+        if (ids.isNotEmpty() && ids.all { it in scelti }) scelti - ids.toSet() else scelti + ids
 
     fun nomeTipo(tipo: String): String = when (tipo) {
         "verifica" -> "Verifica"
@@ -89,9 +105,13 @@ object SceltaMateriale {
         else -> "Altro"
     }
 
-    /** "Appunti · foto · 4 novembre" sotto il titolo della riga. */
-    fun sotto(m: Materiale, oggi: LocalDate = LocalDate.now()): String = listOfNotNull(
+    /**
+     * "Appunti · foto · 4 novembre" sotto il titolo della riga; con la cartella (v1.6, aspetto.md
+     * §42.7) il suo nome va dopo il tipo: "Appunti · Arte greca · foto · 4 novembre".
+     */
+    fun sotto(m: Materiale, oggi: LocalDate = LocalDate.now(), cartella: String? = null): String = listOfNotNull(
         nomeTipo(m.tipo),
+        cartella?.takeIf { it.isNotBlank() },
         when (m.origine) {
             "foto" -> "foto"
             "file" -> "file"

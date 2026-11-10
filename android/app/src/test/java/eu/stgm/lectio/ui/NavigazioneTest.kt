@@ -41,9 +41,12 @@ class NavigazioneTest {
             Pagina.Materia(1, 2), Pagina.NuovaLezione(1, 3, "Il Discobolo: storia", listOf(4, 5)), Pagina.NuovaLezione(1, null, "Solo argomento", null),
             Pagina.NuovoSchema(1), Pagina.NuovoSchema(1, 3, 9), Pagina.Schema(31), Pagina.Riassunto(31, "punti"),
             Pagina.NuovaSimulata(1), Pagina.NuovaSimulata(1, 3, 9), Pagina.Simulata(41), Pagina.Lampo(), Pagina.Lampo(1),
+            Pagina.Cartella(51, 1),
         ))
         assertEquals(n, Navigazione.decodifica(n.codifica()))
         assertEquals(Navigazione(), Navigazione.decodifica("spazzatura"))
+        // Una cartella senza la sua materia non si apre.
+        assertEquals(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(1))), Navigazione.decodifica("OGGI|materia:1:|cartella:51"))
     }
 
     @Test

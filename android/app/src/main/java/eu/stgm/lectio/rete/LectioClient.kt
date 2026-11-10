@@ -1,7 +1,13 @@
 package eu.stgm.lectio.rete
 
 import eu.stgm.lectio.dati.Abbinamento
+import eu.stgm.lectio.dati.Cartella
+import eu.stgm.lectio.dati.CartellaEliminata
 import eu.stgm.lectio.dati.CorpoAbbina
+import eu.stgm.lectio.dati.CorpoEliminaCartella
+import eu.stgm.lectio.dati.NomeCartella
+import eu.stgm.lectio.dati.Proposti
+import eu.stgm.lectio.dati.Spostati
 import eu.stgm.lectio.dati.Chiarimento
 import eu.stgm.lectio.dati.CorpoAscolto
 import eu.stgm.lectio.dati.CorpoChiarimento
@@ -55,7 +61,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Call
@@ -210,14 +219,18 @@ class LectioClient(
     suspend fun caricaTesto(materiaId: Long, scritto: MaterialeScritto): Esito<Materiale> =
         chiama("POST", "/api/materie/$materiaId/materiale", JsonLectio.encodeToString(MaterialeScritto.serializer(), scritto), Materiale.serializer())
 
-    /** Multipart: `file` più `tipo`, `titolo`, `data` facoltativi (§6). */
-    suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?): Esito<Materiale> {
+    /**
+     * Multipart: `file` più `tipo`, `titolo`, `data` facoltativi (§6). v1.6 §27: `cartella_id`
+     * (come testo) solo se scelta; senza, la cartella la sceglie Lectio dopo averlo letto.
+     */
+    suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?, cartellaId: Long? = null): Esito<Materiale> {
         val corpo = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", file.nome, file.file.asRequestBody(file.tipoMime.toMediaTypeOrNull()))
             .addFormDataPart("tipo", tipo)
             .apply {
                 titolo?.trim()?.takeIf { it.isNotEmpty() }?.let { addFormDataPart("titolo", it) }
                 data?.takeIf { it.isNotBlank() }?.let { addFormDataPart("data", it) }
+                cartellaId?.let { addFormDataPart("cartella_id", it.toString()) }
             }
             .build()
         val conf = configurazione()
@@ -231,7 +244,7 @@ class LectioClient(
         return interpreta(risposta.codice, risposta.corpo, Materiale.serializer())
     }
 
-    /** v1.4 §16.3: PATCH con i soli campi cambiati (`titolo`, `tipo`). */
+    /** v1.4 §16.3: PATCH con i soli campi cambiati (`titolo`, `tipo`; v1.6 anche `cartella_id`, null = fuori). */
     suspend fun modificaMateriale(id: Long, cambi: JsonObject): Esito<Materiale> =
         chiama("PATCH", "/api/materiale/$id", cambi.toString(), Materiale.serializer())
 
@@ -241,6 +254,29 @@ class LectioClient(
 
     suspend fun eliminaMateriale(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/materiale/$id", null)
     suspend fun riprovaMateriale(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/materiale/$id/riprova", CORPO_VUOTO)
+
+    // --- §27 Cartelle -------------------------------------------------------------------------
+
+    suspend fun cartelle(materiaId: Long): Esito<List<Cartella>> =
+        chiama("GET", "/api/materie/$materiaId/cartelle", null, ListSerializer(Cartella.serializer()))
+
+    suspend fun creaCartella(materiaId: Long, nome: String): Esito<Cartella> =
+        chiama("POST", "/api/materie/$materiaId/cartelle", JsonLectio.encodeToString(NomeCartella.serializer(), NomeCartella(nome)), Cartella.serializer())
+
+    suspend fun rinominaCartella(id: Long, nome: String): Esito<Cartella> =
+        chiama("PATCH", "/api/cartelle/$id", JsonLectio.encodeToString(NomeCartella.serializer(), NomeCartella(nome)), Cartella.serializer())
+
+    /** Con [conIFile] false i file restano nella materia, fuori dalle cartelle; con true si cancellano. */
+    suspend fun eliminaCartella(id: Long, conIFile: Boolean): Esito<CartellaEliminata> =
+        chiama("DELETE", "/api/cartelle/$id", JsonLectio.encodeToString(CorpoEliminaCartella.serializer(), CorpoEliminaCartella(conIFile = conIFile)), CartellaEliminata.serializer())
+
+    /** [cartellaId] null = fuori dalle cartelle (si manda proprio `null`). */
+    suspend fun sposta(materiaId: Long, materiali: List<Long>, cartellaId: Long?): Esito<Spostati> =
+        chiama("POST", "/api/materie/$materiaId/sposta", corpoSposta(materiali, cartellaId).toString(), Spostati.serializer())
+
+    /** Il materiale fuori dalle cartelle che parla di questa: si spunta già in "Metti dei file qui". */
+    suspend fun proposti(cartellaId: Long): Esito<Proposti> =
+        chiama("GET", "/api/cartelle/$cartellaId/proposti", null, Proposti.serializer())
 
     // --- §7 Eventi ----------------------------------------------------------------------------
 
@@ -729,5 +765,11 @@ class LectioClient(
 
         /** Il corpo di un PATCH con un solo campo. */
         fun campo(nome: String, valore: String): JsonObject = buildJsonObject { put(nome, valore) }
+
+        /** `{"materiali": [4, 7], "cartella_id": 3}`; con [cartellaId] null il campo c'è e vale null (fuori). */
+        fun corpoSposta(materiali: List<Long>, cartellaId: Long?): JsonObject = buildJsonObject {
+            put("materiali", JsonArray(materiali.map { JsonPrimitive(it) }))
+            put("cartella_id", cartellaId?.let { JsonPrimitive(it) } ?: JsonNull)
+        }
     }
 }

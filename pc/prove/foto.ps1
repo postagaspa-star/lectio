@@ -43,7 +43,10 @@ $tutte = [ordered]@{
     '20_vuota' = 'vuota'
     '21_visita_passo1' = 'visita&passo=1'
     '22_visita_passo5' = 'visita&passo=5'
-    '23_visita_passo8' = 'visita&passo=8'
+    '23_visita_passo9' = 'visita&passo=9'
+    '24_visita_passo7' = 'visita&passo=7'
+    '25_cosa_fare' = 'cosa-fare'
+    '26_cosa_fare_schema' = 'cosa-fare-schema'
     '30_colori' = 'colori'
     '31_schemi' = 'schemi'
     '32_simulate' = 'simulate'
@@ -70,9 +73,10 @@ $tutte = [ordered]@{
     '53_simulata_consegna' = 'simulata-consegna'
     '54_simulata_risultati' = 'simulata-risultati'
     '55_novita_passo1' = 'visita&modo=novita&passo=1'
-    '56_novita_passo6' = 'visita&modo=novita&passo=6'
-    '57_novita_passo11' = 'visita&modo=novita&passo=11'
-    '58_novita_passo13' = 'visita&modo=novita&passo=13'
+    '56_novita_passo7' = 'visita&modo=novita&passo=7'
+    '57_novita_passo12' = 'visita&modo=novita&passo=12'
+    '58_novita_passo14' = 'visita&modo=novita&passo=14'
+    '59_novita_passo3' = 'visita&modo=novita&passo=3'
 }
 if ($Scene) {
     # Con -File le scene arrivano come una stringa sola ("oggi,materia"): si dividono.

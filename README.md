@@ -26,6 +26,11 @@ Besides the audio lessons, Lectio writes study material from the same documents:
 - **Mock tests** in the format of the teacher's real ones, corrected with an estimated grade. Exercises are
   never invented: only those already in the documents are proposed.
 
+In each subject a single **New** button opens a choice between these: audio lesson, revision sheet, summary,
+mock test or quick review. The material of a subject can be grouped into folders (one level). When a new file
+is clearly about one folder, the server puts it there by itself after reading it, with plain word matching and
+no model, so it costs nothing; when it is not clear, the file stays outside and the student decides.
+
 Everything is written only from the student's documents. They are split into pieces on the server and searched
 with embeddings and keywords, with a fixed priority: book pages, then tests, then oral exams, then notes. The
 model only receives the selected passages, and every written piece is read again afterwards: sentences that
@@ -63,7 +68,7 @@ everything can be tried at no cost.
 Andrea made the product and design decisions (written answers instead of listening only, mandatory or
 skippable questions per lesson, the material living in the subject rather than in each lesson, choosing the
 material and the kind of lesson, his own instructions for each lesson, which free voices to keep after
-listening to samples) and tests the
+listening to samples, folders in each subject and one New button that asks what to make) and tests the
 apps in real use. The code was written with Claude Code, which also ran adversarial reviews of each part
 before release.
 

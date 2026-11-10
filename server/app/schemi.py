@@ -96,8 +96,25 @@ class MaterialeTestoIn(Corpo):
     titolo: str | None = Field(default=None, max_length=120)
     data: str | None = None
     testo: str = Field(min_length=1)
+    # Contratto 27: la cartella scelta da Andrea; se manca, la sceglie Lectio dopo averlo letto.
+    cartella_id: StrictInt | None = None
 
     _d = field_validator("data")(classmethod(lambda cls, v: _data(v)))
+
+
+class CartellaIn(Corpo):
+    nome: str = Field(max_length=200)
+
+
+class EliminaCartellaIn(Corpo):
+    conferma: StrictBool | None = None
+    con_i_file: StrictBool = False
+
+
+class SpostaIn(Corpo):
+    materiali: list[StrictInt] = Field(min_length=1, max_length=500)
+    # null = fuori dalle cartelle
+    cartella_id: StrictInt | None = None
 
 
 class EventoIn(Corpo):
@@ -149,6 +166,8 @@ class LezioneIn(Corpo):
 class MaterialePatch(Corpo):
     titolo: str | None = Field(default=None, max_length=400)
     tipo: TipoMateriale | None = None
+    # Contratto 27: se c'è (anche null = fuori dalle cartelle) lo sposta; se manca non cambia niente.
+    cartella_id: StrictInt | None = None
 
     @field_validator("titolo")
     @classmethod

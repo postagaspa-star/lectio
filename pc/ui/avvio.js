@@ -191,13 +191,13 @@
         break;
       }
       case 'nuova': case 'tetto':
-        await vai('#materia/1', '[data-visita="nuova-lezione"]');
+        await vai('#materia/1', '[data-visita="nuovo"]');
         A.nuovaLezione(1);
         await aspetta('[data-costo="espressiva"]');
         await new Promise((r) => setTimeout(r, 200));
         break;
       case 'preparazione': {
-        await vai('#materia/1', '[data-visita="nuova-lezione"]');
+        await vai('#materia/1', '[data-visita="nuovo"]');
         const corpo = h('div', { class: 'corpo su-fondo' });
         const piede = h('div', { class: 'piede' });
         const ctl = A.apriFinestra({ etichetta: 'In preparazione', classe: A.classeMateria('ambra'), disegna: (f) => svuota(f, corpo, piede) });
@@ -205,7 +205,7 @@
         break;
       }
       case 'pronta': {
-        await vai('#materia/1', '[data-visita="nuova-lezione"]');
+        await vai('#materia/1', '[data-visita="nuovo"]');
         const corpo = h('div', { class: 'corpo su-fondo' });
         const piede = h('div', { class: 'piede' });
         const ctl = A.apriFinestra({ etichetta: 'Lezione pronta', disegna: (f) => svuota(f, corpo, piede) });
@@ -243,8 +243,15 @@
       case 'colori': await vai('#materie', '.scheda-materia'); A.apriMateria(A.materiaDi(1)); await aspetta('.cerchio-colore'); document.querySelector('[data-colore="giada"]').click(); break;
       case 'schemi': await vai('#materia/1/schemi', '[data-schema]'); await aspetta('[data-simulata]'); S.dom.scorre.scrollTop = S.dom.scorre.scrollHeight; S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 1e6; break;
       case 'simulate': await vai('#materia/1/simulate', '[data-simulata]'); S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 1e6; break;
-      case 'nuovo-schema': await vai('#materia/1', '[data-visita="nuova-lezione"]'); A.nuovoSchema(1); await aspetta('[data-riep="immagini"]'); await new Promise((r) => setTimeout(r, 100)); break;
-      case 'simulata-nuova': await vai('#materia/1', '[data-visita="nuova-lezione"]'); A.nuovaSimulata(1); await aspetta('[data-riep="pronta"]'); await new Promise((r) => setTimeout(r, 100)); break;
+      case 'nuovo-schema': await vai('#materia/1', '[data-visita="nuovo"]'); A.nuovoSchema(1); await aspetta('[data-riep="immagini"]'); await new Promise((r) => setTimeout(r, 100)); break;
+      case 'simulata-nuova': await vai('#materia/1', '[data-visita="nuovo"]'); A.nuovaSimulata(1); await aspetta('[data-riep="pronta"]'); await new Promise((r) => setTimeout(r, 100)); break;
+      // §43.3 "Cosa vuoi fare?" e il suo passo 2 (Riassunto: da quale schema).
+      case 'cosa-fare': case 'cosa-fare-schema':
+        await vai('#materia/1', '[data-schema="3"]');
+        document.querySelector('[data-visita="nuovo"]').click();
+        await aspetta('[data-scelta="riassunto"]:not(:disabled)');
+        if (scena === 'cosa-fare-schema') { document.querySelector('[data-scelta="riassunto"]').click(); await aspetta('[data-schema-scelto]'); }
+        break;
       case 'schema': await vai('#schema/3', '.sch-parte'); break;
       case 'schema-sotto': await vai('#schema/3', '.sch-parte'); S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 900; await new Promise((r) => setTimeout(r, 200)); break;
       case 'schema-fine': await vai('#schema/3', '.sch-parte'); S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 1e6; await new Promise((r) => setTimeout(r, 200)); break;

@@ -165,7 +165,8 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
                 "TESTO: Perché Augusto non si fece chiamare re?\n## Domanda 2 (punti: 3)\nTESTO: Come cambia l'impero romano con Augusto?\n" +
                 "MIA RISPOSTA: L'impero romano diventa più stabile.\nCORREZIONI DEL PROF: Mancano le riforme dell'esercito."),
         Materiale(22, 1, "interrogazione", "Interrogazione su Tiberio", giorno(-8), "scritto", null, 812, "pronto", creatoIl = adessoIso,
-            titoloDa = "utente", testo = "Mi ha chiesto chi era Seiano. Ho risposto che era il capo dei pretoriani."),
+            titoloDa = "utente", testo = "Mi ha chiesto chi era Seiano. Ho risposto che era il capo dei pretoriani.",
+            cartellaId = CARTELLA_STORIA, cartellaDa = "utente"),
         Materiale(23, 1, "appunti", "Augusto e il principato", giorno(-6), "scritto", null, 2410, "pronto", creatoIl = adessoIso,
             titoloDa = "utente",
             testo = "Augusto: princeps, non re. Nasce l'impero romano. Pax augusta. Riforme dell'esercito. L'impero romano si allarga fino al Danubio."),
@@ -174,12 +175,16 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
             testo = "Tiberio, figlio adottivo di Augusto, governa con prudenza ma si fida poco del senato.\n\n" +
                 "Seiano, capo dei pretoriani, prende sempre più potere finché Tiberio lo fa arrestare.\n\n" +
                 "Caligola regna quattro anni; Claudio conquista la Britannia; Nerone chiude la dinastia giulio-claudia.\n\n" +
-                "Nel 69 d.C., l'anno dei quattro imperatori, vince Vespasiano: con lui comincia la dinastia flavia e si costruisce il Colosseo."),
+                "Nel 69 d.C., l'anno dei quattro imperatori, vince Vespasiano: con lui comincia la dinastia flavia e si costruisce il Colosseo.",
+            cartellaId = CARTELLA_STORIA, cartellaDa = "lectio"),
         Materiale(25, 1, "libro", "Libro, capitolo 5", giorno(-12), "file", "storia_capitolo_5.pdf", 18_400, "pronto", creatoIl = adessoIso,
             titoloDa = "file", testo = "La crisi della repubblica: i Gracchi, Mario e Silla, Cesare."),
         Materiale(26, 1, "appunti", "Le guerre puniche", giorno(-20), "foto", "IMG_20261008_0930.jpg", 1340, "pronto", creatoIl = adessoIso,
             titoloDa = "lectio", testo = "Roma contro Cartagine: tre guerre per il Mediterraneo."),
     )
+
+    /** v1.6 §27 (aspetto.md §42.9): una cartella di Storia con due file, uno messo lì da Lectio. */
+    private val cartelle = mutableListOf(Cartella(CARTELLA_STORIA, 1, "Imperatori", creataIl = adessoIso))
 
     private var spesoMese = 0.80
     private val tetto = 2.00
@@ -260,21 +265,28 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
     override suspend fun materialeDettaglio(id: Long): Esito<Materiale> =
         materiale.firstOrNull { it.id == id }?.let { Esito.Ok(it) } ?: Esito.Errore("Non trovo più questo materiale.")
 
-    override suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?): Esito<Materiale> {
+    override suspend fun caricaFile(materiaId: Long, file: FileDaCaricare, tipo: String, titolo: String?, data: String?, cartellaId: Long?): Esito<Materiale> {
+        if (cartellaId != null && cartelle.none { it.id == cartellaId && it.materiaId == materiaId }) return cartellaNonValida()
         val scritto = titolo?.takeIf { it.isNotBlank() }
         val m = Materiale(prossimoId++, materiaId, tipo, scritto ?: file.nome.substringBeforeLast('.'),
             data ?: oggi.toString(), "file", file.nome, 1200, "pronto", creatoIl = adessoIso, testo = "Testo di esempio.",
-            titoloDa = if (scritto != null) "utente" else "file")
+            titoloDa = if (scritto != null) "utente" else "file",
+            cartellaId = cartellaId, cartellaDa = cartellaId?.let { "utente" })
         materiale += m
         return Esito.Ok(m)
     }
 
     override suspend fun caricaTesto(materiaId: Long, scritto: MaterialeScritto): Esito<Materiale> {
+        val cartellaId = scritto.cartellaId
+        if (cartellaId != null && cartelle.none { it.id == cartellaId && it.materiaId == materiaId }) return cartellaNonValida()
         val m = Materiale(prossimoId++, materiaId, scritto.tipo, scritto.titolo?.takeIf { it.isNotBlank() } ?: "Appunti",
-            scritto.data ?: oggi.toString(), "scritto", null, scritto.testo.length, "pronto", creatoIl = adessoIso, testo = scritto.testo)
+            scritto.data ?: oggi.toString(), "scritto", null, scritto.testo.length, "pronto", creatoIl = adessoIso, testo = scritto.testo,
+            cartellaId = cartellaId, cartellaDa = cartellaId?.let { "utente" })
         materiale += m
         return Esito.Ok(m)
     }
+
+    private fun cartellaNonValida() = Esito.Errore("Questa cartella non c'è nella materia.", "non_valido", 422)
 
     override suspend fun eliminaMateriale(id: Long): Esito<Unit> {
         materiale.removeAll { it.id == id }
@@ -289,17 +301,105 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         val m = materiale[i]
         val titolo = cambi["titolo"]?.jsonPrimitive?.contentOrNull?.split(Regex("\\s+"))?.joinToString(" ")?.trim()
         if (titolo != null && titolo.isEmpty()) return Esito.Errore("Il titolo non può essere vuoto.", "non_valido", 422)
+        // v1.6 §27: "cartella_id" presente = si sposta (null = fuori); assente = non cambia.
+        val cambiaCartella = cambi.containsKey("cartella_id")
+        val cartellaId = if (cambiaCartella) cambi["cartella_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() else m.cartellaId
+        if (cambiaCartella && cartellaId != null && cartelle.none { it.id == cartellaId && it.materiaId == m.materiaId }) return cartellaNonValida()
         materiale[i] = m.copy(
             titolo = titolo ?: m.titolo,
             titoloDa = if (titolo != null) "utente" else m.titoloDa,
             tipo = cambi["tipo"]?.jsonPrimitive?.contentOrNull ?: m.tipo,
+            cartellaId = cartellaId,
+            cartellaDa = if (cambiaCartella) "utente" else m.cartellaDa,
         )
         return Esito.Ok(materiale[i].copy(testo = null))
     }
 
+    /** Come il server (contratto 27.2): il nome della cartella conta come il titolo di ogni suo file. */
     override suspend fun suggeriti(materiaId: Long, argomento: String): Esito<Suggeriti> {
-        val ids = eu.stgm.lectio.logica.ParoleArgomento.suggeriti(argomento, materiale.filter { it.materiaId == materiaId })
+        val nomi = cartelle.associate { it.id to it.nome }
+        val conCartella = materiale.filter { it.materiaId == materiaId }.map { m -> m.cartellaId?.let { nomi[it] }?.let { m.copy(titolo = "${m.titolo} $it") } ?: m }
+        val ids = eu.stgm.lectio.logica.ParoleArgomento.suggeriti(argomento, conCartella)
         return Esito.Ok(Suggeriti(argomento, eu.stgm.lectio.logica.ParoleArgomento.parole(argomento), ids))
+    }
+
+    // --- Cartelle (contratto §27) ----------------------------------------------------------------
+
+    private fun conConteggi(c: Cartella) = c.copy(
+        file = materiale.count { it.cartellaId == c.id },
+        messiDaLectio = materiale.count { it.cartellaId == c.id && it.cartellaDa == "lectio" },
+    )
+
+    override suspend fun cartelle(materiaId: Long): Lettura<List<Cartella>> =
+        Lettura(cartelle.filter { it.materiaId == materiaId }.map(::conConteggi).sortedBy { it.nome.lowercase() })
+
+    /** Le regole del server: 1-40 caratteri senza spazi in più, unico nella materia senza badare alle maiuscole. */
+    private fun nomeValido(materiaId: Long, nome: String, escluso: Long? = null): Esito<String> {
+        val pulito = nome.trim().split(Regex("\\s+")).joinToString(" ")
+        if (pulito.isEmpty() || pulito.length > 40) {
+            return Esito.Errore("Il nome della cartella non può essere vuoto né più lungo di 40 caratteri.", "non_valido", 422)
+        }
+        if (cartelle.any { it.materiaId == materiaId && it.id != escluso && it.nome.equals(pulito, ignoreCase = true) }) {
+            return Esito.Errore("C'è già una cartella con questo nome in questa materia.", "conflitto", 409)
+        }
+        return Esito.Ok(pulito)
+    }
+
+    override suspend fun creaCartella(materiaId: Long, nome: String): Esito<Cartella> {
+        val pulito = when (val n = nomeValido(materiaId, nome)) {
+            is Esito.Ok -> n.dato
+            is Esito.Errore -> return n
+            Esito.Irraggiungibile -> return Esito.Irraggiungibile
+        }
+        val c = Cartella(prossimoId++, materiaId, pulito, creataIl = adessoIso)
+        cartelle += c
+        return Esito.Ok(c)
+    }
+
+    override suspend fun rinominaCartella(id: Long, nome: String): Esito<Cartella> {
+        val i = cartelle.indexOfFirst { it.id == id }
+        if (i < 0) return Esito.Errore("Cartella non trovata.", "non_trovato", 404)
+        val pulito = when (val n = nomeValido(cartelle[i].materiaId, nome, escluso = id)) {
+            is Esito.Ok -> n.dato
+            is Esito.Errore -> return n
+            Esito.Irraggiungibile -> return Esito.Irraggiungibile
+        }
+        cartelle[i] = cartelle[i].copy(nome = pulito)
+        return Esito.Ok(conConteggi(cartelle[i]))
+    }
+
+    override suspend fun eliminaCartella(id: Long, conIFile: Boolean): Esito<CartellaEliminata> {
+        if (cartelle.none { it.id == id }) return Esito.Errore("Cartella non trovata.", "non_trovato", 404)
+        val dentro = materiale.filter { it.cartellaId == id }
+        if (conIFile) {
+            materiale.removeAll { it.cartellaId == id }
+        } else {
+            materiale.replaceAll { if (it.cartellaId == id) it.copy(cartellaId = null, cartellaDa = "utente") else it }
+        }
+        cartelle.removeAll { it.id == id }
+        return Esito.Ok(CartellaEliminata(true, if (conIFile) dentro.size else 0))
+    }
+
+    override suspend fun sposta(materiaId: Long, materiali: List<Long>, cartellaId: Long?): Esito<Spostati> {
+        if (cartellaId != null && cartelle.none { it.id == cartellaId && it.materiaId == materiaId }) return cartellaNonValida()
+        val ids = materiali.toSet()
+        var n = 0
+        materiale.replaceAll {
+            if (it.id in ids && it.materiaId == materiaId) {
+                n++
+                it.copy(cartellaId = cartellaId, cartellaDa = "utente")
+            } else {
+                it
+            }
+        }
+        return Esito.Ok(Spostati(n))
+    }
+
+    /** Il materiale pronto fuori dalle cartelle che parla di questa (le parole del nome). */
+    override suspend fun proposti(cartellaId: Long): Esito<List<Long>> {
+        val c = cartelle.firstOrNull { it.id == cartellaId } ?: return Esito.Errore("Cartella non trovata.", "non_trovato", 404)
+        val fuori = materiale.filter { it.materiaId == c.materiaId && it.cartellaId == null }
+        return Esito.Ok(eu.stgm.lectio.logica.ParoleArgomento.suggeriti(c.nome, fuori))
     }
 
     override suspend fun eventi(): Lettura<List<Evento>> = Lettura(eventi.sortedBy { it.data })
@@ -726,6 +826,8 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         const val SCHEMA_STORIA = 31L
         const val SIMULATA_IN_CORSO = 41L
         const val SIMULATA_CORRETTA = 42L
+        /** La cartella "Imperatori" di Storia (aspetto.md §42.9). */
+        const val CARTELLA_STORIA = 51L
 
         /** Una piccola immagine in PNG, per la foto dello schema d'esempio. */
         private const val FOTO_ESEMPIO = "iVBORw0KGgoAAAANSUhEUgAAACAAAAASCAIAAAC1qksFAAAD8ElEQVR42g3N4cpFMACA4e/+e39LKaWUwjo7jWUay05zFkKu6DvPDTx/dUKT0CaIhFeCTHgnqIQuoU/QCUOCSRgTbMKUMCe4hCXBJ3wSQsKa8E2ICVvCnnAknAlXwp3wJPzVKU1KmyJSXiky5Z2iUrqUPkWnDCkmZUyxKVPKnOJSlhSf8kkJKWvKNyWmbCl7ypFyplwpd8qT/oKMJqPNEBmvDJnxzlAZXUafoTOGDJMxZtiMKWPOcBlLhs/4ZISMNeObETO2jD3jyDgzrow748l+QU6T0+aInFeOzHnnqJwup8/ROUOOyRlzbM6UM+e4nCXH53xyQs6a882JOVvOnnPknDlXzp3z5L+goCloC0TBq0AWvAtUQVfQF+iCocAUjAW2YCqYC1zBUuALPgWhYC34FsSCrWAvOArOgqvgLniKX1DSlLQlouRVIkveJaqkK+lLdMlQYkrGElsylcwlrmQp8SWfklCylnxLYslWspccJWfJVXKXPOUvqGgq2gpR8aqQFe8KVdFV9BW6YqgwFWOFrZgq5gpXsVT4ik9FqFgrvhWxYqvYK46Ks+KquCue6hfUNDVtjah51ciad42q6Wr6Gl0z1JiascbWTDVzjatZanzNpybUrDXfmliz1ew1R81Zc9XcNU/9CwSNoBUIwUsgBW+BEnSCXqAFg8AIRoEVTIJZ4ASLwAs+giBYBV9BFGyCXXAITsEluAWP+AWSRtJKhOQlkZK3REk6SS/RkkFiJKPESibJLHGSReIlH0mQrJKvJEo2yS45JKfkktySR/4CRaNoFULxUkjFW6EUnaJXaMWgMIpRYRWTYlY4xaLwio8iKFbFVxEVm2JXHIpTcSluxaN+gabRtBqheWmk5q1Rmk7Ta7Rm0BjNqLGaSTNrnGbReM1HEzSr5quJmk2zaw7Nqbk0t+bRv8DQGFqDMLwM0vA2KENn6A3aMBiMYTRYw2SYDc6wGLzhYwiG1fA1RMNm2A2H4TRchtvwmF9gaSytRVheFml5W5Sls/QWbRksxjJarGWyzBZnWSze8rEEy2r5WqJls+yWw3JaLstteewvcDSO1iEcL4d0vB3K0Tl6h3YMDuMYHdYxOWaHcywO7/g4gmN1fB3RsTl2x+E4HZfjdjzuF3gaT+sRnpdHet4e5ek8vUd7Bo/xjB7rmTyzx3kWj/d8PMGzer6e6Nk8u+fwnJ7Lc3se/wsCTaANiMArIAPvgAp0gT6gA0PABMaADUyBOeACS8AHPoEQWAPfQAxsgT1wBM7AFbgDT/gFkSbSRkTkFZGRd0RFukgf0ZEhYiJjxEamyBxxkSXiI59IiKyRbyRGtsgeOSJn5IrckSfyD8eAbm9jjhFAAAAAAElFTkSuQmCC"

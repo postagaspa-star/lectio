@@ -449,3 +449,130 @@ test('scheda del prof: esempio mai null, volte tenute; limiti del server con la 
   assert.match(L.controllaScheda(Object.assign({}, c, { cosa_premia: Array(21).fill('z') })), /Cosa premia: al massimo 20 righe/);
   assert.match(L.controllaScheda(Object.assign({}, c, { note_mie: 'n'.repeat(5001) })), /5\.000 caratteri/);
 });
+
+// --- Cartelle (§42, contratto §27) ------------------------------------------------------------------
+
+test('cartelle: rotta della pagina dentro la materia, conteggi e frasi in italiano', () => {
+  assert.deepEqual(L.leggiRotta('#materia/1/cartella/3'), { vista: 'cartella', id: 1, cartella: 3 });
+  assert.deepEqual(L.leggiRotta('#materia/1/cartella/abc'), { vista: 'materia', id: 1 });
+  assert.equal(L.contaFile(0), 'Vuota');
+  assert.equal(L.contaFile(1), '1 file');
+  assert.equal(L.contaFile(8), '8 file');
+  assert.equal(L.messiDaLectio(0), '');
+  assert.equal(L.messiDaLectio(1), '1 messo ora da Lectio');
+  assert.equal(L.messiDaLectio(2), '2 messi ora da Lectio');
+  assert.equal(L.fraseMettiQui(1), 'Metti qui 1 file');
+  assert.equal(L.fraseMettiQui(3), 'Metti qui 3 file');
+  assert.equal(L.fraseFattoMetti(3, 'Arte greca'), 'Fatto: 3 file in Arte greca');
+  // L'articolo si sceglie da come si legge il numero: "gli otto", "gli undici", "i tre".
+  assert.equal(L.fraseEliminaConFile(8), 'Elimina anche gli 8 file');
+  assert.equal(L.fraseEliminaConFile(11), 'Elimina anche gli 11 file');
+  assert.equal(L.fraseEliminaConFile(80), 'Elimina anche gli 80 file');
+  assert.equal(L.fraseEliminaConFile(3), 'Elimina anche i 3 file');
+  assert.equal(L.fraseEliminaConFile(1), 'Elimina anche il file');
+  assert.equal(L.fraseDentro(8), 'Dentro ci sono 8 file.');
+  assert.equal(L.fraseDentro(1), 'Dentro c\'è 1 file.');
+  assert.equal(L.fraseCartellaEliminata(0), 'Cartella eliminata');
+  assert.equal(L.fraseCartellaEliminata(8), 'Cartella e 8 file eliminati');
+  assert.equal(L.pulisciNomeCartella('  Arte   greca '), 'Arte greca');
+});
+
+test('cartelle: fuori e dentro, i due gruppi di "Metti dei file qui" e la loro riga', () => {
+  const cartelle = [{ id: 3, nome: 'Arte greca' }, { id: 4, nome: 'Arte romana' }];
+  const lista = [
+    { id: 1, tipo: 'appunti', titolo: 'Mirone', data: '2026-11-04', cartella_id: null },
+    { id: 2, tipo: 'libro', titolo: 'Fidia', cartella_id: 3 },
+    { id: 3, tipo: 'appunti', titolo: 'Il Colosseo', cartella_id: 4 },
+    { id: 4, tipo: 'verifica', titolo: 'Verifica', data: '2026-10-12' },
+  ];
+  assert.deepEqual(L.materialeFuori(lista).map((x) => x.id), [1, 4]);
+  assert.deepEqual(L.materialeDentro(lista, 3).map((x) => x.id), [2]);
+  const g = L.gruppiMetti(lista, 3);
+  assert.deepEqual(g.fuori.map((x) => x.id), [1, 4]);
+  assert.deepEqual(g.altre.map((x) => x.id), [3]);
+  assert.equal(L.sottoMetti(lista[0], cartelle), 'Appunti · 4 novembre');
+  assert.equal(L.sottoMetti(lista[2], cartelle), 'In Arte romana · Appunti');
+  // Nelle righe della scelta il nome della cartella va dopo il tipo, e la ricerca lo trova.
+  assert.equal(L.sottoMateriale({ tipo: 'appunti', origine: 'foto', data: '2026-11-04', cartella_id: 3 }, cartelle), 'Appunti · Arte greca · foto · 4 novembre');
+  assert.equal(L.sottoMateriale({ tipo: 'appunti', origine: 'foto', data: '2026-11-04', cartella_id: null }, cartelle), 'Appunti · foto · 4 novembre');
+  assert.deepEqual(L.filtraPerTitolo(lista, 'romana', cartelle).map((x) => x.id), [3]);
+  assert.deepEqual(L.filtraPerTitolo(lista, 'romana').map((x) => x.id), [], 'senza cartelle si cerca solo nel titolo');
+});
+
+test('cartelle: le pillole della scelta del materiale spuntano o tolgono tutto il materiale pronto della cartella', () => {
+  const cartelle = [{ id: 3, nome: 'Arte greca' }, { id: 4, nome: 'Arte romana' }, { id: 5, nome: 'Vuota' }];
+  const materiale = [
+    { id: 1, stato: 'pronto', cartella_id: 3 },
+    { id: 2, stato: 'pronto', cartella_id: 3 },
+    { id: 3, stato: 'in_lettura', cartella_id: 3 },
+    { id: 4, stato: 'in_lettura', cartella_id: 4 },
+    { id: 5, stato: 'pronto', cartella_id: null },
+  ];
+  // Solo le cartelle con materiale pronto, e solo quello pronto.
+  assert.deepEqual(L.cartelleConPronti(materiale, cartelle), [{ id: 3, nome: 'Arte greca', ids: [1, 2] }]);
+  assert.equal(L.cartellaTuttaScelta([1], [1, 2]), false);
+  assert.equal(L.cartellaTuttaScelta([5, 2, 1], [1, 2]), true);
+  assert.deepEqual(L.alternaCartella([5, 1], [1, 2]), [5, 1, 2]);
+  assert.deepEqual(L.alternaCartella([5, 1, 2], [1, 2]), [5]);
+});
+
+test('un materiale: la cartella si manda solo se è cambiata, e null (fuori) si manda davvero', () => {
+  const x = { titolo: 'Fidia', tipo: 'appunti', cartella_id: 3 };
+  assert.deepEqual(L.campiCambiati(x, { titolo: 'Fidia', tipo: 'appunti', cartella_id: 3 }), {});
+  assert.deepEqual(L.campiCambiati(x, { titolo: 'Fidia', tipo: 'appunti', cartella_id: null }), { cartella_id: null });
+  assert.deepEqual(L.campiCambiati(x, { titolo: 'Fidia', tipo: 'appunti', cartella_id: 4 }), { cartella_id: 4 });
+  assert.deepEqual(L.campiCambiati({ titolo: 'Fidia', tipo: 'appunti' }, { titolo: 'Fidia', tipo: 'appunti', cartella_id: null }), {}, 'un server vecchio senza cartella_id: niente');
+  assert.deepEqual(L.campiCambiati(x, { titolo: 'Fidia', tipo: 'appunti' }), {}, 'senza il campo non cambia niente');
+});
+
+// --- Il pulsante Nuovo e "Cosa vuoi fare?" (1.3.0, guida §43) ------------------------------------------------
+
+test('Cosa vuoi fare?: cinque righe nell\'ordine giusto, con nome, frase e icona', () => {
+  const r = L.righeNuovo({ lampo: 5, pronti: 2, senzaRete: false });
+  assert.deepEqual(r.map((x) => x.scelta), ['lezione', 'schema', 'riassunto', 'simulata', 'lampo']);
+  assert.deepEqual(r.map((x) => x.nome), ['Lezione da ascoltare', 'Schema', 'Riassunto', 'Verifica simulata', 'Ripasso lampo']);
+  assert.deepEqual(r.map((x) => x.frase), [
+    'Te la spiego a voce, con le domande lungo la strada',
+    'Da leggere: i punti chiave, con le immagini',
+    'Da uno schema già pronto: per punti o discorsivo',
+    'Come quella del prof, poi la correggo',
+    '5 schede · circa 2 min',
+  ]);
+  assert.deepEqual(r.map((x) => x.icona), ['lezioni', 'testo', 'riassunto', 'verifica', 'lampo']);
+  assert.ok(r.every((x) => !x.spenta));
+  assert.equal(L.righeNuovo({ lampo: 1, pronti: 1 })[4].frase, '1 scheda · circa 1 min');
+  for (const x of r) assert.doesNotMatch(x.nome + x.frase, /!/);
+});
+
+test('Cosa vuoi fare?: righe spente con il perché nella frase', () => {
+  const vuote = L.righeNuovo({ lampo: 0, pronti: 0, senzaRete: false });
+  assert.deepEqual(vuote.filter((x) => x.spenta).map((x) => [x.scelta, x.frase]), [['riassunto', 'Prima serve uno schema pronto'], ['lampo', 'Niente per oggi']]);
+  // Non si sa ancora quanti schemi ci sono: Riassunto aspetta spento, con la sua frase.
+  const attesa = L.righeNuovo({ lampo: 3, pronti: null })[2];
+  assert.equal(attesa.spenta, true);
+  assert.equal(attesa.frase, 'Da uno schema già pronto: per punti o discorsivo');
+  // Senza rete sul PC (nessuna scheda salvata, §35.5) tutto spento, anche il Ripasso lampo.
+  const giu = L.righeNuovo({ lampo: 5, pronti: 2, senzaRete: true });
+  assert.ok(giu.every((x) => x.spenta && x.frase === 'Serve la rete'));
+  // Con schede salvate (telefono) il Ripasso lampo resta acceso.
+  const salvate = L.righeNuovo({ lampo: 5, pronti: 2, senzaRete: true, schedeSalvate: true });
+  assert.deepEqual(salvate.filter((x) => !x.spenta).map((x) => x.scelta), ['lampo']);
+});
+
+test('Nuovo è spento solo se nel foglio non si può toccare niente', () => {
+  assert.equal(L.nuovoSpento({ senzaRete: false }), false);
+  assert.equal(L.nuovoSpento({ senzaRete: true }), true);
+  assert.equal(L.nuovoSpento({ senzaRete: true, schedeSalvate: true }), false);
+});
+
+test('Da quale schema?: solo gli schemi pronti, i più recenti prima', () => {
+  const lista = [
+    { id: 3, stato: 'pronto', creato_il: '2026-10-26T17:00:00+01:00' },
+    { id: 5, stato: 'in_preparazione', creato_il: '2026-11-01T17:00:00+01:00' },
+    { id: 7, stato: 'pronto', creato_il: '2026-11-02T17:00:00+01:00' },
+    { id: 4, stato: 'pronto', creato_il: '2026-10-26T17:00:00+01:00' },
+    { id: 6, stato: 'errore', creato_il: '2026-11-03T17:00:00+01:00' },
+  ];
+  assert.deepEqual(L.schemiPronti(lista).map((x) => x.id), [7, 4, 3]);
+  assert.deepEqual(L.schemiPronti(null), []);
+});

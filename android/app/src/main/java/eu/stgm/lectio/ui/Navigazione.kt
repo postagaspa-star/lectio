@@ -12,6 +12,8 @@ enum class Scheda(val etichetta: String) {
 sealed interface Pagina {
     /** [segmento]: Lezioni 0, Schemi 1, Simulate 2, quando si arriva da una notifica. */
     data class Materia(val id: Long, val segmento: Int? = null) : Pagina
+    /** v1.6 (aspetto.md §42.2): una cartella dentro la sua materia. */
+    data class Cartella(val id: Long, val materiaId: Long) : Pagina
     data class ModificaScheda(val materiaId: Long) : Pagina
     data class TestoMateriale(val id: Long) : Pagina
     /** [argomento] e [materiali]: "Ascolta questa parte" apre la pagina già compilata. */
@@ -63,6 +65,7 @@ data class Navigazione(val scheda: Scheda = Scheda.OGGI, val pagine: List<Pagina
     fun codifica(): String = (listOf(scheda.name) + pagine.map {
         when (it) {
             is Pagina.Materia -> "materia:${it.id}:${it.segmento ?: ""}"
+            is Pagina.Cartella -> "cartella:${it.id}:${it.materiaId}"
             is Pagina.ModificaScheda -> "scheda:${it.materiaId}"
             is Pagina.TestoMateriale -> "materiale:${it.id}"
             is Pagina.NuovaLezione -> "nuova:${it.materiaId}:${it.eventoId ?: ""}:${it.argomento?.let(::chiudiTesto) ?: ""}:${it.materiali?.joinToString(",") ?: ""}"
@@ -94,6 +97,7 @@ data class Navigazione(val scheda: Scheda = Scheda.OGGI, val pagine: List<Pagina
                 val n = pezzi.getOrNull(1)?.toLongOrNull()
                 when (pezzi[0]) {
                     "materia" -> n?.let { Pagina.Materia(it, pezzi.getOrNull(2)?.toIntOrNull()) }
+                    "cartella" -> n?.let { id -> pezzi.getOrNull(2)?.toLongOrNull()?.let { m -> Pagina.Cartella(id, m) } }
                     "scheda" -> n?.let { Pagina.ModificaScheda(it) }
                     "materiale" -> n?.let { Pagina.TestoMateriale(it) }
                     "nuova" -> n?.let {

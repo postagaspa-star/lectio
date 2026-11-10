@@ -47,6 +47,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import eu.stgm.lectio.dati.Cartella
 import eu.stgm.lectio.dati.JsonLectio
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.MaterialeScritto
@@ -103,6 +104,11 @@ data class RichiestaAggiunta(
     val oggetto: String? = null,
     /** Arriva da "Condividi": si chiede "In quale materia?". */
     val condivisa: Boolean = false,
+    /**
+     * v1.6 §27 (aspetto.md §42.6): la cartella scelta; null = "Decide Lectio" (non si manda e
+     * Lectio la sceglie dopo averlo letto). Dalla pagina di una cartella parte già quella.
+     */
+    val cartellaId: Long? = null,
 )
 
 /**
@@ -129,6 +135,8 @@ private data class FoglioSalvato(val aperto: Boolean, val richiesta: RichiestaAg
 data class StatoAggiunta(
     val aperto: Boolean = false,
     val materie: List<Materia> = emptyList(),
+    /** Le cartelle della materia scelta: senza, la riga CARTELLA non c'è. */
+    val cartelle: List<Cartella> = emptyList(),
     val richiesta: RichiestaAggiunta = RichiestaAggiunta(),
     val campi: CampiAggiunta = CampiAggiunta(),
     val inCorso: Boolean = false,
@@ -213,15 +221,49 @@ class AggiuntaViewModel(
                 val proposta = s.richiesta.materiaId ?: Condivisione.materiaDalTesto(s.richiesta.testo, materie)
                 s.copy(materie = materie, richiesta = s.richiesta.copy(materiaId = proposta))
             }
+            caricaCartelle()
+        }
+    }
+
+    private var giroCartelle = 0
+
+    /**
+     * Le cartelle della materia scelta (contratto §27). Se la lettura non riesce (server di
+     * prima delle cartelle, niente rete) la cartella già scelta resta: la controlla il server.
+     */
+    private fun caricaCartelle() {
+        val materiaId = _stato.value.richiesta.materiaId
+        val giro = ++giroCartelle
+        if (materiaId == null) {
+            _stato.update { it.copy(cartelle = emptyList()) }
+            return
+        }
+        viewModelScope.launch {
+            val elenco = sorgente.cartelle(materiaId).dato ?: return@launch
+            if (giro != giroCartelle) return@launch
+            aggiorna { s ->
+                if (s.richiesta.materiaId != materiaId) return@aggiorna s
+                val scelta = s.richiesta.cartellaId?.takeIf { id -> elenco.any { it.id == id } }
+                s.copy(cartelle = elenco, richiesta = s.richiesta.copy(cartellaId = scelta))
+            }
         }
     }
 
     fun chiudi() = aggiorna { StatoAggiunta() }
 
-    fun cambia(r: RichiestaAggiunta) = aggiorna { s ->
-        val campi = if (r.passo != s.richiesta.passo) s.campi.copy(data = dataIniziale(r.passo)) else s.campi
-        s.copy(richiesta = r, campi = campi, errori = emptyList())
+    fun cambia(r: RichiestaAggiunta) {
+        val primaMateria = _stato.value.richiesta.materiaId
+        // Un'altra materia: le sue cartelle sono altre, si riparte da "Decide Lectio".
+        val nuova = if (r.materiaId != primaMateria) r.copy(cartellaId = null) else r
+        aggiorna { s ->
+            val campi = if (nuova.passo != s.richiesta.passo) s.campi.copy(data = dataIniziale(nuova.passo)) else s.campi
+            s.copy(richiesta = nuova, campi = campi, errori = emptyList(), cartelle = if (nuova.materiaId != primaMateria) emptyList() else s.cartelle)
+        }
+        if (nuova.materiaId != primaMateria) caricaCartelle()
     }
+
+    /** CARTELLA: null = "Decide Lectio". */
+    fun cartella(id: Long?) = aggiorna { it.copy(richiesta = it.richiesta.copy(cartellaId = id)) }
 
     fun campi(cambia: (CampiAggiunta) -> CampiAggiunta) = aggiorna { it.copy(campi = cambia(it.campi)) }
 
@@ -237,7 +279,7 @@ class AggiuntaViewModel(
             val rimasti = mutableListOf<FileScelto>()
             if (r.testo != null) {
                 val f = preparatore?.testo(r.testo, r.oggetto) ?: FileDaCaricare(java.io.File("esempio.txt"), Condivisione.nomeTesto(r.oggetto), "text/plain")
-                val e = sorgente.caricaFile(materiaId, f, r.tipo.codice, titolo, data)
+                val e = sorgente.caricaFile(materiaId, f, r.tipo.codice, titolo, data, r.cartellaId)
                 if (e !is Esito.Ok) errori += e.messaggio ?: "Non è partito."
             }
             r.file.forEachIndexed { i, scelto ->
@@ -252,7 +294,8 @@ class AggiuntaViewModel(
                         rimasti += scelto
                     }
                     is FilePronto.Pronto -> {
-                        val e = sorgente.caricaFile(materiaId, pronto.file, r.tipo.codice, if (r.file.size == 1) titolo else null, data)
+                        // Con più foto insieme la cartella vale per tutte (aspetto.md §42.6).
+                        val e = sorgente.caricaFile(materiaId, pronto.file, r.tipo.codice, if (r.file.size == 1) titolo else null, data, r.cartellaId)
                         if (e !is Esito.Ok) {
                             errori += "${scelto.nome ?: "File"}: ${e.messaggio}"
                             rimasti += scelto
@@ -276,9 +319,10 @@ class AggiuntaViewModel(
     fun inviaTesto(tipo: TipoMateriale, titolo: String?, testo: String) {
         val materiaId = _stato.value.richiesta.materiaId ?: return
         val data = _stato.value.campi.data
+        val cartellaId = _stato.value.richiesta.cartellaId
         _stato.update { it.copy(inCorso = true, errori = emptyList()) }
         viewModelScope.launch {
-            val e = sorgente.caricaTesto(materiaId, MaterialeScritto(tipo.codice, titolo?.takeIf { it.isNotBlank() }, data, testo.trim()))
+            val e = sorgente.caricaTesto(materiaId, MaterialeScritto(tipo.codice, titolo?.takeIf { it.isNotBlank() }, data, testo.trim(), cartellaId))
             aggiorna { it.copy(inCorso = false, fatto = e is Esito.Ok, errori = listOfNotNull(e.messaggio)) }
         }
     }
@@ -420,6 +464,12 @@ private fun RigaScelta(icona: ImageVector, titolo: String, sotto: String?, onCli
     }
 }
 
+/** CARTELLA (aspetto.md §42.6): "Decide Lectio" e una pillola per cartella; niente senza cartelle. */
+@Composable
+private fun SceltaCartellaAggiungi(s: StatoAggiunta, vm: AggiuntaViewModel) {
+    SceltaCartella(s.cartelle, s.richiesta.cartellaId, "Decide Lectio", vm::cartella, abilitato = !s.inCorso)
+}
+
 /** "Che cos'è" nel foglio (contratto §16.4): le due famiglie, una sotto l'altra. */
 @Composable
 private fun SceltaTipo(scelto: TipoMateriale, onScegli: (TipoMateriale) -> Unit) {
@@ -436,6 +486,7 @@ private fun ModuloFile(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Boole
         }
     }
     SceltaTipo(r.tipo) { vm.cambia(r.copy(tipo = it)) }
+    SceltaCartellaAggiungi(s, vm)
     if (r.file.size <= 1) {
         // Facoltativo: se resta vuoto non si manda e il titolo lo scrive Lectio (contratto §16.3).
         val cosa = if (r.passo == PassoAggiunta.FOTO) "la foto" else "il file"
@@ -470,6 +521,7 @@ private fun RigaFile(icona: ImageVector, nome: String, errore: String?) {
 private fun ModuloAppunti(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Boolean) {
     val k = s.campi
     SceltaTipo(s.richiesta.tipo) { vm.cambia(s.richiesta.copy(tipo = it)) }
+    SceltaCartellaAggiungi(s, vm)
     CampoConEtichetta("Titolo") { Campo(k.titolo, { t -> vm.campi { it.copy(titolo = t.take(120)) } }, segnaposto = "Per esempio Augusto e il principato") }
     CampoConEtichetta("Testo") { Campo(k.testo, { t -> vm.campi { it.copy(testo = t) } }, righe = 6, segnaposto = "Scrivi o incolla") }
     CampoData(k.data) { d -> vm.campi { it.copy(data = d) } }
@@ -484,6 +536,8 @@ private fun ModuloAppunti(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Bo
 @Composable
 private fun ModuloInterrogazione(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Boolean) {
     val k = s.campi
+    // Qui "Che cos'è" non c'è: la cartella va in cima, dove negli altri moduli sta il tipo.
+    SceltaCartellaAggiungi(s, vm)
     CampoConEtichetta("Cosa ti ha chiesto") { Campo(k.chiesto, { t -> vm.campi { it.copy(chiesto = t) } }, righe = 3) }
     CampoConEtichetta("Cosa hai risposto") { Campo(k.risposto, { t -> vm.campi { it.copy(risposto = t) } }, righe = 3) }
     CampoConEtichetta("Cosa ha detto") { Campo(k.detto, { t -> vm.campi { it.copy(detto = t) } }, righe = 3) }

@@ -441,7 +441,10 @@ public sealed class Motore : IDisposable
     public static bool Recente(VoceNovita v, DateTimeOffset adesso) =>
         !DateTimeOffset.TryParse(v.Quando, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var quando) || adesso - quando <= EtaMassimaAvvisi;
 
-    /// <summary>Le novità che diventano un avviso di Windows; le altre (scheda aggiornata, file letto) si vedono nella pagina.</summary>
+    /// <summary>
+    /// Le novità che diventano un avviso di Windows; le altre (scheda aggiornata, file letto, file messo da Lectio in
+    /// una cartella: <c>materiale_in_cartella</c>, aspetto §42.8) si vedono nella pagina.
+    /// </summary>
     public static Notifica? NotificaPer(VoceNovita v)
     {
         var frammento = v.LezioneId is long id ? "lezione/" + id.ToString(CultureInfo.InvariantCulture) : null;
@@ -880,11 +883,14 @@ public sealed class Motore : IDisposable
     /// <summary>
     /// Un file trascinato o scelto nella pagina → <c>POST /api/materie/{id}/materiale</c> in multipart (§6).
     /// La pagina manda i byte; il programma controlla formato e dimensione prima di spedire.
+    /// <paramref name="cartellaId"/> (contratto §27): la cartella scelta da Andrea, mandata come testo; senza, la
+    /// sceglie Lectio sul server dopo aver letto il file.
     /// </summary>
-    public async Task<RispostaPonte> CaricaFileAsync(long? materiaId, string? tipo, string? titolo, string? data, string? nomeFile, byte[]? dati)
+    public async Task<RispostaPonte> CaricaFileAsync(long? materiaId, string? tipo, string? titolo, string? data, string? nomeFile, byte[]? dati, long? cartellaId = null)
     {
         if (!Abbinato) return ErrorePonte(401, Frasi.NonCollegato, "non_abbinato");
         if (materiaId is not long id || id <= 0) return ErrorePonte(422, "Scegli prima la materia.", "non_valido");
+        if (cartellaId is long c0 && c0 <= 0) return ErrorePonte(422, "Questa cartella non c'è nella materia.", "non_valido");
         if (dati == null || dati.Length == 0) return ErrorePonte(422, "Il file è vuoto oppure non è arrivato al programma. Riprova.", "non_valido");
         if (dati.LongLength > MassimoByteFile) return ErrorePonte(413, "Il file è troppo grande: il massimo è 20 MB.", "troppo_grande");
         var nome = Path.GetFileName((nomeFile ?? "").Trim());
@@ -904,6 +910,7 @@ public sealed class Motore : IDisposable
         if (!string.IsNullOrWhiteSpace(tipo)) multipart.Add(new StringContent(tipo), "tipo");
         if (!string.IsNullOrWhiteSpace(titolo)) multipart.Add(new StringContent(titolo.Trim()), "titolo");
         if (!string.IsNullOrWhiteSpace(data)) multipart.Add(new StringContent(data.Trim()), "data");
+        if (cartellaId is long cartella) multipart.Add(new StringContent(cartella.ToString(CultureInfo.InvariantCulture)), "cartella_id");
 
         var percorso = "api/materie/" + id.ToString(CultureInfo.InvariantCulture) + "/materiale";
         var r = await client.InviaContenutoAsync("POST", base_, percorso, tok, multipart, TempoForzato ?? TempoCaricamento).ConfigureAwait(false);

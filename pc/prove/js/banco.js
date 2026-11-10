@@ -12,7 +12,7 @@ const path = require('path');
 
 // LECTIO_UI: un'altra cartella dell'interfaccia (per esempio quella di una versione vecchia, per vedere che i test la bocciano).
 const UI = process.env.LECTIO_UI || path.join(__dirname, '..', '..', 'ui');
-const SCRIPT = ['logica.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'visita.js', 'avvio.js'];
+const SCRIPT = ['logica.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'visita.js', 'avvio.js'];
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 
@@ -78,10 +78,13 @@ function server(opzioni) {
       const materia = Number(q.get('materia_id'));
       // Come il server (§16.3): senza titolo vale quello del nome del file ("file"), quello scritto da Andrea è "utente".
       const nome = q.get('nome') || '';
+      // §27: con cartella_id il file va in quella cartella (scelta di Andrea); senza, resta fuori finché Lectio non decide.
+      const cartella = q.get('cartella_id') ? Number(q.get('cartella_id')) : null;
       const nuovo = {
         id: 900 + s.log.length, materia_id: materia, tipo: q.get('tipo') || 'appunti', titolo: q.get('titolo') || nome.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '),
         titolo_da: q.get('titolo') ? 'utente' : 'file', data: q.get('data') || null, origine: /\.(jpe?g|png|webp)$/i.test(nome) ? 'foto' : 'file', nome_file: nome,
         caratteri: 0, stato: 'in_lettura', errore: null, costo_eur: 0, creato_il: new Date().toISOString(),
+        cartella_id: cartella, cartella_da: cartella != null ? 'utente' : null,
       };
       (s.esempio.stato.materiale[materia] = s.esempio.stato.materiale[materia] || []).unshift(nuovo);
       return [201, nuovo];
@@ -140,7 +143,8 @@ async function pagina(s, opzioni) {
     const [stato, dati] = r;
     return { status: stato, headers: { get: () => null }, text: async () => (dati === undefined ? '' : JSON.stringify(dati)) };
   };
-  for (const f of SCRIPT) w.eval(fs.readFileSync(path.join(UI, f), 'utf8') + '\n//# sourceURL=' + f);
+  // Una versione vecchia (LECTIO_UI) può non avere tutti i file (cartelle.js è della 1.3.0).
+  for (const f of SCRIPT) if (fs.existsSync(path.join(UI, f))) w.eval(fs.readFileSync(path.join(UI, f), 'utf8') + '\n//# sourceURL=' + f);
   const p = {
     w,
     d: w.document,

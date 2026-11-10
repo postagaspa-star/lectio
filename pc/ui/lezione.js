@@ -34,7 +34,7 @@
     if (!m) { A.avviso('Questa materia non c\'è più.'); return null; }
     const st = {
       argomento: '', eventoId: o.eventoId != null ? o.eventoId : undefined, durata: 20, saltabili: false, tipo: 'spiegazione', indicazioni: '',
-      voceVoluta: null, eventi: [], materiale: [], erroreMateriale: null, voci: [],
+      voceVoluta: null, eventi: [], materiale: [], cartelle: [], erroreMateriale: null, voci: [],
       // §16.2: finché Andrea non tocca una casella valgono i suggeriti del server (auto); null = il server non sa suggerire.
       auto: true, suggeriti: [], suggeritiArrivati: false, manuali: [], cerca: '',
       stime: {}, chiaveStima: null, erroreStima: null, invio: false, errore: null, chiusa: false,
@@ -62,18 +62,21 @@
     }
 
     const oggi = L.iso();
-    const [, rm, re, rv] = await Promise.all([
+    const [, rm, re, rv, , rc] = await Promise.all([
       S.impostazioni ? null : A.caricaImpostazioni(),
       A.api.get('/server/api/materie/' + m.id + '/materiale'),
       A.api.get('/server/api/eventi?da=' + oggi),
       A.api.get('/server/api/voci'),
       S.salute ? null : A.caricaSalute(),
+      A.cartelle.carica(m.id),
     ]);
     if (st.chiusa) return ctl;
     const imp = S.impostazioni || {};
     st.durata = L.durataVicina(imp.durata_predefinita || 20);
     st.saltabili = !!imp.domande_saltabili;
     st.materiale = rm.ok ? rm.dati || [] : [];
+    // §42.7: le cartelle servono solo per le pillole e per il nome nelle righe; senza, si sceglie come prima.
+    st.cartelle = rc && rc.ok ? rc.dati || [] : [];
     if (!rm.ok) st.erroreMateriale = rm.errore;
     st.eventi = re.ok ? (re.dati || []).filter((e) => e.materia_id === m.id && L.giorniFra(oggi, e.data) >= 0).sort((a, b) => a.data.localeCompare(b.data)) : [];
     st.voci = rv.ok ? rv.dati || [] : [];
@@ -107,6 +110,7 @@
     el.per = h('div', { class: 'nl-riga-per', role: 'group', 'aria-label': 'Per' });
     el.conta = h('span', { class: 'nl-conta', 'data-conta': 'materiale' });
     el.modi = h('div', { class: 'nl-modi' });
+    el.cartelle = h('div', { class: 'nl-cartelle-box' });
     el.cerca = h('input', { class: 'nl-cerca', id: 'nl-cerca', type: 'search', placeholder: 'Cerca nel materiale', 'aria-label': 'Cerca nel materiale', autocomplete: 'off' });
     el.cerca.addEventListener('input', () => { st.cerca = el.cerca.value; disegnaRighe(); });
     el.studio = h('div', { class: 'nl-righe', 'data-gruppo': 'studio' });
@@ -143,6 +147,7 @@
             el.per),
           sezione(2, 'Da quale materiale', el.conta,
             el.modi,
+            el.cartelle,
             st.erroreMateriale ? A.messaggio('errore', st.erroreMateriale) : null,
             etichetta('Appunti e libro'), el.studio,
             h('span', { class: 'etichetta nl-gruppo' }, 'Verifiche e interrogazioni del prof'), el.prof),
@@ -214,6 +219,14 @@
       const ora = spuntati();
       st.auto = false;
       st.manuali = ora.includes(id) ? ora.filter((x) => x !== id) : ora.concat([id]);
+      dopoCambioMateriale();
+    }
+
+    /** §42.7: una pillola cartella spunta o toglie tutto il suo materiale pronto; conta come un tocco di Andrea. */
+    function toccaCartella(ids) {
+      const ora = spuntati();
+      st.auto = false;
+      st.manuali = L.alternaCartella(ora, ids);
       dopoCambioMateriale();
     }
 
@@ -330,6 +343,7 @@
         pillola('Tutti', !st.auto && tot > 0 && n === tot, () => modo('tutti'), { 'data-modo': 'tutti' }),
         pillola('Nessuno', !st.auto && n === 0, () => modo('nessuno'), { 'data-modo': 'nessuno' }),
         h('span', { class: 'spazio' }), el.cerca);
+      svuota(el.cartelle, A.pilloleCartelleScelta(st.materiale, st.cartelle, spuntati(), toccaCartella));
       disegnaRighe();
     }
 
@@ -346,11 +360,11 @@
         },
         h('span', { class: 'nl-casella', 'aria-hidden': 'true' }, icona('spunta')),
         h('span', { class: 'testi' }, h('span', { class: 't' }, x.titolo || x.nome_file || 'Materiale'),
-          pronto ? h('span', { class: 's' }, L.sottoMateriale(x)) : h('span', { class: 's leggo' }, 'Lo sto leggendo')),
+          pronto ? h('span', { class: 's' }, L.sottoMateriale(x, st.cartelle)) : h('span', { class: 's leggo' }, 'Lo sto leggendo')),
         pronto && sugg.includes(x.id) ? h('span', { class: 'nl-sugg' }, 'argomento') : null);
       };
       const elenco = (box, lista, vuoto) => {
-        const visti = L.filtraPerTitolo(lista, st.cerca);
+        const visti = L.filtraPerTitolo(lista, st.cerca, st.cartelle);
         svuota(box, visti.length ? visti.map(riga) : h('span', { class: 'nl-vuoto' }, lista.length ? 'Nessun titolo con queste parole' : vuoto));
       };
       elenco(el.studio, g.studio, 'Nessuno ancora');

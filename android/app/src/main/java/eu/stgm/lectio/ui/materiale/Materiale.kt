@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import eu.stgm.lectio.dati.Cartella
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.Materiale
 import eu.stgm.lectio.dati.Sorgente
@@ -77,7 +78,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -119,6 +122,32 @@ fun SceltaCheCosE(tipo: TipoMateriale, onScegli: (TipoMateriale) -> Unit, modifi
     }
 }
 
+/**
+ * CARTELLA (aspetto.md §42.6): la prima pillola ([prima]: "Decide Lectio" in Aggiungi, "Fuori"
+ * in Un materiale) vale null, poi una per cartella; vanno a capo. Niente se non ci sono cartelle.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SceltaCartella(
+    cartelle: List<Cartella>,
+    scelta: Long?,
+    prima: String,
+    onScegli: (Long?) -> Unit,
+    modifier: Modifier = Modifier,
+    abilitato: Boolean = true,
+    nota: String? = null,
+) {
+    if (cartelle.isEmpty()) return
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Etichetta("Cartella")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            PillolaOpzione(prima, scelta == null, { onScegli(null) }, abilitato = abilitato)
+            cartelle.forEach { c -> PillolaOpzione(c.nome, scelta == c.id, { onScegli(c.id) }, abilitato = abilitato) }
+        }
+        nota?.let { Text(it, style = L.testi.piccolo, color = L.colori.tenue) }
+    }
+}
+
 /** "Verifica", non "Verifica corretta": la famiglia dice già che è corretta. */
 private fun nomeTipo(t: TipoMateriale): String = when (t) {
     TipoMateriale.VERIFICA -> "Verifica"
@@ -132,16 +161,19 @@ fun pulisciTitolo(t: String): String = t.trim().split(Regex("\\s+")).joinToStrin
 
 /**
  * Il corpo del PATCH /api/materiale/{id} (contratto §16.3): SOLO i campi cambiati.
- * null = niente da salvare (o titolo vuoto, che il server rifiuta).
+ * null = niente da salvare (o titolo vuoto, che il server rifiuta). v1.6 §27: `cartella_id`
+ * solo se è cambiata, e "Fuori" si manda come null.
  */
-fun cambiMateriale(originale: Materiale, titolo: String, tipo: TipoMateriale): JsonObject? {
+fun cambiMateriale(originale: Materiale, titolo: String, tipo: TipoMateriale, cartellaId: Long? = originale.cartellaId): JsonObject? {
     val t = pulisciTitolo(titolo)
     val nuovoTitolo = t.takeIf { it.isNotEmpty() && it != originale.titolo }
     val nuovoTipo = tipo.codice.takeIf { it != originale.tipo }
-    if (nuovoTitolo == null && nuovoTipo == null) return null
+    val nuovaCartella = cartellaId != originale.cartellaId
+    if (nuovoTitolo == null && nuovoTipo == null && !nuovaCartella) return null
     return buildJsonObject {
         nuovoTitolo?.let { put("titolo", it) }
         nuovoTipo?.let { put("tipo", it) }
+        if (nuovaCartella) put("cartella_id", cartellaId?.let { JsonPrimitive(it) } ?: JsonNull)
     }
 }
 
@@ -176,14 +208,21 @@ data class StatoMateriale(
     val materia: Materia? = null,
     val titolo: String = "",
     val tipo: TipoMateriale = TipoMateriale.APPUNTI,
+    /** v1.6 §27: le cartelle della materia e quella scelta (null = fuori). */
+    val cartelle: List<Cartella> = emptyList(),
+    val cartellaId: Long? = null,
     val salvando: Boolean = false,
     /** "Salvato" per 2 secondi dopo un salvataggio riuscito. */
     val salvato: Boolean = false,
     val errore: String? = null,
     val eliminato: Boolean = false,
 ) {
-    val cambi: JsonObject? get() = materiale?.let { cambiMateriale(it, titolo, tipo) }
+    val cambi: JsonObject? get() = materiale?.let { cambiMateriale(it, titolo, tipo, cartellaId) }
     val puoSalvare: Boolean get() = cambi != null && pulisciTitolo(titolo).isNotEmpty() && !salvando
+
+    /** "Messo qui da Lectio": solo sulla cartella dove l'ha messo Lectio, finché resta scelta quella. */
+    val notaCartella: String?
+        get() = materiale?.takeIf { it.cartellaDa == "lectio" && it.cartellaId != null && it.cartellaId == cartellaId }?.let { "Messo qui da Lectio" }
 }
 
 class MaterialeViewModel(private val sorgente: Sorgente, private val id: Long, private val durataSalvato: Long = 2_000) : ViewModel() {
@@ -196,7 +235,14 @@ class MaterialeViewModel(private val sorgente: Sorgente, private val id: Long, p
                 is Esito.Ok -> {
                     val m = e.dato
                     val materia = sorgente.materie().dato?.firstOrNull { it.id == m.materiaId }
-                    _stato.update { it.copy(materiale = m, materia = materia ?: it.materia, titolo = m.titolo, tipo = TipoMateriale.da(m.tipo), errore = null) }
+                    // Un server di prima delle cartelle risponde 404: niente pillole CARTELLA.
+                    val cartelle = sorgente.cartelle(m.materiaId).dato
+                    _stato.update {
+                        it.copy(
+                            materiale = m, materia = materia ?: it.materia, titolo = m.titolo, tipo = TipoMateriale.da(m.tipo),
+                            cartelle = cartelle ?: it.cartelle, cartellaId = m.cartellaId, errore = null,
+                        )
+                    }
                 }
                 else -> _stato.update { it.copy(errore = e.messaggio) }
             }
@@ -205,6 +251,7 @@ class MaterialeViewModel(private val sorgente: Sorgente, private val id: Long, p
 
     fun titolo(t: String) = _stato.update { it.copy(titolo = t.take(120), salvato = false) }
     fun tipo(t: TipoMateriale) = _stato.update { it.copy(tipo = t, salvato = false) }
+    fun cartella(id: Long?) = _stato.update { it.copy(cartellaId = id, salvato = false) }
 
     /** PATCH con i soli campi cambiati, poi si rilegge il materiale dal server. */
     fun salva() {
@@ -218,7 +265,10 @@ class MaterialeViewModel(private val sorgente: Sorgente, private val id: Long, p
                     val riletto = (sorgente.materialeDettaglio(id) as? Esito.Ok)?.dato
                         ?: e.dato.copy(testo = e.dato.testo ?: s.materiale?.testo)
                     _stato.update {
-                        it.copy(materiale = riletto, titolo = riletto.titolo, tipo = TipoMateriale.da(riletto.tipo), salvando = false, salvato = true)
+                        it.copy(
+                            materiale = riletto, titolo = riletto.titolo, tipo = TipoMateriale.da(riletto.tipo), cartellaId = riletto.cartellaId,
+                            salvando = false, salvato = true,
+                        )
                     }
                     delay(durataSalvato)
                     _stato.update { it.copy(salvato = false) }
@@ -289,6 +339,9 @@ fun MaterialeScreen(vm: MaterialeViewModel, onIndietro: () -> Unit, esempio: Boo
                 }
             }
             item { SceltaCheCosE(s.tipo, vm::tipo, Modifier.padding(top = 18.dp)) }
+            if (s.cartelle.isNotEmpty()) {
+                item { SceltaCartella(s.cartelle, s.cartellaId, "Fuori", vm::cartella, Modifier.padding(top = 18.dp), abilitato = !bloccato, nota = s.notaCartella) }
+            }
             m.avviso?.takeIf { it.isNotBlank() }?.let { a -> item { RigaAvviso(a, Modifier.padding(top = 18.dp)) } }
             // "Cosa ho letto": a pezzi quando è aperto, così un libro intero non blocca la pagina.
             val caratteri = Formati.numero((m.caratteri ?: testo.length).toLong())

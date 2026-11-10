@@ -68,11 +68,23 @@
   function mat(id, materia, tipo, titolo, data, origine, nomeFile, titoloDa, testo) {
     return {
       id, materia_id: materia, tipo, titolo, data, origine, nome_file: nomeFile, titolo_da: titoloDa, caratteri: testo.length, stato: 'pronto', errore: null,
-      avviso: null, costo_eur: origine === 'foto' ? 0.004 : 0, creato_il: data + 'T17:00:00+02:00', testo,
+      avviso: null, costo_eur: origine === 'foto' ? 0.004 : 0, creato_il: data + 'T17:00:00+02:00', testo, cartella_id: null, cartella_da: null,
     };
   }
 
+  /** §42.9: una cartella nella materia d'esempio con due file (uno messo da Andrea, uno messo ora da Lectio). */
+  function cartelle() {
+    return { 1: [{ id: 1, materia_id: 1, nome: 'La Repubblica', creata_il: '2026-10-20T17:00:00+02:00' }] };
+  }
+  const IN_CARTELLA = { 10: [1, 'lectio'], 7: [1, 'utente'] };
+
   function materiale() {
+    const tutto = materialeBase();
+    for (const x of tutto[1]) if (IN_CARTELLA[x.id]) [x.cartella_id, x.cartella_da] = IN_CARTELLA[x.id];
+    return tutto;
+  }
+
+  function materialeBase() {
     return {
       1: [
         mat(15, 1, 'appunti', 'Nerone e l\'incendio di Roma', '2026-10-26', 'scritto', null, 'utente',
@@ -107,13 +119,15 @@
   const radice = (w) => (w.length > 4 ? w.replace(/[aeiou]+$/, '') : w);
   const parole = (t) => senzaAccenti(t).split(/[^a-z]+/).filter((w) => w.length >= 4 && !VUOTE.includes(w));
 
-  function suggerisci(lista, argomento) {
+  function suggerisci(lista, argomento, cartelle) {
     const chiave = Array.from(new Set(parole(argomento)));
     const punti = {};
     const sugg = [];
     if (!chiave.length) return { argomento: argomento || '', parole: [], suggeriti: [], punti };
     for (const x of lista.filter((y) => y.stato === 'pronto')) {
-      const titolo = parole(x.titolo).map(radice);
+      // Contratto §27.2: il nome della cartella conta come il titolo di ogni suo file.
+      const cartella = (cartelle || []).find((c) => c.id === x.cartella_id);
+      const titolo = parole(x.titolo + ' ' + (cartella ? cartella.nome : '')).map(radice);
       const testo = parole(x.testo).map(radice);
       let p = 0;
       for (const w of chiave.map(radice)) {
@@ -428,6 +442,9 @@
       materie: o.vuoto ? [] : materie(),
       schede: o.vuoto ? {} : schede(),
       materiale: o.vuoto ? {} : materiale(),
+      cartelle: o.vuoto ? {} : cartelle(),
+      // I file messi da Lectio "nelle ultime 24 ore" (contratto §27: messi_da_lectio).
+      messiOra: o.vuoto ? [] : [10],
       eventi: o.vuoto ? [] : eventi(),
       lezioni: o.vuoto ? [] : lezioni(),
       impostazioni: { tetto_eur: 2.0, voce_predefinita: 'mistral:voice_482', durata_predefinita: 20, fermati_alle_domande: true, risposte_scritte: true, domande_saltabili: false, velocita: 1.0, nome: 'Andrea' },
@@ -498,6 +515,26 @@
         voce_gratis_caratteri_rimasti: 412000, si_azzera_il: s.spesa.si_azzera_il,
         minuti_preparazione: Math.floor(2 + d * (voce.minuti_per_minuto != null ? voce.minuti_per_minuto : 0.1) + 0.5),
       };
+    };
+    // --- Cartelle (contratto §27) ---
+    const cartelleDi = (materiaId) => s.cartelle[materiaId] || (s.cartelle[materiaId] = []);
+    const cartellaDi = (id) => Object.values(s.cartelle).flat().find((c) => c.id === Number(id)) || null;
+    const cartellaDellaMateria = (materiaId, id) => cartelleDi(materiaId).find((c) => c.id === Number(id)) || null;
+    const ERRORE_CARTELLA = [422, { errore: 'Questa cartella non c\'è nella materia.', codice: 'non_valido', campo: 'cartella_id' }];
+    const cartellaPerApi = (c) => {
+      const dentro = (s.materiale[c.materia_id] || []).filter((x) => x.cartella_id === c.id);
+      return Object.assign(copia(c), { file: dentro.length, messi_da_lectio: dentro.filter((x) => x.cartella_da === 'lectio' && s.messiOra.includes(x.id)).length });
+    };
+    const nomeCartella = (n) => String(n == null ? '' : n).replace(/\s+/g, ' ').trim();
+    const controllaNome = (materiaId, nome, escluso) => {
+      if (!nome || nome.length > 40) return [422, { errore: 'Il nome della cartella non può essere vuoto né più lungo di 40 caratteri.', codice: 'non_valido', campo: 'nome' }];
+      if (cartelleDi(materiaId).some((c) => c.id !== escluso && c.nome.toLowerCase() === nome.toLowerCase())) return [409, { errore: 'C\'è già una cartella con questo nome in questa materia.', codice: 'conflitto' }];
+      return null;
+    };
+    const metti = (x, cartellaId) => {
+      x.cartella_id = cartellaId == null ? null : Number(cartellaId);
+      x.cartella_da = 'utente';
+      s.messiOra = s.messiOra.filter((y) => y !== x.id);
     };
     const daRipassare = (materiaId) => copia(s.ripassare.filter((x) => {
       const l = s.lezioni.find((y) => y.id === x.lezione_id);
@@ -652,8 +689,57 @@
         const x = materia(m[1]);
         if (!x) return [404, { errore: 'Questa materia non c\'è più.', codice: 'non_trovato' }];
         if (metodo === 'PATCH') { Object.assign(x, corpo); return [200, copia(x)]; }
-        if (metodo === 'DELETE') { s.materie = s.materie.filter((y) => y !== x); return [200, { ok: true }]; }
+        if (metodo === 'DELETE') { s.materie = s.materie.filter((y) => y !== x); delete s.cartelle[x.id]; return [200, { ok: true }]; }
         return [200, copia(x)];
+      }
+      if ((m = /^\/server\/api\/materie\/(\d+)\/cartelle$/.exec(p))) {
+        if (!materia(m[1])) return [404, { errore: 'Questa materia non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'POST') {
+          const nome = nomeCartella(corpo.nome);
+          const no = controllaNome(m[1], nome, null);
+          if (no) return no;
+          const c = { id: s.prossimoId++, materia_id: Number(m[1]), nome, creata_il: new Date().toISOString() };
+          cartelleDi(m[1]).push(c);
+          return [201, cartellaPerApi(c)];
+        }
+        return [200, cartelleDi(m[1]).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' })).map(cartellaPerApi)];
+      }
+      if ((m = /^\/server\/api\/cartelle\/(\d+)\/proposti$/.exec(p))) {
+        const c = cartellaDi(m[1]);
+        if (!c) return [404, { errore: 'Cartella non trovata.', codice: 'non_trovato' }];
+        // In piccolo: il materiale pronto fuori dalle cartelle con una parola del nome della cartella nel titolo.
+        const chiave = parole(c.nome).map(radice);
+        const proposti = (s.materiale[c.materia_id] || []).filter((x) => x.stato === 'pronto' && x.cartella_id == null && chiave.some((w) => parole(x.titolo).map(radice).includes(w))).map((x) => x.id);
+        return [200, { proposti }];
+      }
+      if ((m = /^\/server\/api\/cartelle\/(\d+)$/.exec(p))) {
+        const c = cartellaDi(m[1]);
+        if (!c) return [404, { errore: 'Cartella non trovata.', codice: 'non_trovato' }];
+        if (metodo === 'PATCH') {
+          const nome = nomeCartella(corpo.nome);
+          const no = controllaNome(c.materia_id, nome, c.id);
+          if (no) return no;
+          c.nome = nome;
+          return [200, cartellaPerApi(c)];
+        }
+        if (metodo === 'DELETE') {
+          if (!corpo || corpo.conferma !== true) return [422, { errore: 'Per eliminare la cartella serve la conferma.', codice: 'non_valido', campo: 'conferma' }];
+          const lista = s.materiale[c.materia_id] || [];
+          const dentro = lista.filter((x) => x.cartella_id === c.id);
+          if (corpo.con_i_file) s.materiale[c.materia_id] = lista.filter((x) => x.cartella_id !== c.id);
+          else dentro.forEach((x) => metti(x, null));
+          s.cartelle[c.materia_id] = cartelleDi(c.materia_id).filter((y) => y !== c);
+          return [200, { ok: true, file_eliminati: corpo.con_i_file ? dentro.length : 0 }];
+        }
+        return [200, cartellaPerApi(c)];
+      }
+      if ((m = /^\/server\/api\/materie\/(\d+)\/sposta$/.exec(p)) && metodo === 'POST') {
+        const lista = s.materiale[m[1]] || [];
+        const ids = Array.isArray(corpo.materiali) ? corpo.materiali : [];
+        if (!ids.length || ids.length > 500 || ids.some((i) => !lista.some((x) => x.id === i))) return [422, { errore: 'Scegli il materiale di questa materia.', codice: 'non_valido', campo: 'materiali' }];
+        if (corpo.cartella_id != null && !cartellaDellaMateria(m[1], corpo.cartella_id)) return ERRORE_CARTELLA;
+        for (const x of lista) if (ids.includes(x.id)) metti(x, corpo.cartella_id);
+        return [200, { spostati: ids.length }];
       }
       if ((m = /^\/server\/api\/materie\/(\d+)\/scheda$/.exec(p))) {
         const sc = s.schede[m[1]] || { materia_id: Number(m[1]), aggiornata_il: null, basata_su: { verifiche: 0, interrogazioni: 0, esiti: 0 }, argomenti: [], tipi_domanda: [], cosa_corregge: [], cosa_premia: [], lunghezza_risposte: '', consigli: [], note_mie: '', stato: 'vuota' };
@@ -664,6 +750,8 @@
       if ((m = /^\/server\/api\/materie\/(\d+)\/materiale$/.exec(p))) {
         const lista = s.materiale[m[1]] || (s.materiale[m[1]] = []);
         if (metodo === 'POST') {
+          // §27: con la cartella scelta da Andrea il file va lì; una cartella di un'altra materia → 422.
+          if (corpo.cartella_id != null && !cartellaDellaMateria(m[1], corpo.cartella_id)) return ERRORE_CARTELLA;
           // §16.3: un titolo scritto da Andrea vale "utente"; senza titolo (o uguale al nome del file) vale "file".
           const nomeFile = corpo.nome_file || null;
           const daFile = nomeFile ? String(nomeFile).replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() : null;
@@ -672,18 +760,22 @@
           const titoloDa = scritto && scritto !== daFile ? 'utente' : 'file';
           const nuovo = mat(s.prossimoId++, Number(m[1]), corpo.tipo || 'appunti', titolo.slice(0, 120), corpo.data || s.oggi, corpo.origine || (nomeFile ? 'file' : 'scritto'), nomeFile, titoloDa, String(corpo.testo || ''));
           nuovo.creato_il = new Date().toISOString();
+          if (corpo.cartella_id != null) metti(nuovo, corpo.cartella_id);
           lista.unshift(nuovo);
           return [201, senzaTesto(nuovo)];
         }
         return [200, lista.map(senzaTesto)];
       }
-      if ((m = /^\/server\/api\/materie\/(\d+)\/suggeriti$/.exec(p))) return [200, suggerisci(s.materiale[m[1]] || [], qs.get('argomento') || '')];
+      if ((m = /^\/server\/api\/materie\/(\d+)\/suggeriti$/.exec(p))) return [200, suggerisci(s.materiale[m[1]] || [], qs.get('argomento') || '', s.cartelle[m[1]] || [])];
       if ((m = /^\/server\/api\/materiale\/(\d+)$/.exec(p))) {
         const tutti = Object.values(s.materiale).flat();
         const x = tutti.find((y) => y.id === Number(m[1]));
         if (!x) return [404, { errore: 'Questo materiale non c\'è più.', codice: 'non_trovato' }];
         if (metodo === 'DELETE') { s.materiale[x.materia_id] = s.materiale[x.materia_id].filter((y) => y !== x); return [200, { ok: true }]; }
         if (metodo === 'PATCH') {
+          // §27: cartella_id (numero, o null = fuori) lo sposta; se il campo manca non cambia niente.
+          const cambiaCartella = Object.prototype.hasOwnProperty.call(corpo, 'cartella_id');
+          if (cambiaCartella && corpo.cartella_id != null && !cartellaDellaMateria(x.materia_id, corpo.cartella_id)) return ERRORE_CARTELLA;
           // §16.3: titolo 1-120 caratteri (spazi in più tolti), tipo tra quelli del contratto; il titolo diventa di Andrea.
           if (corpo.titolo != null) {
             const t = String(corpo.titolo).replace(/\s+/g, ' ').trim();
@@ -695,6 +787,7 @@
             if (!['verifica', 'interrogazione', 'appunti', 'libro', 'altro'].includes(corpo.tipo)) return [422, { errore: 'Tipo di materiale sconosciuto.', codice: 'non_valido', campo: 'tipo' }];
             x.tipo = corpo.tipo;
           }
+          if (cambiaCartella) metti(x, corpo.cartella_id);
           return [200, senzaTesto(x)];
         }
         return [200, Object.assign(copia(x), { testo: x.testo || 'Testo d\'esempio letto dal server per "' + x.titolo + '".' })];

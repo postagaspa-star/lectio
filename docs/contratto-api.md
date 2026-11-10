@@ -1,4 +1,4 @@
-# Lectio — contratto delle API (v1.5)
+# Lectio — contratto delle API (v1.6)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (risposte scritte alle domande, materiale solo nella materia) sono nella sezione 15 e
@@ -234,7 +234,7 @@ seguenti; `avviso` = spesa ≥ 80% del tetto.
 
 `GET /api/novita?dopo_id=0` → `[{"id":51,"tipo":"lezione_pronta","testo":"La lezione di Storia è pronta","lezione_id":12,"quando":"…"}]`
 `tipo`: `lezione_pronta` | `lezione_errore` | `scheda_aggiornata` | `materiale_letto` | `materiale_errore` |
-`tetto_vicino`. Le app chiedono ogni 20 s mentre una lezione è in preparazione, altrimenti all'apertura.
+`tetto_vicino` | `materiale_in_cartella` (v1.6, sezione 27.1). Le app chiedono ogni 20 s mentre una lezione è in preparazione, altrimenti all'apertura.
 
 ## 12. Testo per Gemini
 
@@ -579,3 +579,59 @@ Un riassunto si fa a partire da uno schema `pronto`, in una di tre forme: `punti
 `Riassunto`: `{"id": 4, "schema_id": 3, "materia_id": 7, "forma": "misto", "titolo": "…", "stato": "pronto", "frase": null, "errore": null, "nota": null, "stima_eur": 0.01, "creato_il": "…", "pronto_il": "…", "parole": 480, "contenuto": {"parti": [{"titolo": "…", "paragrafi": ["…"], "punti": ["…"]}]}}`.
 `stato`: `in_coda` | `in_preparazione` | `pronto` | `errore`. Si chiede ogni 3 s finché è in lavorazione. Una novità `riassunto_pronto` o `riassunto_errore` avvisa quando finisce.
 In `punti` i `paragrafi` sono vuoti; in `discorsivo` i `punti` sono vuoti; in `misto` vengono prima i paragrafi e sotto i punti. `titolo` di una parte può essere `null`. `**grassetto**` come negli schemi.
+
+## 27. Cartelle (v1.6, richiesta di Andrea del 10/11)
+
+Un livello solo: materia → cartelle → materiale. Nelle cartelle va solo il materiale (lezioni, schemi e verifiche
+simulate no). Un materiale sta in una cartella sola, oppure fuori. Le scelte di Andrea: ogni cartella ha la sua
+pagina; quando la elimina sceglie ogni volta se tenere i file; i file nuovi li mette Lectio nella cartella giusta.
+
+`Cartella`: `{"id": 3, "materia_id": 7, "nome": "Arte greca", "file": 8, "messi_da_lectio": 2, "creata_il": "…"}`.
+`file` = tutto il materiale dentro (anche quello in lettura o in errore); `messi_da_lectio` = quanti ce ne ha messi
+Lectio nelle ultime 24 ore.
+
+- `GET /api/materie/{id}/cartelle` → `[Cartella]` in ordine alfabetico.
+- `POST /api/materie/{id}/cartelle` `{"nome": "Arte greca"}` → 201 `Cartella`. Nome 1-40 caratteri (spazi in più
+  tolti), unico nella materia senza distinguere maiuscole: 409 "C'è già una cartella con questo nome in questa
+  materia."; vuoto o troppo lungo: 422 con `campo: "nome"`.
+- `PATCH /api/cartelle/{id}` `{"nome": "…"}` → `Cartella` (stesse regole). 404 se non c'è.
+- `DELETE /api/cartelle/{id}` `{"conferma": true, "con_i_file": false}` → `{"ok": true, "file_eliminati": 0}`.
+  Con `con_i_file: false` i file restano nella materia, fuori dalle cartelle; con `true` si cancellano come con
+  `DELETE /api/materiale/{id}` (anche il file sul NAS; se va via una verifica o un'interrogazione la scheda del prof si
+  rifà). Senza `conferma: true`: 422 con `campo: "conferma"`.
+- `POST /api/materie/{id}/sposta` `{"materiali": [4, 7], "cartella_id": 3}` → `{"spostati": 2}`. `cartella_id: null`
+  = fuori dalle cartelle. Da 1 a 500 id, tutti di questa materia, altrimenti 422 (`campo` `materiali` o
+  `cartella_id`).
+- `GET /api/cartelle/{id}/proposti` → `{"proposti": [12, 15]}`: il materiale pronto fuori dalle cartelle che parla di
+  questa cartella, da spuntare già in "Metti dei file qui". Gratis, senza AI.
+
+`Materiale` ha in più `"cartella_id"` (null = fuori) e `"cartella_da"`: `"utente"` (l'ha messo Andrea) | `"lectio"`
+(l'ha messo Lectio) | null.
+- `POST /api/materie/{id}/materiale`: campo facoltativo `cartella_id` (nel multipart come testo, nel JSON come numero).
+  Con la cartella il materiale va lì; senza, la sceglie Lectio dopo averlo letto (27.1). Una cartella di un'altra
+  materia o che non c'è: 422 con `campo: "cartella_id"`.
+- `PATCH /api/materiale/{id}` accetta `"cartella_id"` (numero, o null = fuori): lo sposta. Se il campo manca non cambia
+  niente.
+
+### 27.1 Lectio mette i file nuovi nella cartella giusta
+
+Solo il materiale caricato senza cartella dalla 1.3.0 in poi, una volta sola, dopo che il server l'ha letto (e, con la
+chiave, dopo il titolo scritto da Lectio). Niente AI, gratis:
+1. se tutte le parole del nome di una cartella sono nel titolo del file, e quelle di nessun'altra cartella, va lì
+   (parole di almeno 4 lettere, per radice; quelle presenti in più del 60% del materiale della materia non contano);
+2. altrimenti si confronta con i file che ogni cartella ha già (parole in comune, quelle rare nella materia contano di
+   più): va nella cartella più simile solo se lo è almeno il doppio di ogni altra cartella e del materiale che sta
+   fuori, e oltre un minimo.
+Se non è chiaro resta fuori, e non si riprova. Il materiale spostato da Andrea (anche fuori) Lectio non lo tocca più.
+Provato sul materiale vero di Storia (37 pagine di libro, quattro cartelle di prova): nessun file messo dove non
+c'entrava; quelli dubbi restano fuori.
+
+Quando Lectio mette un file in una cartella arriva una novità `materiale_in_cartella` (sezione 11): "Ho messo «Mirone e
+il Discobolo» nella cartella Arte greca".
+
+### 27.2 Le cartelle nella scelta del materiale
+
+- `GET /api/materie/{id}/suggeriti`: il nome della cartella conta come il titolo di ogni suo file, così l'argomento
+  "Arte greca" sceglie i file della cartella Arte greca.
+- Nelle app (Nuova lezione, Nuovo schema, Nuova verifica simulata) una pillola per cartella spunta o toglie in un tocco
+  tutto il suo materiale pronto (`docs/aspetto.md` §42.7).

@@ -173,6 +173,10 @@ data class Materiale(
     val avviso: String? = null,
     /** v1.4 §16.3: chi ha scritto il titolo: `lectio` | `file` | `utente` (null dai server vecchi). */
     @SerialName("titolo_da") val titoloDa: String? = null,
+    /** v1.6 §27: la cartella dove sta (null = fuori dalle cartelle, o server vecchio). */
+    @SerialName("cartella_id") val cartellaId: Long? = null,
+    /** v1.6 §27: chi l'ha messo nella cartella: `utente` | `lectio` | null. */
+    @SerialName("cartella_da") val cartellaDa: String? = null,
 )
 
 /** v1.4 §16.2: GET /api/materie/{id}/suggeriti?argomento=… */
@@ -185,7 +189,44 @@ data class Suggeriti(
 )
 
 @Serializable
-data class MaterialeScritto(val tipo: String, val titolo: String?, val data: String?, val testo: String)
+data class MaterialeScritto(
+    val tipo: String,
+    val titolo: String?,
+    val data: String?,
+    val testo: String,
+    /** v1.6 §27: la cartella scelta; null = non si manda e la sceglie Lectio dopo averlo letto. */
+    @SerialName("cartella_id") val cartellaId: Long? = null,
+)
+
+// --- §27 Cartelle (v1.6) -----------------------------------------------------------------------
+
+/** Una cartella della materia: `file` = tutto il materiale dentro; `messi_da_lectio` = nelle ultime 24 ore. */
+@Serializable
+data class Cartella(
+    val id: Long = 0,
+    @SerialName("materia_id") val materiaId: Long = 0,
+    val nome: String = "",
+    val file: Int = 0,
+    @SerialName("messi_da_lectio") val messiDaLectio: Int = 0,
+    @SerialName("creata_il") val creataIl: String? = null,
+)
+
+/** POST /api/materie/{id}/cartelle e PATCH /api/cartelle/{id}. */
+@Serializable
+data class NomeCartella(val nome: String)
+
+/** DELETE /api/cartelle/{id}: senza `conferma` il server rifiuta. */
+@Serializable
+data class CorpoEliminaCartella(val conferma: Boolean = true, @SerialName("con_i_file") val conIFile: Boolean)
+
+@Serializable
+data class CartellaEliminata(val ok: Boolean = false, @SerialName("file_eliminati") val fileEliminati: Int = 0)
+
+@Serializable
+data class Spostati(val spostati: Int = 0)
+
+@Serializable
+data class Proposti(val proposti: List<Long> = emptyList())
 
 // --- §7 Eventi ---------------------------------------------------------------------------------
 

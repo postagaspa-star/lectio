@@ -54,7 +54,13 @@
     {
       titolo: 'Aggiungi una verifica', frase: 'Fai clic su Aggiungi.', evento: 'foglio-aggiungi', tasto: 'clic',
       bersaglio: ['[data-visita="aggiungi"]'],
-      prepara: async () => { A.chiudiTuttiIVeli(); await vaiA('#materia/' + STORIA, '[data-visita="aggiungi"]'); },
+      prepara: async () => {
+        A.chiudiTuttiIVeli();
+        await vaiA('#materia/' + STORIA, '[data-visita="aggiungi"]');
+        // Il Materiale ora sta in fondo (§43.1): al centro, così non resta sotto Nuovo o fuori dalla finestra.
+        portaInVista(document.querySelector('[data-visita="aggiungi"]'), 'center');
+        await new Promise((r) => setTimeout(r, A.conMovimenti() ? 320 : 0));
+      },
     },
     {
       titolo: 'Testo per Gemini', frase: 'Copialo, dallo a Gemini con la foto, poi trascina qui il file.', leggi: true,
@@ -70,9 +76,15 @@
       },
     },
     {
-      titolo: 'Nuova lezione', frase: 'Fai clic su Nuova lezione.', evento: 'nuova-lezione', tasto: 'clic',
-      bersaglio: ['[data-visita="nuova-lezione"]'],
-      prepara: async () => { A.chiudiTuttiIVeli(); await vaiA('#materia/' + STORIA, '[data-visita="nuova-lezione"]'); },
+      // §43.4: prima Nuovo, poi la riga giusta di "Cosa vuoi fare?".
+      titolo: 'Nuova lezione', frase: 'Fai clic su Nuovo.', evento: 'nuovo', tasto: 'clic',
+      bersaglio: ['[data-visita="nuovo"]'],
+      prepara: async () => { A.chiudiTuttiIVeli(); A.chiudiLettore(false); await vaiA('#materia/' + STORIA, '[data-visita="nuovo"]'); },
+    },
+    {
+      titolo: 'Lezione da ascoltare', frase: 'Fai clic su Lezione da ascoltare.', evento: 'nuova-lezione', tasto: 'clic',
+      bersaglio: ['[data-visita="scelta-lezione"]'],
+      prepara: () => apriCosaFare('lezioni', 'scelta-lezione'),
     },
     {
       titolo: 'Come la vuoi', frase: 'Scegli materiale, tipo e indicazioni: qui vedi cosa esce e quanto costa.', leggi: true,
@@ -81,7 +93,7 @@
         if (!S.velo.some((v) => v.tipo === 'nuova-lezione')) {
           A.chiudiTuttiIVeli();
           A.chiudiLettore(false);
-          await vaiA('#materia/' + STORIA, '[data-visita="nuova-lezione"]');
+          await vaiA('#materia/' + STORIA, '[data-visita="nuovo"]');
           A.nuovaLezione(STORIA);
         }
         // Il riepilogo col costo (con la finestra stretta sta sotto le sezioni: si porta in vista).
@@ -122,6 +134,18 @@
     A.nuovoSchema(STORIA);
   }
 
+  /** "Cosa vuoi fare?" aperto sulla materia d'esempio (§43.4), se non lo è già; poi si aspetta la riga indicata. */
+  async function apriCosaFare(segmento, riga) {
+    if (!S.velo.some((v) => v.tipo === 'cosa-fare')) {
+      await apriMateriaIn(segmento);
+      await aspetta(() => document.querySelector('[data-visita="nuovo"]'), 3000);
+      const m = A.materiaDi(STORIA);
+      if (m) A.apriNuovo(m);
+    }
+    await aspetta(() => document.querySelector('[data-visita="' + riga + '"]'), 3000);
+    await new Promise((r) => setTimeout(r, A.conMovimenti() ? 320 : 0));
+  }
+
   async function apriSchema() {
     A.chiudiTuttiIVeli();
     A.chiudiLettore(false);
@@ -152,9 +176,15 @@
       prepara: () => apriMateriaIn('lezioni'),
     },
     {
-      titolo: 'Nuovo schema', frase: 'Si crea come una lezione.', evento: 'nuovo-schema', tasto: 'clic',
-      bersaglio: ['[data-visita="nuovo-schema"]'],
+      // §43.4: Nuovo, poi la riga Schema di "Cosa vuoi fare?".
+      titolo: 'Nuovo schema', frase: 'Si crea come una lezione.', evento: 'nuovo', tasto: 'clic',
+      bersaglio: ['[data-visita="nuovo"]'],
       prepara: () => apriMateriaIn('schemi'),
+    },
+    {
+      titolo: 'Schema', frase: 'Fai clic su Schema.', evento: 'nuovo-schema', tasto: 'clic',
+      bersaglio: ['[data-visita="scelta-schema"]'],
+      prepara: () => apriCosaFare('schemi', 'scelta-schema'),
     },
     {
       titolo: 'Come lo vuoi', frase: 'Scegli forma e livello: qui vedi cosa esce e quanto costa.', leggi: true,

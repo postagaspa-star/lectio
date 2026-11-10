@@ -336,7 +336,7 @@ class FotografoTest {
         mostra(visita = visita) { LettoreScreen(vm, AzioniLettore(), scaricata = false, scaricamento = null, esempio = true, senzaRete = false) }
         compose.runOnIdle {
             visita.inizia()
-            repeat(7) { if (visita.corrente.pratico) visita.azione(visita.corrente.bersaglio!!) else visita.avanti() }
+            repeat(7) { if (visita.corrente.pratico) visita.azione(visita.corrente.azioneGiusta!!) else visita.avanti() }
         }
         compose.waitUntil(10_000) { visita.rettangolo() != null }
         chiaroEScuro("19_visita_passo8_domanda")

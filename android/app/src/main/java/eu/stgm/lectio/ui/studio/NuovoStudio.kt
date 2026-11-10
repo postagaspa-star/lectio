@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import eu.stgm.lectio.dati.Cartella
 import eu.stgm.lectio.dati.Evento
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.Materiale
@@ -98,6 +99,8 @@ data class StatoNuovoStudio(
     val eventi: List<Evento> = emptyList(),
     val eventoId: Long? = null,
     val materiale: List<Materiale> = emptyList(),
+    /** Le cartelle della materia (pillole CARTELLE, aspetto.md §42.7). */
+    val cartelle: List<Cartella> = emptyList(),
     val suggeriti: Set<Long> = emptySet(),
     val sceltiAMano: Set<Long>? = null,
     val cerca: String = "",
@@ -196,6 +199,7 @@ class NuovoStudioViewModel(
             val materie = async { sorgente.materie() }
             val eventi = async { sorgente.eventi() }
             val materiale = async { sorgente.materiale(materiaId) }
+            val cartelle = async { sorgente.cartelle(materiaId) }
             val spesa = async { sorgente.spesa() }
             val salute = async { sorgente.salute() }
             val giorno = oggi().toString()
@@ -213,6 +217,7 @@ class NuovoStudioViewModel(
                     eventoId = if (gia) it.eventoId else evento?.id,
                     argomento = it.argomento.ifBlank { schemaDa?.argomento ?: simulataDa?.argomento ?: evento?.argomento ?: "" },
                     materiale = materiale.await().dato ?: it.materiale,
+                    cartelle = cartelle.await().dato ?: it.cartelle,
                     sceltiAMano = if (gia) it.sceltiAMano else (schemaDa?.materiali ?: simulataDa?.materiali)?.toSet(),
                     forma = if (gia) it.forma else schemaDa?.forma ?: it.forma,
                     livello = if (gia) it.livello else schemaDa?.livello ?: it.livello,
@@ -282,6 +287,16 @@ class NuovoStudioViewModel(
 
     fun nessuno() {
         _stato.update { it.copy(sceltiAMano = emptySet()) }
+        forseStima()
+    }
+
+    /** Una pillola CARTELLE (aspetto.md §42.7): spunta o toglie tutto il suo materiale pronto; conta come un tocco. */
+    fun cartella(id: Long) {
+        _stato.update { s ->
+            val ids = s.pronti.filter { it.cartellaId == id }.map { it.id }
+            if (ids.isEmpty()) return@update s
+            s.copy(sceltiAMano = SceltaMateriale.alternaCartella(s.scelti, ids))
+        }
         forseStima()
     }
 
@@ -400,7 +415,7 @@ fun NuovoStudioScreen(
                 modifier = Modifier.semantics { heading() },
             )
             SezioneSuCosa(s.argomento, vm::argomento, s.eventi, s.eventoId, vm::evento)
-            SezioneMateriale(s.materiale, s.pronti, s.scelti, s.suggeriti, s.auto, s.cerca, vm::cerca, vm::tocca, vm::sullArgomento, vm::tutti, vm::nessuno)
+            SezioneMateriale(s.materiale, s.pronti, s.scelti, s.suggeriti, s.auto, s.cerca, vm::cerca, vm::tocca, vm::sullArgomento, vm::tutti, vm::nessuno, s.cartelle, vm::cartella)
             if (schema) ComeLoVuoi(s, vm) else ComeLaVuoi(s, vm)
             Riepilogo(s)
             s.errore?.let { RigaErrore(it, onRiprova = vm::riprova) }
