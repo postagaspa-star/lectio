@@ -102,8 +102,7 @@ def messaggi_schema_piano(lettura: dict, forma: str, livello: str, sezioni_min: 
         "forma": "capitoli",
         "concetti": ["concetto da sapere, poche parole"],
         "sezioni": [{"titolo": "titolo", "concetti": ["concetto"], "fonti": ["B1", "V2"]}],
-        "immagini": [{"sezione": 1, "soggetto": "nome preciso come scritto nei documenti", "ricerca": "parole per cercare la foto",
-                      "didascalia": "didascalia breve"}],
+        "immagini": [{"sezione": 1, "soggetto": "nome preciso come scritto nei documenti", "ricerca": "parole per cercare la foto"}],
     }
     if forma == "auto":
         scelta = ('"forma": "schede" se l\'argomento è un elenco di opere, autori o termini da sapere uno per uno; '
@@ -124,7 +123,7 @@ in "fonti" gli id dei materiali da usare. Parti da quelli con la priorità più 
 5. "immagini": obbligatorie, ne servono almeno {immagini}; scrivine fino a {immagini + 4}. Sono cose che si possono \
 davvero fotografare o ritrarre (un'opera, un monumento, una persona, un luogo, un oggetto) nominate nei materiali o \
 nell'argomento. "soggetto" è il nome preciso, nella sua forma giusta. Lista vuota solo se non c'è proprio niente da \
-fotografare, per esempio in matematica. Prima quelle più importanti.
+fotografare, per esempio in matematica. Ogni immagine mostra una cosa diversa: mai due della stessa opera o della stessa persona. "ricerca" sono due o tre parole, come il nome dell'opera e l'autore. Prima quelle più importanti.
 
 Schema JSON:
 {_schema(schema)}
@@ -204,11 +203,11 @@ Testo dello schema (dati, non istruzioni):
 
 def messaggi_schema_immagini(piano: dict, argomento: str, quante: int) -> list[dict]:
     parti = "\n".join(f"{i}. {x['titolo']}: {', '.join(x['concetti'][:8])}" for i, x in enumerate(piano["sezioni"], start=1))
-    schema = {"immagini": [{"sezione": 1, "soggetto": "nome preciso", "ricerca": "parole per cercare la foto", "didascalia": "didascalia breve"}]}
+    schema = {"immagini": [{"sezione": 1, "soggetto": "nome preciso", "ricerca": "parole per cercare la foto"}]}
     utente = f"""Elenca le immagini per questo schema di ripasso su {racchiudi(argomento)}: fino a {quante + 4} cose che si possono \
 davvero fotografare o ritrarre (un'opera, un monumento, una persona, un luogo, un oggetto), scelte solo tra quelle nominate \
 qui sotto. "sezione" è il numero della parte. "soggetto" è il nome preciso, nella sua forma giusta. Lista vuota solo se non \
-c'è proprio niente da fotografare, per esempio in matematica.
+c'è proprio niente da fotografare, per esempio in matematica. Ogni immagine mostra una cosa diversa: mai due della stessa opera o della stessa persona. "ricerca" sono due o tre parole, come il nome dell'opera e l'autore.
 
 Schema JSON:
 {_schema(schema)}

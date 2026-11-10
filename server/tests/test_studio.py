@@ -165,6 +165,7 @@ def test_schema_vero_con_foto_controllate(client, auth, servizi, server):
     assert d["contenuto"]["avvisi"] == ["Ho trovato solo 1 foto sicura su 3."]
     foto = next(b for s in sezioni for b in s["blocchi"] if b["tipo"] == "immagine")
     assert "CC BY-SA 4.0" in foto["credito"] and d["carte"] == 2
+    assert foto["didascalia"] == "Augusto"  # solo il nome: una data qui non passerebbe dal controllo
     r = client.get(f"/api/schemi/{d['id']}/immagini/1", headers=auth)
     assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
     assert client.post(f"/api/schemi/{d['id']}/immagini/1/cambia", headers=auth).status_code == 200
@@ -173,6 +174,27 @@ def test_schema_vero_con_foto_controllate(client, auth, servizi, server):
     assert "immagine" not in [b["tipo"] for s in dopo["contenuto"]["sezioni"] for b in s["blocchi"]]
     usate = [x["model"] for p, x in server.chiamate if p == "/v1/chat/completions"]
     assert "mistral-medium-latest" in usate and "mistral-small-latest" in usate
+
+
+def test_ricerca_foto_troppo_lunga_si_accorcia():
+    from app.immagini import ricerche
+
+    assert ricerche("Discobolo Mirone statua marmo bronzo", "Discobolo di Mirone") == [
+        "Discobolo Mirone statua marmo bronzo", "Discobolo di Mirone", "Discobolo Mirone statua", "Discobolo Mirone"]
+    assert ricerche("Augusto", "Augusto") == ["Augusto"]
+
+
+def test_foto_trasparente_ha_il_fondo_bianco():
+    import io
+
+    from PIL import Image
+
+    from app.immagini import in_jpeg
+
+    grezza = io.BytesIO()
+    Image.new("RGBA", (40, 40), (0, 0, 0, 0)).save(grezza, "PNG")
+    with Image.open(io.BytesIO(in_jpeg(grezza.getvalue(), 40))) as im:
+        assert min(im.getpixel((20, 20))) > 240
 
 
 @pagamento

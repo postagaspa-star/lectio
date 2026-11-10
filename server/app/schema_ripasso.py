@@ -28,6 +28,8 @@ IMMAGINI_PER_LIVELLO = {"essenziale": 2, "completo": 3, "approfondito": 5}
 IMMAGINI_MASSIME = 40
 IMMAGINI_TANTE = 15
 DIVISORE_SEZIONI = {"essenziale": 9000, "completo": 5000, "approfondito": 3500}
+TOKEN_PIANO = 8000  # la lunghezza del piano dipende dai concetti dei documenti: con meno viene tagliato a metà
+TOKEN_TABELLA = 3000
 
 
 def quante_immagini(livello: str, indicazioni: str | None) -> int:
@@ -88,7 +90,7 @@ def foto_valide(lista, n_sezioni: int, parole: set[str]) -> list[dict]:
         except (TypeError, ValueError):
             sezione = 1
         foto.append({"sezione": sezione, "soggetto": soggetto, "ricerca": _corto(i.get("ricerca"), 120) or soggetto,
-                     "didascalia": _corto(i.get("didascalia"), 160) or soggetto})
+                     "didascalia": soggetto})  # solo il nome dell'opera: date e dettagli stanno nel testo, che viene controllato
     return foto
 
 
@@ -234,7 +236,7 @@ class PreparazioneSchema:
         minimo, massimo = numero_sezioni(sum(len(b["testo"]) for b in per_piano["brani"]), livello)
         oggetto = self._chiedi("schema_piano", prompt_studio.messaggi_schema_piano(
             per_piano, forma, livello, minimo, massimo, quante_immagini(livello, lettura.get("indicazioni"))),
-            self.ctx.settings.modello_scrittura, valida_piano, min(8000, 1500 + 260 * massimo), "Schema · piano",
+            self.ctx.settings.modello_scrittura, valida_piano, TOKEN_PIANO, "Schema · piano",
             {"lettura": per_piano, "forma": forma, "massimo": massimo})
         self.c.scrivi("piano.json", normalizza_piano(oggetto, per_piano, forma, massimo))
 
@@ -309,9 +311,9 @@ class PreparazioneSchema:
             return [] if isinstance(o.get("righe"), list) and o["righe"] else ['servono le "righe"']
         messaggi = prompt_studio.messaggi_schema_tabella(lettura, testo)
         dati = {"sezioni": [{"titolo": s["titolo"], "primo": next((b.get("testo") for b in s["blocchi"] if b.get("testo")), "")} for s in sezioni]}
-        grezzo = self._chiedi("schema_tabella", messaggi, modello, valida, 1500, "Schema · quadro d'insieme", dati)
+        grezzo = self._chiedi("schema_tabella", messaggi, modello, valida, TOKEN_TABELLA, "Schema · quadro d'insieme", dati)
         riveduto = controllo.rivedi(self.ctx, grezzo, [], compito="schema_tabella", messaggi=messaggi, modello=modello, valida=valida,
-                                    max_token=1500, cosa="Schema · quadro d'insieme", altro=testo, materia_id=self.riga["materia_id"],
+                                    max_token=TOKEN_TABELLA, cosa="Schema · quadro d'insieme", altro=testo, materia_id=self.riga["materia_id"],
                                     prima=self.controlla, dati=dati, parlato=False, riferimento=self.riferimento)
         righe = [[_formula(c) for c in r] for r in riveduto.get("righe") or [] if isinstance(r, list)]
         if not righe:
@@ -335,7 +337,9 @@ class PreparazioneSchema:
         piano = self.c.leggi("piano.json")
         voluti = quante_immagini(self.riga["livello"], self.riga["indicazioni"])
         if stato["candidati"] is None:
-            stato["candidati"] = list(piano["immagini"]) or (self._altri_soggetti(piano) if voluti and self.ctx.foto is not None else [])
+            stato["candidati"] = list(piano["immagini"])
+            if not stato["candidati"] and voluti and self.ctx.foto is not None:
+                stato["candidati"], stato["altri"] = self._altri_soggetti(piano), True
         if voluti == 0:
             stato["candidati"] = []
         if self.ctx.foto is None:
@@ -345,12 +349,19 @@ class PreparazioneSchema:
         cartella_foto = self.c.file("immagini")
         cartella_foto.mkdir(parents=True, exist_ok=True)
         cercati = 0
-        while stato["candidati"] and len(stato["foto"]) < voluti:
+        while len(stato["foto"]) < voluti:
+            if not stato["candidati"]:
+                # Le foto sono obbligatorie: se di quelle del piano non se n'è trovata nessuna, si chiede apposta, una volta.
+                if stato["foto"] or stato.get("altri") or not stato.get("provate"):
+                    break
+                stato["candidati"], stato["altri"] = self._altri_soggetti(piano), True
+                self.c.scrivi("immagini.json", stato)
+                continue
             self.avanza("immagini", len(stato["foto"]), voluti, f"Cerco le foto, {len(stato['foto']) + 1} di {voluti}")
             voce = stato["candidati"].pop(0)
             cercati += 1
             stato["provate"] = True
-            escluse: set[str] = set()
+            escluse = {f["url"] for f in stato["foto"]}  # la stessa foto non entra due volte
             trovata = immagini.trova_foto(self.ctx, voce["soggetto"], voce["ricerca"], escluse, materia_id=self.riga["materia_id"],
                                           riferimento=self.riferimento, prima=self.controlla)
             if trovata is not None:
@@ -373,10 +384,14 @@ class PreparazioneSchema:
         sezioni = self._scritte(piano, bool(copertura.get("extra")))
         if copertura.get("tabella"):
             sezioni.append(copertura["tabella"])
+        gia_messe: dict[int, int] = {}
         for f in foto["foto"]:
             indice = max(0, min(len(sezioni) - 1, f["sezione"] - 1))
             blocchi = sezioni[indice]["blocchi"]
-            blocchi.insert(min(1, len(blocchi)), {"tipo": "immagine", "n": f["n"], "didascalia": f["didascalia"], "credito": f["credito"]})
+            prima = gia_messe.get(indice, 0)
+            gia_messe[indice] = prima + 1
+            # In ordine, con il testo in mezzo quando ce n'è: non tutte ammucchiate nello stesso punto.
+            blocchi.insert(min(1 + 2 * prima, len(blocchi)), {"tipo": "immagine", "n": f["n"], "didascalia": f["didascalia"], "credito": f["credito"]})
         usate: dict[str, dict] = {}
         per_id = {b["id"]: b for b in lettura["brani"]}
         for s in sezioni:

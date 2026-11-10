@@ -515,7 +515,9 @@ finché è in lavorazione. Una novità `schema_pronto` o `schema_errore` avvisa 
 Immagini: `GET /api/schemi/{id}/immagini/{n}` → JPEG. `POST /api/schemi/{id}/immagini/{n}/cambia` → `Schema` (ne cerca un'altra
 coerente; 404 se non ce ne sono altre). `DELETE /api/schemi/{id}/immagini/{n}` → `Schema`. Le immagini sono poche: 2 in `essenziale`,
 3 in `completo`, 5 in `approfondito`; di più solo se le indicazioni lo chiedono (fino a 40). Ognuna è controllata guardandola:
-deve mostrare davvero quello che dice la didascalia. Se non se ne trova una sicura, lo dice `avvisi`.
+deve mostrare davvero quello che dice la didascalia, che è solo il nome di quello che si vede. Ogni immagine mostra una cosa
+diversa. Le foto vengono da Wikimedia Commons; la richiesta si presenta con il nome di Lectio e il link pubblico del progetto.
+Se non se ne trova una sicura, lo dice `avvisi`.
 
 "Ascolta questa parte": l'app apre Nuova lezione con `argomento` = titolo della sezione e gli stessi `materiali` dello schema.
 
