@@ -24,6 +24,11 @@
     rete: 30000,         // senza rete: si riprova
     riparte: 3000,       // a finestra nascosta, dopo la risposta si riparte da soli
     avviso: 3500,
+    stato: 4000,         // schemi, verifiche e riassunti in lavorazione: si chiede ogni 3-5 secondi (contratto §18, §21, §26)
+    salvaRisposta: 800,  // §36.3: dopo l'ultima lettera si manda la risposta
+    tempoSalvato: 10000, // §36.3: il tempo della verifica si tiene sul computer ogni 10 secondi
+    attesaLunga: 15000,  // §34: dopo 15 secondi si dice che ci vuole ancora poco
+    fermoEsito: 300,     // §35.2: i tre esiti non rispondono per i primi 300 ms
   }, window.LectioTempi || {});
 
   const S = {
@@ -141,6 +146,13 @@
     calendario: 'M6.5 5h11a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-11a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z M3.5 10h17 M8 3v4 M16 3v4',
     ripeti: 'M3 12a9 9 0 1 0 3-6.7 M3 4v5h5',
     cestino: 'M4 7h16 M10 11v6 M14 11v6 M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12 M9 7V4h6v3',
+    lampo: 'M13 2 3 14h9l-1 8 10-12h-9z',
+    domanda: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01',
+    indice: 'M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01',
+    orologio: 'M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z M12 6v6l4 2',
+    confronta: 'M17 3l4 4-4 4 M3 7h18 M7 21l-4-4 4-4 M21 17H3',
+    quasi: 'M5 12h14',
+    riassunto: 'M21 6H3 M17 10H3 M21 14H3 M17 18H3',
   };
   const PIENE = {
     play: 'M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z',
@@ -186,15 +198,16 @@
   }
 
   /** Un numero che conta fino al valore (costo, centratura), in 400 ms; subito se si chiedono meno animazioni. */
-  function contaNumero(el, valore, formato) {
+  function contaNumero(el, valore, formato, durata) {
     const fmt = formato || ((x) => String(Math.round(x)));
+    const ms = durata || 400;
     const fine = Number(valore) || 0;
     if (!conMovimenti() || A.S.esempio && A.S.prova) { el.textContent = fmt(fine); return el; }
     const inizio = performance.now();
     const da = Number(el.dataset.valore || 0);
     el.dataset.valore = String(fine);
     const passo = (t) => {
-      const p = Math.min(1, (t - inizio) / 400);
+      const p = Math.min(1, (t - inizio) / ms);
       const x = da + (fine - da) * (1 - Math.pow(1 - p, 3));
       el.textContent = fmt(p >= 1 ? fine : x);
       if (p < 1 && el.isConnected) requestAnimationFrame(passo);
@@ -213,13 +226,22 @@
       h('div', null, h('span', null, testo), azioni && azioni.length ? h('div', { class: 'azioni' }, azioni) : null));
   }
 
-  /** Un avviso breve in basso al centro. */
-  function avviso(testo) {
+  /**
+   * Un avviso breve in basso al centro. opzioni.azione = { testo, fai } aggiunge un pulsante ("Apri", "Riprova");
+   * opzioni.dura cambia quanto resta; opzioni.resta lo lascia finché non si chiude con la X.
+   */
+  function avviso(testo, opzioni) {
     const box = document.getElementById('avvisi');
-    if (!box) return;
-    const el = h('div', { class: 'avviso-breve' }, testo);
+    if (!box) return null;
+    const o = opzioni || {};
+    const via = () => el.remove();
+    const el = h('div', { class: 'avviso-breve' + (o.azione || o.resta ? ' con-azione' : '') },
+      h('span', null, testo),
+      o.azione ? h('button', { type: 'button', class: 'azione-avviso', onclick: () => { via(); o.azione.fai(); } }, o.azione.testo) : null,
+      o.resta ? h('button', { type: 'button', class: 'azione-avviso chiudi', 'aria-label': 'Chiudi', onclick: via }, icona('chiudi')) : null);
     box.append(el);
-    setTimeout(() => el.remove(), T.avviso);
+    if (!o.resta) setTimeout(via, o.dura || T.avviso);
+    return el;
   }
 
   function segnaposto(n) {
@@ -297,13 +319,16 @@
     const menu = S.dom.menu;
     if (!menu) return;
     const v = S.rotta.vista;
-    const attiva = (nome) => (nome === v || (nome === 'materie' && (v === 'materia' || v === 'scheda')) || (nome === 'lezioni' && (v === 'lettore' || v === 'lezione')) || (nome === 'oggi' && v === 'racconta'));
+    const dentroMateria = ['materia', 'scheda', 'schema', 'simulata', 'riassunto'].includes(v);
+    // Da uno schema o da una verifica la materia accesa è la loro (l'id nella rotta è il loro, non della materia).
+    const materiaAccesa = v === 'materia' || v === 'scheda' ? S.rotta.id : dentroMateria ? S.materiaAperta : null;
+    const attiva = (nome) => (nome === v || (nome === 'materie' && dentroMateria) || (nome === 'lezioni' && (v === 'lettore' || v === 'lezione')) || (nome === 'oggi' && v === 'racconta'));
     const voce = (nome, etichetta, icona_) => h('button', {
       type: 'button', class: 'voce-menu' + (attiva(nome) ? ' attiva' : ''), 'data-vista': nome, 'aria-current': attiva(nome) ? 'page' : null,
       onclick: () => A.vai('#' + nome),
     }, icona(icona_), etichetta);
     const materie = (S.materie || []).map((m) => h('button', {
-      type: 'button', class: 'voce-materia ' + classeMateria(m.colore) + ((v === 'materia' || v === 'scheda') && S.rotta.id === m.id ? ' attiva' : ''),
+      type: 'button', class: 'voce-materia ' + classeMateria(m.colore) + (materiaAccesa === m.id ? ' attiva' : ''),
       'data-materia': String(m.id), onclick: () => A.vai('#materia/' + m.id),
     }, pallino(m.colore), h('span', { class: 'n' }, m.nome)));
     const spesa = S.spesa;
@@ -333,7 +358,7 @@
     if (!box) return;
     const pillole = [];
     if (S.esempio && !S.prova) pillole.push(h('span', { class: 'pillola stato esempio', 'data-stato': 'esempio' }, 'Esempio'));
-    if (S.senzaRete && (!S.esempio || S.prova)) pillole.push(h('span', { class: 'pillola stato rete', 'data-stato': 'rete' }, icona('rete'), 'Senza rete: vedi solo le lezioni scaricate'));
+    if (S.senzaRete && (!S.esempio || S.prova)) pillole.push(h('span', { class: 'pillola stato rete', 'data-stato': 'rete' }, icona('rete'), ['schema', 'simulata', 'riassunto'].includes(S.rotta.vista) ? 'Senza rete' : 'Senza rete: vedi solo le lezioni scaricate'));
     if (A.modalitaProva() && !S.esempio) {
       pillole.push(h('button', { type: 'button', class: 'pillola stato prova', 'data-stato': 'prova', onclick: spiegaProva }, 'Prova'));
     }
@@ -399,6 +424,8 @@
       if (S.storia.length > 50) S.storia.shift();
     }
     S.rotta = rotta;
+    S.verso = verso;
+    S.materiaAperta = null;
     clearTimeout(S.timerPagina);
     S.aggiornaPagina = null;
     A.chiudiTuttiIVeli();
@@ -528,6 +555,11 @@
       const sopra = S.velo[S.velo.length - 1];
       e.preventDefault();
       sopra.chiudi();
+      return;
+    }
+    // Il velo in cima può tenersi la tastiera (Ripasso lampo: Spazio, 1, 2, 3; "Non ho capito": niente tasti del lettore).
+    if (S.velo.length && S.velo[S.velo.length - 1].tasti) {
+      S.velo[S.velo.length - 1].tasti(e);
       return;
     }
     if (A.tastoLettore) A.tastoLettore(e);

@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_
 
 from . import clock
 
-Colore = Literal["ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva"]
+Colore = Literal["ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva", "giada", "senape", "orchidea",
+                 "prugna", "cacao", "lavagna", "salvia", "lavanda"]
 TipoMateriale = Literal["verifica", "interrogazione", "appunti", "libro", "altro"]
 TipoEvento = Literal["scritta", "orale"]
 TipoLezione = Literal["spiegazione", "ripasso", "interrogazione"]
@@ -184,3 +185,68 @@ class ImpostazioniPatch(Corpo):
     nome: str | None = Field(default=None, max_length=40)
     risposte_scritte: StrictBool | None = None
     domande_saltabili: StrictBool | None = None
+
+
+# --- schemi, "Non ho capito", ripasso lampo, verifica simulata (contratto 18-21)
+
+FormaSchema = Literal["auto", "capitoli", "schede"]
+LivelloSchema = Literal["essenziale", "completo", "approfondito"]
+
+
+class SchemaStimaIn(Corpo):
+    materia_id: StrictInt
+    argomento: str = Field(default="", max_length=200)
+    materiali: list[StrictInt] | None = Field(default=None, max_length=500)
+    forma: FormaSchema = "auto"
+    livello: LivelloSchema = "completo"
+    indicazioni: str | None = Field(default=None, max_length=4000)
+
+    _i = field_validator("indicazioni")(classmethod(lambda cls, v: _indicazioni(v)))
+
+
+class SchemaIn(SchemaStimaIn):
+    evento_id: StrictInt | None = None
+
+
+class ChiarimentoIn(Corpo):
+    materia_id: StrictInt
+    schema_id: StrictInt | None = None
+    sezione: StrictInt | None = None
+    passaggio: str = Field(default="", max_length=4000)
+    lezione_id: StrictInt | None = None
+    posizione_s: float | None = Field(default=None, ge=0, le=100_000)
+    domanda: str = Field(default="", max_length=300)
+
+
+class RiassuntoIn(Corpo):
+    forma: Literal["punti", "discorsivo", "misto"]
+
+
+class LampoIn(Corpo):
+    esito: Literal["sapevo", "quasi", "non_sapevo"]
+
+
+class SimulataStimaIn(Corpo):
+    materia_id: StrictInt
+    argomento: str = Field(default="", max_length=200)
+    materiali: list[StrictInt] | None = Field(default=None, max_length=500)
+    minuti: StrictInt = Field(default=50, ge=10, le=180)
+    indicazioni: str | None = Field(default=None, max_length=4000)
+
+    _i = field_validator("indicazioni")(classmethod(lambda cls, v: _indicazioni(v)))
+
+
+class SimulataIn(SimulataStimaIn):
+    evento_id: StrictInt | None = None
+
+
+class SimulataPatch(Corpo):
+    risposte: dict[str, str] | None = None
+    iniziata: StrictBool | None = None
+
+    @field_validator("risposte")
+    @classmethod
+    def _risposte(cls, v):
+        if v is not None and (len(v) > 200 or any(len(x) > 20_000 for x in v.values())):
+            raise ValueError("risposte troppo lunghe")
+        return v

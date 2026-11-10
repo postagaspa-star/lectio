@@ -8,7 +8,7 @@ import json
 import logging
 import sqlite3
 
-from . import ai, clock, prompt
+from . import ai, clock, lampo, prompt
 from . import scheda as schede
 from .rete import ErroreFornitore
 from .spesa import TettoRaggiunto, VoceGratisFinita
@@ -138,6 +138,8 @@ def rispondi(ctx, conn: sqlite3.Connection, lezione: sqlite3.Row, domanda: sqlit
         (domanda["id"], lezione["id"], testo, esito["esito"], esito["punteggio"], esito["commento"],
          json.dumps(esito["mancava"], ensure_ascii=False), costo, clock.adesso()),
     )
+    if esito["esito"] in ("parziale", "sbagliata"):
+        lampo.aggiungi(conn, lezione["materia_id"], "lezione", f"lezione:{domanda['id']}", domanda["testo"], domanda["risposta"])
     riga = conn.execute("SELECT * FROM risposte WHERE id = ?", (cur.lastrowid,)).fetchone()
     return per_api(riga, domanda["risposta"])
 

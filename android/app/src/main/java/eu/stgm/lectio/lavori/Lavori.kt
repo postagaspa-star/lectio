@@ -125,7 +125,10 @@ suspend fun novitaDaMostrare(novita: suspend (Long) -> Esito<List<Novita>>, memo
     val da = lette.filter { n ->
         when (n.tipo) {
             "lezione_pronta", "lezione_errore" -> n.lezioneId != null && n.lezioneId !in avvisate
-            "tetto_vicino", "materiale_errore", "scheda_aggiornata", "materiale_letto" -> true
+            "tetto_vicino", "materiale_errore", "scheda_aggiornata", "materiale_letto",
+            "schema_pronto", "schema_errore", "riassunto_pronto", "riassunto_errore",
+            "simulata_pronta", "simulata_corretta", "simulata_errore",
+            -> true
             else -> false
         }
     }
@@ -144,15 +147,17 @@ class PreparazioneWorker(context: Context, params: WorkerParameters) : Coroutine
     override suspend fun doWork(): Result {
         val app = applicationContext as LectioApp
         if (app.archivio.leggi() == null) return Result.success()
-        primoPiano(Notificatore.preparazione(app, "Preparo la lezione", "Controllo a che punto è", null, null))
+        primoPiano(Notificatore.preparazione(app, "Sto preparando", "Controllo a che punto è", null, null))
+        val aggiornaNotifica = { n: android.app.Notification ->
+            try {
+                if (Notificatore.puoNotificare(app)) NotificationManagerCompat.from(app).notify(Notificatore.ID_PREPARAZIONE, n)
+            } catch (e: SecurityException) {
+                // Senza permesso la notifica non si vede: l'avanzamento resta nell'app.
+            }
+        }
         val avvisi = object : Avvisi {
             override fun avanzamento(titolo: String, frase: String, frazione: Float?, lezioneId: Long) {
-                val n = Notificatore.preparazione(app, titolo, frase, frazione, lezioneId)
-                try {
-                    if (Notificatore.puoNotificare(app)) NotificationManagerCompat.from(app).notify(Notificatore.ID_PREPARAZIONE, n)
-                } catch (e: SecurityException) {
-                    // Senza permesso la notifica non si vede: l'avanzamento resta nell'app.
-                }
+                aggiornaNotifica(Notificatore.preparazione(app, titolo, frase, frazione, lezioneId))
             }
             override fun pronta(testo: String, lezioneId: Long) {
                 Notificatore.lezionePronta(app, testo, lezioneId)
@@ -168,10 +173,40 @@ class PreparazioneWorker(context: Context, params: WorkerParameters) : Coroutine
             memoria = app.archivio,
             avvisi = avvisi,
         )
+        val giroStudio = GiroStudio(
+            deposito = app.deposito,
+            schema = { app.client.schema(it) },
+            simulata = { app.client.simulata(it) },
+            riassunto = { app.client.riassunto(it) },
+            nomeMateria = { id -> app.sorgente.materie().dato?.firstOrNull { it.id == id }?.nome },
+            avvisi = object : AvvisiStudio {
+                override fun avanzamento(titolo: String, frase: String, frazione: Float?) =
+                    aggiornaNotifica(Notificatore.preparazione(app, titolo, frase, frazione, null))
+                override fun schema(testo: String, schema: eu.stgm.lectio.dati.Schema) =
+                    Notificatore.schema(app, testo, schema.id, schema.materiaId, schema.pronto)
+                override fun simulata(testo: String, simulata: eu.stgm.lectio.dati.Simulata) = Notificatore.simulata(
+                    app, testo, simulata.id, simulata.materiaId,
+                    when {
+                        simulata.pronta -> "Tocca per iniziarla."
+                        simulata.corretta -> "Tocca per vedere com'è andata."
+                        else -> "Tocca per vedere cosa fare."
+                    },
+                )
+                override fun riassunto(testo: String, riassunto: eu.stgm.lectio.dati.Riassunto) =
+                    Notificatore.riassunto(app, testo, riassunto.id, riassunto.schemaId, riassunto.forma, riassunto.materiaId, riassunto.pronto)
+            },
+        )
         var senzaRete = 0
         try {
             repeat(MASSIMO_GIRI) {
-                when (giro.giro()) {
+                val lezioni = giro.giro()
+                val studio = giroStudio.giro(mostraAvanzamento = lezioni == Giro.FINITO)
+                val insieme = when {
+                    lezioni == Giro.SENZA_RETE || studio == Giro.SENZA_RETE -> Giro.SENZA_RETE
+                    lezioni == Giro.IN_CORSO || studio == Giro.IN_CORSO -> Giro.IN_CORSO
+                    else -> Giro.FINITO
+                }
+                when (insieme) {
                     Giro.FINITO -> return Result.success()
                     Giro.SENZA_RETE -> if (++senzaRete >= 15) return Result.retry()
                     Giro.IN_CORSO -> senzaRete = 0
@@ -269,7 +304,8 @@ class InviiWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         if (app.archivio.leggi() == null) return Result.success()
         val posizioni = app.posizioni.inviaInSospeso()
         val risposte = app.risposte.inviaInCoda()
-        return if (posizioni && risposte) Result.success() else Result.retry()
+        val studio = inviaStudio(app.sorgente)
+        return if (posizioni && risposte && studio) Result.success() else Result.retry()
     }
 
     companion object {
@@ -292,6 +328,7 @@ class ControlloWorker(context: Context, params: WorkerParameters) : CoroutineWor
         if (app.archivio.leggi() == null) return Result.success()
         app.posizioni.inviaInSospeso()
         app.risposte.inviaInCoda()
+        inviaStudio(app.sorgente)
         try {
             Aggiornatore(app).controlla(inSottofondo = true)
         } catch (e: CancellationException) {

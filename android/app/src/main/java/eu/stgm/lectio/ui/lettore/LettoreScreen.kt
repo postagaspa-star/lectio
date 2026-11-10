@@ -272,6 +272,10 @@ fun LettoreScreen(
     scaricamento: Float?,
     esempio: Boolean,
     senzaRete: Boolean,
+    /** "Non ho capito" (aspetto.md §34): senza, la pillola non c'è. */
+    nonHoCapito: eu.stgm.lectio.ui.studio.NonHoCapitoViewModel? = null,
+    onAggiungiMateriale: (Long) -> Unit = {},
+    onApriFonte: (eu.stgm.lectio.dati.Fonte) -> Unit = {},
 ) {
     val st by vm.lettore.stato.collectAsStateWithLifecycle()
     val ui by vm.stato.collectAsStateWithLifecycle()
@@ -288,6 +292,8 @@ fun LettoreScreen(
     val l = st.lezione
     val m = materia(st.materia?.colore)
     var menu by remember { mutableStateOf(false) }
+    // Con il foglio aperto la lezione aspetta, e alla chiusura riparte se stava suonando.
+    var riprendiDopoFoglio by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().padding(start = MARGINE, end = MARGINE, top = 12.dp, bottom = 24.dp),
@@ -359,9 +365,27 @@ fun LettoreScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
                 PillolaLettore(Formati.velocita(st.velocita), false) { vm.lettore.cambiaVelocita(prossimaVelocita(st.velocita)) }
                 PillolaLettore("Testo", ui.testoAperto, vm::testo)
+                if (nonHoCapito != null && st.fermate.fase == FaseDomanda.ASCOLTO) {
+                    eu.stgm.lectio.ui.PillolaIcona(
+                        "Non ho capito", Icone.Domanda,
+                        {
+                            riprendiDopoFoglio = st.suona
+                            if (st.suona) vm.lettore.playPausa()
+                            val titolo = st.capitoloCorrente?.titolo
+                            nonHoCapito.apriDaLezione(l.materiaId, l.id, st.posizioneS, listOfNotNull("Al minuto ${Formati.tempo(st.posizioneS)}", titolo).joinToString(" · "))
+                        },
+                        abilitato = !senzaRete || esempio,
+                    )
+                }
             }
         }
         SchedaDomanda(st, ui, vm, esempio)
+    }
+    if (nonHoCapito != null) {
+        eu.stgm.lectio.ui.studio.FoglioNonHoCapito(nonHoCapito, senzaRete && !esempio, onAggiungiMateriale, onApriFonte, onChiuso = {
+            if (riprendiDopoFoglio) vm.lettore.playPausa()
+            riprendiDopoFoglio = false
+        })
     }
     if (menu && l != null) {
         Foglio(onChiudi = { menu = false }, titolo = l.argomento) {

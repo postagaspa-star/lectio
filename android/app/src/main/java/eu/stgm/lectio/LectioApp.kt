@@ -4,6 +4,8 @@ import android.app.Application
 import eu.stgm.lectio.dati.Archivio
 import eu.stgm.lectio.dati.ArchivioAudio
 import eu.stgm.lectio.dati.CacheFile
+import eu.stgm.lectio.dati.DepositoStudio
+import eu.stgm.lectio.dati.ScaffaleFile
 import eu.stgm.lectio.dati.SorgenteServer
 import eu.stgm.lectio.lavori.ControlloWorker
 import eu.stgm.lectio.lavori.InviiWorker
@@ -35,7 +37,10 @@ class LectioApp : Application() {
 
     val client: LectioClient by lazy { LectioClient({ archivio.leggi() }, alNonAutorizzato = ::scollegatoDalServer) }
 
-    val sorgente: SorgenteServer by lazy { SorgenteServer(client, cache, audio, alSalute = { archivio.adottaFuoriCasa(it.indirizzoFuoriCasa) }) }
+    /** Schemi aperti, foto, verifiche in corso e coda dei ripassi: restano sul telefono senza scadere. */
+    val deposito: DepositoStudio by lazy { DepositoStudio(ScaffaleFile(File(filesDir, "studio/dati")), File(filesDir, "studio/immagini")) }
+
+    val sorgente: SorgenteServer by lazy { SorgenteServer(client, cache, audio, alSalute = { archivio.adottaFuoriCasa(it.indirizzoFuoriCasa) }, deposito = deposito) }
 
     val posizioni: SincronizzatorePosizioni by lazy {
         SincronizzatorePosizioni(archivio, client::salvaAscolto, dopoInvio = { id, ascolto -> sorgente.aggiornaAscoltoLocale(id, ascolto) })
@@ -71,6 +76,7 @@ class LectioApp : Application() {
     fun svuotaDatiLocali() {
         cache.svuota()
         audio.svuota()
+        deposito.svuota()
     }
 
     /** Posizioni e risposte rimaste sul telefono partono appena c'è rete. */

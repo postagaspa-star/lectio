@@ -169,9 +169,10 @@ def test_lezione_vera_registra_le_spese_con_i_numeri_veri(client, auth, servizi,
     assert dettaglio["stato"] == "pronta", dettaglio
     assert dettaglio["nota"] is not None and "prova" not in dettaglio["nota"].lower()
     righe = spese(servizi, f"lezione_id = {l['id']}")
-    testo = [r for r in righe if r["unita"] == "token"]
+    testo = [r for r in righe if r["unita"] == "token" and "Ricerca" not in r["cosa"]]
     voce = [r for r in righe if r["unita"] == "caratteri"]
-    assert len(testo) == server.conta("/v1/chat/completions") == 1 + 3 + 2  # piano, 3 blocchi, apertura, finale
+    # Piano, 3 blocchi, apertura, finale; ogni pezzo scritto ha il suo controllo.
+    assert len(testo) == server.conta("/v1/chat/completions") == 1 + 3 + 2 + 5
     assert len(voce) == server.conta("/v1/audio/speech")
     prezzi = servizi.cassa.prezzi
     # Ogni pezzo di voce costa i caratteri inviati davvero (con i segni di Voxtral).

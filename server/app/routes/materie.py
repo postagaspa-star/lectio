@@ -92,6 +92,8 @@ def cancella(materia_id: int, corpo: ConfermaIn | None = None, conn: sqlite3.Con
         raise non_valido("Per cancellare la materia serve la conferma: si cancellano anche materiale, scheda, "
                          "verifiche in arrivo e lezioni.", campo="conferma")
     lezioni = [r["id"] for r in conn.execute("SELECT id FROM lezioni WHERE materia_id = ?", (materia_id,))]
+    schemi = [r["id"] for r in conn.execute("SELECT id FROM schemi WHERE materia_id = ?", (materia_id,))]
+    simulate = [r["id"] for r in conn.execute("SELECT id FROM simulate WHERE materia_id = ?", (materia_id,))]
     with db.transazione(conn):
         conn.execute("DELETE FROM materie WHERE id = ?", (materia_id,))
     # I file dopo il database: se il server cade qui, restano solo file orfani, mai righe senza file.
@@ -99,6 +101,10 @@ def cancella(materia_id: int, corpo: ConfermaIn | None = None, conn: sqlite3.Con
     shutil.rmtree(dati / "materiale" / str(materia_id), ignore_errors=True)
     for lezione_id in lezioni:
         shutil.rmtree(dati / "lezioni" / str(lezione_id), ignore_errors=True)
+    for schema_id in schemi:
+        shutil.rmtree(dati / "schemi" / str(schema_id), ignore_errors=True)
+    for simulata_id in simulate:
+        shutil.rmtree(dati / "simulate" / str(simulata_id), ignore_errors=True)
     return {"ok": True}
 
 

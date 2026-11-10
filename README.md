@@ -13,6 +13,26 @@ file into the subject. The server reads every test of that subject and keeps a "
 topics, types of question, what gets marked down and what gets rewarded. Every lesson of that subject is
 written against the profile, and the questions answered badly come back in later lessons.
 
+## Study tools
+
+Besides the audio lessons, Lectio writes study material from the same documents:
+
+- **Revision sheets**, by chapters or as one card per work or author, at three levels of detail, with a few
+  relevant photos that a vision model checks before they are used, and a PDF to print.
+- **Written summaries** of a sheet: bullet points, flowing prose, or a mix of the two.
+- **"I didn't get it"** on any passage of a sheet or moment of a lesson: it explains again, or says that the
+  documents don't cover it.
+- **Quick review** cards with spaced repetition, born from the sheets and from wrong answers.
+- **Mock tests** in the format of the teacher's real ones, corrected with an estimated grade. Exercises are
+  never invented: only those already in the documents are proposed.
+
+Everything is written only from the student's documents. They are split into pieces on the server and searched
+with embeddings and keywords, with a fixed priority: book pages, then tests, then oral exams, then notes. The
+model only receives the selected passages, and every written piece is read again afterwards: sentences that
+the documents don't support are rewritten or removed, and fixed rules catch the turns of phrase that sound
+machine-written. The numbers in the teacher profile are counted by the code from the actual questions, not
+estimated by the model.
+
 ## How it is built
 
 - **Server** (`server/`): FastAPI and SQLite in Docker on a home NAS with a low-power CPU and no GPU, so the

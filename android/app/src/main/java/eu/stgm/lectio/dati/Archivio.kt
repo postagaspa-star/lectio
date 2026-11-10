@@ -43,6 +43,9 @@ interface DepositoConfigurazione {
     suspend fun dimentica()
 }
 
+/** Quale visita guidata far partire da sola. */
+enum class VisitaDaFare { NESSUNA, TUTTA, NOVITA }
+
 /** Il tema scelto nelle Impostazioni: sistema segue il telefono. */
 enum class TemaScelto { SISTEMA, CHIARO, SCURO }
 
@@ -88,6 +91,7 @@ class Archivio(private val context: Context) : DepositoConfigurazione, Preferenz
         val TEMA = stringPreferencesKey("tema")
         val MENO_ANIMAZIONI = booleanPreferencesKey("meno_animazioni")
         val VISITA_VISTA = booleanPreferencesKey("visita_vista")
+        val VISITA_NOVITA_VISTA = booleanPreferencesKey("visita_novita_vista")
         val RICHIESTA_NOTIFICHE_FATTA = booleanPreferencesKey("richiesta_notifiche_fatta")
         val CURSORE = longPreferencesKey("cursore_novita")
         val AVVISATE = stringSetPreferencesKey("lezioni_avvisate")
@@ -209,6 +213,22 @@ class Archivio(private val context: Context) : DepositoConfigurazione, Preferenz
 
     override suspend fun segnaVisitaVista() {
         context.dataStore.edit { p -> p[Chiavi.VISITA_VISTA] = true }
+    }
+
+    /** Che visita far partire da sola: tutta (mai vista), solo le novità (già vista prima della 1.2), o nessuna. */
+    val visitaDaFare: Flow<VisitaDaFare> = context.dataStore.data.map { p ->
+        when {
+            p[Chiavi.VISITA_VISTA] != true -> VisitaDaFare.TUTTA
+            p[Chiavi.VISITA_NOVITA_VISTA] != true -> VisitaDaFare.NOVITA
+            else -> VisitaDaFare.NESSUNA
+        }
+    }
+
+    suspend fun segnaVisitaTuttaVista() {
+        context.dataStore.edit { p ->
+            p[Chiavi.VISITA_VISTA] = true
+            p[Chiavi.VISITA_NOVITA_VISTA] = true
+        }
     }
 
     val richiestaNotificheFatta: Flow<Boolean> = context.dataStore.data.map { p -> p[Chiavi.RICHIESTA_NOTIFICHE_FATTA] ?: false }

@@ -2,8 +2,9 @@
 
 - lezioni: UNA lezione alla volta, nell'ordine di arrivo; le altre aspettano in coda
   (stato salvato nel database, quindi la coda sopravvive a un riavvio);
-- sfondo: le letture a pagamento (foto e PDF scansionati) e gli aggiornamenti della
-  scheda del prof, uno alla volta.
+- sfondo: le letture a pagamento (foto e PDF scansionati), gli aggiornamenti della scheda del
+  prof e la memoria sui documenti, uno alla volta;
+- studio: schemi e verifiche simulate, uno alla volta (girano anche mentre una voce lavora).
 
 Ogni passo è una funzione normale che fa una cosa e dice com'è andata: "fatto" (c'è
 altro, continua) o "vuoto" (niente da fare, aspetta). I test chiamano i passi a mano.
@@ -12,9 +13,10 @@ Niente resta appeso: ogni lavoro finisce in uno stato con una frase leggibile.""
 import asyncio
 import logging
 import shutil
+import time
 from pathlib import Path
 
-from . import ai, clock, db, lettura, prompt, titoli
+from . import ai, db, lettura, memoria, prompt, riassunti, schema_ripasso, simulata, titoli
 from . import scheda as schede
 from .ai import RispostaNonUsabile
 from .audio import ErroreMontaggio
@@ -27,6 +29,7 @@ log = logging.getLogger("uvicorn.error")
 
 FATTO, VUOTO = "fatto", "vuoto"
 FALLIMENTI_MASSIMI = 3
+PAUSA_VETTORI_SECONDI = 900
 ERRORE_INTERNO_LEZIONE = "Lectio ha avuto un problema interno preparando la lezione. Tocca Riprova."
 
 
@@ -54,6 +57,7 @@ class Lavoro:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._sveglie: dict[str, asyncio.Event] = {}
         self._fallimenti: dict[tuple[str, int], int] = {}
+        self._vettori_dopo = 0.0
 
     @property
     def db_path(self) -> str:
@@ -102,6 +106,50 @@ class Lavoro:
             db.aggiungi_novita(conn, "lezione_errore", f"La lezione di {r['nome']} si è fermata: {_minuscola(frase)}",
                                lezione_id=lezione_id, materia_id=r["materia_id"])
 
+    # ------------------------------------------------------------------ schemi e verifiche simulate
+
+    def passo_studio(self) -> str:
+        """Una cosa alla volta: prima le correzioni (si sta aspettando il voto), poi i riassunti (bastano pochi secondi),
+        poi in ordine di arrivo."""
+        with db.aperta(self.db_path) as conn, db.transazione(conn):
+            riassunto = conn.execute("SELECT id FROM riassunti WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
+            da_correggere = conn.execute(
+                "SELECT id FROM simulate WHERE stato = 'in_correzione' ORDER BY consegnata_il, id LIMIT 1").fetchone()
+            schema = conn.execute("SELECT id, in_coda_dal FROM schemi WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
+            prova = conn.execute("SELECT id, in_coda_dal FROM simulate WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
+            if da_correggere is None and riassunto is None and schema is None and prova is None:
+                return VUOTO
+            if da_correggere is not None:
+                riassunto = None
+            if riassunto is not None:
+                conn.execute("UPDATE riassunti SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (riassunto["id"],))
+            prima_schema = da_correggere is None and riassunto is None and schema is not None and (prova is None or schema["in_coda_dal"] <= prova["in_coda_dal"])
+            if prima_schema:
+                conn.execute("UPDATE schemi SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (schema["id"],))
+            elif da_correggere is None and riassunto is None:
+                conn.execute("UPDATE simulate SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (prova["id"],))
+        if da_correggere is not None:
+            self._esegui_studio("simulata", da_correggere["id"], lambda: simulata.correggi(self.ctx, da_correggere["id"]))
+        elif riassunto is not None:
+            self._esegui_studio("riassunto", riassunto["id"], lambda: riassunti.PreparazioneRiassunto(self.ctx, riassunto["id"]).esegui())
+        elif prima_schema:
+            self._esegui_studio("schema", schema["id"], lambda: schema_ripasso.PreparazioneSchema(self.ctx, schema["id"]).esegui())
+        else:
+            self._esegui_studio("simulata", prova["id"], lambda: simulata.PreparazioneSimulata(self.ctx, prova["id"]).esegui())
+        return FATTO
+
+    def _esegui_studio(self, tipo: str, ident: int, fare) -> None:
+        try:
+            fare()
+        except Annullata:
+            log.info("%s %s annullato durante il lavoro", tipo, ident)
+        except Exception as e:
+            frase = frase_errore(e)
+            if frase is None:
+                log.exception("%s %s: errore inatteso", tipo, ident)
+                frase = "Lectio ha avuto un problema interno. Tocca Riprova."
+            {"schema": schema_ripasso, "simulata": simulata, "riassunto": riassunti}[tipo].in_errore(self.db_path, ident, frase)
+
     # ------------------------------------------------------------------ materiale e schede
 
     def passo_sfondo(self) -> str:
@@ -119,6 +167,11 @@ class Lavoro:
                 lavori += [(("titolo", r["id"]), self.scrivi_titolo, r["id"]) for r in conn.execute(
                     "SELECT id FROM materiali WHERE stato = 'pronto' AND titolo_da = 'file' AND da_prova = 0"
                     " AND length(testo) >= ? ORDER BY id", (titoli.TITOLO_MINIMO_CARATTERI,))]
+            # La memoria sui documenti: prima i pezzi, poi i vettori.
+            lavori += [(("memoria", r["id"]), self.indicizza, r["id"]) for r in conn.execute(memoria.SENZA_PEZZI + " ORDER BY m.id")]
+            if self.ctx.vettori is not None and time.monotonic() >= self._vettori_dopo and conn.execute(
+                    memoria.DA_VETTORIZZARE + " LIMIT 1", (self.ctx.vettori.modello,)).fetchone():
+                lavori.append((("vettori", 0), self.vettorizza, 0))
         for chiave, fare, argomento in lavori:
             if self._fallimenti.get(chiave, 0) >= FALLIMENTI_MASSIMI:
                 continue
@@ -134,6 +187,16 @@ class Lavoro:
             self._fallimenti.pop(chiave, None)
             return FATTO
         return VUOTO
+
+    def indicizza(self, materiale_id: int) -> None:
+        with db.aperta(self.db_path) as conn, db.transazione(conn):
+            m = conn.execute("SELECT * FROM materiali WHERE id = ? AND stato = 'pronto'", (materiale_id,)).fetchone()
+            if m is not None:
+                memoria.indicizza(conn, m, self.ctx.settings.dati_dir)
+
+    def vettorizza(self, _: int) -> None:
+        if memoria.vettorizza(self.ctx) == 0:  # tetto finito o Mistral giù: si riprova più tardi
+            self._vettori_dopo = time.monotonic() + PAUSA_VETTORI_SECONDI
 
     def scrivi_titolo(self, materiale_id: int) -> None:
         """Un titolo che dica di cosa parla il materiale, al posto del nome del file. Se il tetto è
@@ -235,6 +298,7 @@ class Lavoro:
                 (testo, da_prova, avviso, letto.pagine, m["id"]))
             if cur.rowcount == 0:
                 return  # cancellato nel frattempo
+            conn.execute("DELETE FROM pezzi WHERE materiale_id = ?", (m["id"],))
             db.aggiungi_novita(conn, "materiale_letto", f"Ho letto «{m['titolo']}»", materia_id=m["materia_id"],
                                materiale_id=m["id"])
             if m["tipo"] in ("verifica", "interrogazione"):
@@ -278,10 +342,11 @@ class Lavoro:
 
     async def gira(self, ferma: asyncio.Event) -> None:
         self._loop = asyncio.get_running_loop()
-        self._sveglie = {n: asyncio.Event() for n in ("lezioni", "sfondo")}
+        self._sveglie = {n: asyncio.Event() for n in ("lezioni", "sfondo", "studio")}
         compiti = [
             asyncio.create_task(self._ciclo("lezioni", self.passo_lezione, 30.0, ferma)),
             asyncio.create_task(self._ciclo("sfondo", self.passo_sfondo, 30.0, ferma)),
+            asyncio.create_task(self._ciclo("studio", self.passo_studio, 30.0, ferma)),
         ]
         await ferma.wait()
         for c in compiti:

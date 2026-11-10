@@ -8,11 +8,12 @@
 
 import json
 import logging
+import re
 import sqlite3
 
 from . import ai, clock, db, prompt
 from .rete import ErroreFornitore
-from .spesa import TettoRaggiunto
+from .spesa import TOKEN_SCHEDA_USCITA, TettoRaggiunto
 
 log = logging.getLogger("uvicorn.error")
 
@@ -129,26 +130,103 @@ def normalizza_argomenti(v) -> list[dict]:
     return sorted(uscita, key=lambda a: -a["volte"])[:15]
 
 
-def normalizza(o: dict) -> dict:
+_DEFINIZIONE = re.compile(r"defini|che cos['’ ]?[èe]\b|cos['’][èe]\b|cosa (?:si intende|significa|vuol dire)|significato d", re.I)
+_ESERCIZIO = re.compile(r"risolv|calcol|semplific|determina|dimostra|scomponi|trova |verifica che|disegna|rappresenta"
+                        r"|equazion|disequazion|sistema|espressione|[=+^]|\d\s*[a-z]\b", re.I)
+
+
+def _normale(testo: str) -> str:
+    return " ".join(re.findall(r"[a-zàèéìòù0-9]+", str(testo or "").lower()))
+
+
+def _trovata(frammento: str, testo_normale: str, parole: set[str]) -> bool:
+    """Il pezzo è davvero nel documento? Si perdona qualche differenza (lettura delle foto)."""
+    f = _normale(frammento)
+    if not f:
+        return False
+    if f in testo_normale:
+        return True
+    voci = f.split()
+    return len(voci) >= 3 and sum(1 for v in voci if v in parole) / len(voci) >= 0.8
+
+
+def tipo_vero(tipo, testo: str) -> str:
+    """Il tipo dichiarato dal modello, corretto da quello che la domanda chiede davvero."""
+    t = str(tipo or "").strip().lower().replace(" ", "_")
+    t = t if t in prompt.TIPI_DOMANDA else "altro"
+    if t == "definizione" and not _DEFINIZIONE.search(testo):
+        return "esercizio" if _ESERCIZIO.search(testo) else "aperta"
+    return t
+
+
+def _con_prova(voci, testi: str, parole: set[str], massimo_voci: int = 10) -> list[str]:
+    """Solo le voci con una prova che si trova nei documenti: quelle senza si scartano."""
+    if not isinstance(voci, list):
+        return []
+    uscita, visti = [], set()
+    for v in voci:
+        if not isinstance(v, dict):
+            continue
+        frase = _testo(v.get("frase"), 200)
+        if frase and frase.casefold() not in visti and _trovata(v.get("prova") or "", testi, parole):
+            visti.add(frase.casefold())
+            uscita.append(frase)
+    return uscita[:massimo_voci]
+
+
+def conta(o: dict, documenti: list[dict], esiti: list[dict]) -> dict:
+    """La scheda dalle domande vere: il modello le elenca, i numeri li fa il codice."""
+    testi = {d["id"]: _normale(d["testo"]) for d in documenti}
+    for i, e in enumerate(esiti, start=1):
+        testi[f"E{i}"] = _normale(" ".join(e["uscite"] + e["altre"]))
+    parole_doc = {k: set(v.split()) for k, v in testi.items()}
+    domande, viste = [], set()
+    for d in o.get("domande") or []:
+        if not isinstance(d, dict):
+            continue
+        doc, testo = str(d.get("doc") or "").strip(), _testo(d.get("testo"), 400)
+        chiave = (doc, _normale(testo))
+        if doc not in testi or not testo or chiave in viste or not _trovata(testo, testi[doc], parole_doc[doc]):
+            continue
+        viste.add(chiave)
+        domande.append({"doc": doc, "testo": testo, "tipo": tipo_vero(d.get("tipo"), testo),
+                        "argomento": _testo(d.get("argomento"), 80)})
+    quanti: dict[str, int] = {}
+    for d in domande:
+        quanti[d["tipo"]] = quanti.get(d["tipo"], 0) + 1
+    totale = sum(quanti.values())
+    tipi = sorted(({"tipo": t, "quota": round(n / totale, 2)} for t, n in quanti.items()), key=lambda x: -x["quota"])
+    gruppi: dict[str, dict] = {}
+    for d in domande:
+        if d["argomento"]:
+            g = gruppi.setdefault(d["argomento"].casefold(), {"nome": d["argomento"], "docs": set(), "esempio": d["testo"][:200], "n": 0})
+            g["docs"].add(d["doc"])
+            g["n"] += 1
+    argomenti = [{"nome": g["nome"], "volte": len(g["docs"]), "esempio": g["esempio"]}
+                 for g in sorted(gruppi.values(), key=lambda g: (-len(g["docs"]), -g["n"]))][:15]
+    tutto = " ".join(testi.values())
+    parole = set(tutto.split())
+    lunghezza = o.get("lunghezza_risposte")
     return {
-        "argomenti": normalizza_argomenti(o.get("argomenti")),
-        "tipi_domanda": normalizza_tipi(o.get("tipi_domanda")),
-        "cosa_corregge": _lista_testi(o.get("cosa_corregge")),
-        "cosa_premia": _lista_testi(o.get("cosa_premia")),
-        "lunghezza_risposte": _testo(o.get("lunghezza_risposte") or "", 200),
-        "consigli": _lista_testi(o.get("consigli"), massimo_voci=6),
+        "argomenti": argomenti,
+        "tipi_domanda": tipi,
+        "cosa_corregge": _con_prova(o.get("cosa_corregge"), tutto, parole),
+        "cosa_premia": _con_prova(o.get("cosa_premia"), tutto, parole),
+        "lunghezza_risposte": _testo(lunghezza.get("frase"), 200) if isinstance(lunghezza, dict)
+        and _trovata(lunghezza.get("prova") or "", tutto, parole) else "",
+        "consigli": _con_prova(o.get("consigli"), tutto, parole, massimo_voci=6),
     }
 
 
 def valida(o: dict) -> list[str]:
     errori = []
-    for campo in ("argomenti", "tipi_domanda", "cosa_corregge", "cosa_premia", "consigli"):
-        if campo in o and not isinstance(o[campo], (list, str)):
+    if not isinstance(o.get("domande"), list):
+        errori.append('serve "domande", la lista delle domande copiate dai documenti')
+    elif any(not isinstance(d, dict) for d in o["domande"]):
+        errori.append('ogni domanda deve avere "doc", "testo", "tipo", "argomento"')
+    for campo in ("cosa_corregge", "cosa_premia", "consigli"):
+        if campo in o and not isinstance(o[campo], list):
             errori.append(f'"{campo}" deve essere una lista')
-    if "argomenti" not in o or "tipi_domanda" not in o:
-        errori.append('mancano "argomenti" o "tipi_domanda"')
-    if isinstance(o.get("argomenti"), list) and any(not isinstance(a, (dict, str)) for a in o["argomenti"]):
-        errori.append('ogni argomento deve essere un oggetto con "nome", "volte", "esempio"')
     return errori
 
 
@@ -341,7 +419,7 @@ def aggiorna(ctx, materia_id: int) -> None:
             return
         richiesta = r["da_aggiornare"]
         documenti, esiti = _documenti(conn, materia_id), _esiti(conn, materia_id)
-        attuale, di_andrea, note = dati_di(r), json.loads(r["di_andrea"] or "{}"), r["note_mie"]
+        di_andrea, note = json.loads(r["di_andrea"] or "{}"), r["note_mie"]
         basi = conta_basi(conn, materia_id)
     nome_materia = {"nome": materia["nome"], "prof": materia["prof"]}
 
@@ -378,10 +456,10 @@ def aggiorna(ctx, materia_id: int) -> None:
     try:
         oggetto = ai.chiedi_json(
             cassa=ctx.cassa, fornitore=ctx.testo, compito="scheda",
-            messaggi=prompt.messaggi_scheda(nome_materia, attuale, di_andrea, note, documenti, esiti),
-            modello=ctx.settings.modello_piano, valida=valida, max_token=2500,
+            messaggi=prompt.messaggi_scheda(nome_materia, documenti, esiti),
+            modello=ctx.settings.modello_piano, valida=valida, max_token=TOKEN_SCHEDA_USCITA,
             cosa=f"Scheda del prof di {materia['nome']}",
-            dati={"materia": nome_materia, "attuale": attuale, "documenti": documenti, "esiti": esiti},
+            dati={"materia": nome_materia, "documenti": documenti, "esiti": esiti},
             materia_id=materia_id,
         )
     except TettoRaggiunto as e:
@@ -395,5 +473,5 @@ def aggiorna(ctx, materia_id: int) -> None:
         chiudi("errore", errore="Lectio ha avuto un problema aggiornando la scheda. Riprova con Aggiorna.")
         return
     prof = (materia["prof"] or "").strip()
-    chiudi("pronta", dati=normalizza(oggetto),
+    chiudi("pronta", dati=conta(oggetto, documenti, esiti),
            novita=f"Ho aggiornato la scheda del prof {prof}" if prof else f"Ho aggiornato la scheda di {materia['nome']}")

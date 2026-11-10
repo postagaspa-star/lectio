@@ -1,5 +1,7 @@
 package eu.stgm.lectio.ui.materie
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,20 +48,28 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import eu.stgm.lectio.dati.DaRipassare
+import eu.stgm.lectio.dati.DocumentoPdf
 import eu.stgm.lectio.dati.Evento
 import eu.stgm.lectio.dati.Lezione
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.Materiale
 import eu.stgm.lectio.dati.NuovaMateria
 import eu.stgm.lectio.dati.NuovoEvento
+import eu.stgm.lectio.dati.Schema
 import eu.stgm.lectio.dati.SchedaProf
+import eu.stgm.lectio.dati.Simulata
 import eu.stgm.lectio.dati.Sorgente
 import eu.stgm.lectio.logica.Esiti
 import eu.stgm.lectio.logica.Formati
+import eu.stgm.lectio.logica.TestiLampo
+import eu.stgm.lectio.logica.TestiSchema
+import eu.stgm.lectio.logica.TestiSimulata
 import eu.stgm.lectio.logica.TipoMateriale
 import eu.stgm.lectio.logica.ToniEsito
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.messaggio
+import eu.stgm.lectio.ui.Barra
+import eu.stgm.lectio.ui.Binario
 import eu.stgm.lectio.ui.Campo
 import eu.stgm.lectio.ui.CampoConEtichetta
 import eu.stgm.lectio.ui.Conferma
@@ -67,6 +77,8 @@ import eu.stgm.lectio.ui.Etichetta
 import eu.stgm.lectio.ui.Foglio
 import eu.stgm.lectio.ui.Icone
 import eu.stgm.lectio.ui.MARGINE
+import eu.stgm.lectio.ui.MenuPuntini
+import eu.stgm.lectio.ui.PiastrellaIcona
 import eu.stgm.lectio.ui.PulsantePieno
 import eu.stgm.lectio.ui.PulsanteSecondario
 import eu.stgm.lectio.ui.PulsanteTesto
@@ -77,10 +89,13 @@ import eu.stgm.lectio.ui.Scheda
 import eu.stgm.lectio.ui.Segmenti
 import eu.stgm.lectio.ui.Segnaposto
 import eu.stgm.lectio.ui.TitoloSezione
+import eu.stgm.lectio.ui.VoceMenu
 import eu.stgm.lectio.ui.comuni.PilloleStato
 import eu.stgm.lectio.ui.lezioni.RigaLezione
 import eu.stgm.lectio.ui.materiale.CampoData
+import eu.stgm.lectio.ui.studio.SchedaLampo
 import eu.stgm.lectio.ui.tema.L
+import eu.stgm.lectio.ui.tema.LocalMovimenti
 import eu.stgm.lectio.ui.tema.materia
 import eu.stgm.lectio.visita.Bersagli
 import eu.stgm.lectio.visita.LocalVisita
@@ -108,6 +123,14 @@ data class StatoMateria(
     val messaggio: String? = null,
     val eliminata: Boolean = false,
     val oggi: LocalDate = LocalDate.now(),
+    /** Colore -> materia che lo usa, per il foglio dei colori. */
+    val usatiDa: Map<String, String> = emptyMap(),
+    val schemi: List<Schema> = emptyList(),
+    val simulate: List<Simulata> = emptyList(),
+    /** 0 Lezioni, 1 Schemi, 2 Simulate (aspetto.md §31.2). */
+    val segmento: Int = 0,
+    /** Ci sono schede già sul telefono: Inizia funziona anche senza rete. */
+    val lampoDisponibile: Boolean = false,
 )
 
 class MateriaViewModel(
@@ -128,6 +151,11 @@ class MateriaViewModel(
             val materiale = sorgente.materiale(materiaId)
             val ripassare = sorgente.daRipassare(materiaId)
             val lezioni = sorgente.lezioni(materiaId)
+            val schemi = sorgente.schemi(materiaId)
+            val simulate = sorgente.simulate(materiaId)
+            // Le schede di oggi si tengono sul telefono: così Ripasso lampo parte anche senza rete.
+            val quante = materie.dato?.firstOrNull { m -> m.id == materiaId }?.conteggi?.lampo ?: 0
+            val lampo = if (quante > 0) sorgente.lampo(materiaId) else null
             val oggiData = oggi()
             val prossime = eventi.dato.orEmpty()
                 .filter { it.materiaId == materiaId && (Formati.data(it.data)?.let { d -> !d.isBefore(oggiData) } ?: false) }
@@ -136,6 +164,10 @@ class MateriaViewModel(
                 it.copy(
                     materia = materie.dato?.firstOrNull { m -> m.id == materiaId } ?: it.materia,
                     usati = materie.dato.orEmpty().filter { m -> m.id != materiaId }.map { m -> m.colore },
+                    usatiDa = materie.dato.orEmpty().filter { m -> m.id != materiaId }.associate { m -> m.colore to m.nome },
+                    schemi = schemi.dato ?: it.schemi,
+                    simulate = simulate.dato ?: it.simulate,
+                    lampoDisponibile = lampo?.dato?.carte?.isNotEmpty() == true,
                     scheda = scheda.dato ?: it.scheda,
                     prossime = prossime,
                     lezioniEventi = lezioni.dato.orEmpty().associateBy { l -> l.id },
@@ -151,7 +183,36 @@ class MateriaViewModel(
 
     /** Mentre il server legge un file o aggiorna la scheda, si ricontrolla ogni pochi secondi. */
     val inAttesa: Boolean
-        get() = _stato.value.materiale.any { it.stato == "in_lettura" } || _stato.value.scheda?.stato == "in_aggiornamento"
+        get() = _stato.value.let { s ->
+            s.materiale.any { it.stato == "in_lettura" } || s.scheda?.stato == "in_aggiornamento" ||
+                s.schemi.any { it.inLavoro } || s.simulate.any { it.inLavoro || it.inCorrezione }
+        }
+
+    fun segmento(i: Int) = _stato.update { it.copy(segmento = i.coerceIn(0, 2)) }
+
+    fun riprovaSchema(id: Long) = azione {
+        val e = sorgente.riprovaSchema(id)
+        if (e is Esito.Ok) sorgente.deposito.seguiSchema(id)
+        e
+    }
+
+    fun eliminaSchema(id: Long) = azione {
+        val e = sorgente.eliminaSchema(id)
+        if (e is Esito.Ok) sorgente.deposito.smettiSchema(id)
+        e
+    }
+
+    fun riprovaSimulata(id: Long) = azione {
+        val e = sorgente.riprovaSimulata(id)
+        if (e is Esito.Ok) sorgente.deposito.seguiSimulata(id)
+        e
+    }
+
+    fun eliminaSimulata(id: Long) = azione {
+        val e = sorgente.eliminaSimulata(id)
+        if (e is Esito.Ok) sorgente.deposito.smettiSimulata(id)
+        e
+    }
 
     fun aggiornaScheda() = azione { sorgente.aggiornaScheda(materiaId) }
     fun riprovaMateriale(id: Long) = azione { sorgente.riprovaMateriale(id) }
@@ -185,6 +246,8 @@ class MateriaViewModel(
             val e = sorgente.eliminaMateria(materiaId)
             if (e is Esito.Ok) {
                 togliLezioniLocali(lezioni.toList())
+                _stato.value.schemi.forEach { sorgente.deposito.togliSchema(it.id) }
+                _stato.value.simulate.forEach { sorgente.deposito.togliCopia(it.id) }
                 _stato.update { it.copy(eliminata = true) }
             }
             fatto(e.messaggio)
@@ -213,6 +276,13 @@ data class AzioniMateria(
     val nuovaLezione: (eventoId: Long?) -> Unit = {},
     val apriLezione: (Lezione) -> Unit = {},
     val ripassa: (DaRipassare) -> Unit = {},
+    val lampo: () -> Unit = {},
+    val nuovoSchema: (eventoId: Long?) -> Unit = {},
+    val apriSchema: (Schema) -> Unit = {},
+    val nuovaSimulata: (eventoId: Long?) -> Unit = {},
+    val apriSimulata: (Simulata) -> Unit = {},
+    val pdf: (DocumentoPdf, String) -> Unit = { _, _ -> },
+    val inLavoro: () -> Unit = {},
 )
 
 /** La pagina della materia (aspetto.md §4, prototipo Materia.dc.html). */
@@ -220,13 +290,19 @@ data class AzioniMateria(
 fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean, senzaRete: Boolean, scaricate: Set<Long>) {
     val s by vm.stato.collectAsStateWithLifecycle()
     LaunchedEffect(vm) { vm.carica() }
-    LaunchedEffect(s.materiale, s.scheda) {
+    LaunchedEffect(s.materiale, s.scheda, s.schemi, s.simulate) {
         while (vm.inAttesa) {
             delay(4_000)
             vm.carica()
         }
     }
     LaunchedEffect(s.eliminata) { if (s.eliminata) azioni.indietro() }
+    LaunchedEffect(s.messaggio) {
+        if (s.messaggio != null) {
+            delay(4_000)
+            vm.messaggioVisto()
+        }
+    }
     val c = L.colori
     val m = s.materia
     val colori = materia(m?.colore)
@@ -234,6 +310,21 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
     var foglioMateria by remember { mutableStateOf(false) }
     var evento by remember { mutableStateOf<Evento?>(null) }
     var nuovoEvento by remember { mutableStateOf(false) }
+    var daEliminare by remember { mutableStateOf<Any?>(null) }
+    val muove = LocalMovimenti.current
+    val puoCreare = !senzaRete || esempio
+    val prossimaData = s.prossime.firstOrNull()?.id
+
+    // Visita guidata: ogni passo trova il segmento giusto, anche tornando indietro.
+    if (visita != null) {
+        LaunchedEffect(visita.attiva, visita.indice) {
+            if (!visita.attiva) return@LaunchedEffect
+            when (visita.corrente.bersaglio) {
+                Bersagli.NUOVA_LEZIONE, Bersagli.SEGMENTO_SCHEMI -> vm.segmento(0)
+                Bersagli.NUOVO_SCHEMA, Bersagli.SEGMENTO_SIMULATE -> vm.segmento(1)
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 100.dp)) {
@@ -262,6 +353,7 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
 
             Column(Modifier.padding(MARGINE), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 s.errore?.let { RigaErrore(it, onRiprova = vm::carica) }
+                s.messaggio?.let { RigaErrore(it) }
                 SchedaDelProf(s.scheda, m?.colore, senzaRete, azioni, vm::aggiornaScheda, Modifier.bersaglio(Bersagli.SCHEDA_PROF))
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -290,9 +382,11 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
                     }
                 }
 
-                if (s.ripassare.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        TitoloSezione("Da ripassare")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TitoloSezione("Da ripassare")
+                    val schede = m?.conteggi?.lampo ?: 0
+                    SchedaLampo(schede, TestiLampo.minuti(schede), puoCreare || s.lampoDisponibile, "Niente per oggi", azioni.lampo)
+                    if (s.ripassare.isNotEmpty()) {
                         Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) {
                             s.ripassare.forEachIndexed { i, r ->
                                 if (i > 0) Riga()
@@ -336,13 +430,40 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
                     }
                 }
 
-                if (s.lezioni.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        TitoloSezione("Lezioni")
-                        Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Binario(
+                        listOf("Lezioni", "Schemi", "Simulate"), s.segmento,
+                        { i ->
+                            vm.segmento(i)
+                            if (i == 1) visita?.azione(Bersagli.SEGMENTO_SCHEMI)
+                            if (i == 2) visita?.azione(Bersagli.SEGMENTO_SIMULATE)
+                        },
+                        altezza = 48.dp,
+                        modificatoreSegmento = { i ->
+                            when (i) {
+                                1 -> Modifier.bersaglio(Bersagli.SEGMENTO_SCHEMI)
+                                2 -> Modifier.bersaglio(Bersagli.SEGMENTO_SIMULATE)
+                                else -> Modifier
+                            }
+                        },
+                    )
+                    when (s.segmento) {
+                        0 -> ElencoVuotoOppure(s.lezioni.isEmpty(), "Nessuna lezione ancora") {
                             s.lezioni.forEachIndexed { i, l ->
                                 if (i > 0) Riga()
                                 RigaLezione(l, m?.nome, m?.colore, l.id in scaricate, { azioni.apriLezione(l) })
+                            }
+                        }
+                        1 -> ElencoVuotoOppure(s.schemi.isEmpty(), "Nessuno schema ancora") {
+                            s.schemi.forEachIndexed { i, x ->
+                                if (i > 0) Riga()
+                                RigaSchema(x, m?.colore, senzaRete && !esempio, azioni, { vm.riprovaSchema(x.id) }, { daEliminare = x })
+                            }
+                        }
+                        else -> ElencoVuotoOppure(s.simulate.isEmpty(), "Nessuna verifica simulata ancora") {
+                            s.simulate.forEachIndexed { i, x ->
+                                if (i > 0) Riga()
+                                RigaSimulata(x, m?.colore, senzaRete && !esempio, azioni, { vm.riprovaSimulata(x.id) }, { daEliminare = x })
                             }
                         }
                     }
@@ -350,21 +471,40 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
             }
         }
         eu.stgm.lectio.ui.ZonaPulsanteFisso(Modifier.align(Alignment.BottomCenter)) {
-            PulsantePieno(
-                "Nuova lezione",
-                {
-                    visita?.azione(Bersagli.NUOVA_LEZIONE)
-                    if (visita?.attiva != true) azioni.nuovaLezione(s.prossime.firstOrNull()?.id)
-                },
-                Modifier.bersaglio(Bersagli.NUOVA_LEZIONE), icona = Icone.Piu, abilitato = !senzaRete || esempio,
-            )
+            // Il pulsante segue il segmento (aspetto.md §31.2).
+            Crossfade(s.segmento, animationSpec = tween(if (muove) 200 else 0), label = "pulsante") { segmento ->
+                when (segmento) {
+                    0 -> PulsantePieno(
+                        "Nuova lezione",
+                        {
+                            visita?.azione(Bersagli.NUOVA_LEZIONE)
+                            if (visita?.attiva != true) azioni.nuovaLezione(prossimaData)
+                        },
+                        Modifier.bersaglio(Bersagli.NUOVA_LEZIONE), icona = Icone.Piu, abilitato = puoCreare,
+                    )
+                    1 -> PulsantePieno(
+                        "Nuovo schema",
+                        {
+                            visita?.azione(Bersagli.NUOVO_SCHEMA)
+                            if (visita?.attiva != true) azioni.nuovoSchema(prossimaData)
+                        },
+                        Modifier.bersaglio(Bersagli.NUOVO_SCHEMA), icona = Icone.Piu, abilitato = puoCreare,
+                    )
+                    else -> PulsantePieno("Nuova verifica simulata", { azioni.nuovaSimulata(prossimaData) }, icona = Icone.Piu, abilitato = puoCreare)
+                }
+            }
         }
     }
 
+    when (val x = daEliminare) {
+        is Schema -> Conferma("Eliminare lo schema?", "Sparisce anche dal server di casa. Non si può tornare indietro.", "Elimina", { daEliminare = null; vm.eliminaSchema(x.id) }, { daEliminare = null })
+        is Simulata -> Conferma("Eliminare la verifica simulata?", "Sparisce anche dal server di casa. Non si può tornare indietro.", "Elimina", { daEliminare = null; vm.eliminaSimulata(x.id) }, { daEliminare = null })
+    }
     if (foglioMateria && m != null) {
         FoglioMateria(
             esistente = m,
             usati = s.usati,
+            usatiDa = s.usatiDa,
             onSalva = { nome, prof, colore, fatto -> vm.salvaMateria(nome, prof, colore) { e -> fatto(e); if (e == null) foglioMateria = false } },
             onElimina = { fatto -> vm.eliminaMateria(fatto) },
             onChiudi = { foglioMateria = false },
@@ -383,6 +523,82 @@ fun MateriaScreen(vm: MateriaViewModel, azioni: AzioniMateria, esempio: Boolean,
             evento = null
             nuovoEvento = false
         })
+    }
+}
+
+/** La scheda con le righe, oppure la frase quando non c'è ancora niente. */
+@Composable
+private fun ElencoVuotoOppure(vuoto: Boolean, frase: String, righe: @Composable () -> Unit) {
+    if (vuoto) {
+        Text(frase, style = L.testi.testoMedio.copy(fontWeight = FontWeight.Medium), color = L.colori.tenue, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+    } else {
+        Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) { righe() }
+    }
+}
+
+/** Una riga di schema o di simulata (aspetto.md §31.2). */
+@Composable
+private fun RigaStudio(
+    icona: ImageVector,
+    colore: String?,
+    titolo: String,
+    sotto: String,
+    errore: Boolean,
+    frazione: Float?,
+    onClick: () -> Unit,
+    destra: @Composable () -> Unit,
+) {
+    val c = L.colori
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        PiastrellaIcona(icona, colore)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(titolo, style = L.testi.forte, color = c.testo, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (sotto.isNotBlank()) Text(sotto, style = L.testi.secondario, color = if (errore) c.erroreTesto else c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            frazione?.let { Barra(it, altezza = 4.dp, modifier = Modifier.padding(top = 4.dp)) }
+        }
+        destra()
+    }
+}
+
+private fun frazioneDi(fatto: Int, totale: Int): Float? = if (totale > 0) (fatto.toFloat() / totale).coerceIn(0f, 1f) else null
+
+@Composable
+private fun RigaSchema(s: Schema, colore: String?, offline: Boolean, azioni: AzioniMateria, onRiprova: () -> Unit, onElimina: () -> Unit) {
+    RigaStudio(
+        Icone.Testo, colore, s.nome, TestiSchema.sottoRiga(s), s.fallito,
+        if (s.stato == "in_preparazione") frazioneDi(s.fatto, s.totale) else null,
+        { azioni.apriSchema(s) },
+    ) {
+        if (s.fallito) PulsanteTesto("Riprova", onRiprova, abilitato = !offline)
+        MenuPuntini(
+            buildList {
+                if (s.pronto) add(VoceMenu("Scarica PDF", !offline) { azioni.pdf(DocumentoPdf.DiSchema(s.id), s.nome) })
+                add(VoceMenu("Elimina", !offline, onElimina))
+            },
+        )
+    }
+}
+
+@Composable
+private fun RigaSimulata(q: Simulata, colore: String?, offline: Boolean, azioni: AzioniMateria, onRiprova: () -> Unit, onElimina: () -> Unit) {
+    val conDomande = q.pronta || q.inCorso || q.inCorrezione || q.corretta
+    RigaStudio(
+        Icone.Verifica, colore, q.nome, TestiSimulata.sottoRiga(q), q.fallita,
+        if (q.stato == "in_preparazione") frazioneDi(q.fatto, q.totale) else null,
+        { azioni.apriSimulata(q) },
+    ) {
+        if (q.fallita) PulsanteTesto("Riprova", onRiprova, abilitato = !offline)
+        if (q.inCorso) PulsanteSecondario("Riprendi", { azioni.apriSimulata(q) }, altezza = 48.dp)
+        MenuPuntini(
+            buildList {
+                if (conDomande) add(VoceMenu("Scarica PDF", !offline) { azioni.pdf(DocumentoPdf.DiSimulata(q.id), q.nome) })
+                add(VoceMenu("Elimina", !offline, onElimina))
+            },
+        )
     }
 }
 

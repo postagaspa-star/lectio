@@ -135,7 +135,7 @@ def test_tre_tipi_con_la_chiave_e_indicazioni_nei_prompt(client, auth, servizi, 
     s = misure.struttura(tipo, 15)
     assert len(l["domande"]) == s["domande"]
     chat = [d for percorso, d in server.chiamate if percorso == "/v1/chat/completions"]
-    utenti = [d["messages"][1]["content"] for d in chat]
+    utenti = [d["messages"][1]["content"] for d in chat if "Qui sotto ci sono delle frasi numerate" not in d["messages"][1]["content"]]
     # Le indicazioni arrivano in ogni passo, racchiuse: la chiusura finta non esce dal blocco.
     assert all("<indicazioni>" in u for u in utenti), [u[:60] for u in utenti]
     assert all(u.count("</indicazioni>") == 1 for u in utenti)

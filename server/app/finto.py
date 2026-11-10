@@ -192,7 +192,7 @@ class TestoFinto:
         blocco = piano["blocchi"][k - 1]
         tutte = [f for b in d.get("brani") or [] for f in frasi(b["testo"])] or list(blocco.get("punti") or [])
         limite = min(int(d.get("parole") or PAROLE_MASSIME_BLOCCO), PAROLE_MASSIME_BLOCCO)
-        paragrafi = [{"tipo": "aggancio", "testo": f"Partiamo da una domanda. Che cosa sappiamo di {blocco['titolo'].lower()}?"}]
+        paragrafi: list[dict] = []
         usate, attuale = 0, []
         for frase in tutte:
             if usate >= limite:
@@ -212,7 +212,7 @@ class TestoFinto:
     def _parte(self, d: dict) -> dict:
         """Ripasso: solo i punti chiave, senza domanda."""
         uscita = self._blocco(d)
-        return {"paragrafi": [p for p in uscita["paragrafi"] if p["tipo"] != "aggancio"] or uscita["paragrafi"]}
+        return {"paragrafi": uscita["paragrafi"] or [{"tipo": "spiegazione", "testo": "Niente da aggiungere su questa parte."}]}
 
     def _gruppo(self, d: dict) -> dict:
         """Interrogazione: le domande del gruppo, con la risposta presa dal materiale."""
@@ -247,19 +247,98 @@ class TestoFinto:
         return {"riepilogo": [riepilogo], "domande": domande, "errori": errori,
                 "chiusura": "Per oggi è tutto. Ripeti a voce le risposte prima della verifica."}
 
-    def _selezione(self, d: dict) -> dict:
-        """Sceglie i pezzi che hanno più parole in comune con l'argomento."""
-        parole = set(_parole_importanti(d.get("argomento") or ""))
+    # ------------------------------------------------------------------ controllo, schemi, simulate
+
+    def _verifica(self, d: dict) -> dict:
+        return {"fuori": []}
+
+    def _copertura(self, d: dict) -> dict:
+        return {"mancanti": []}
+
+    def _foto(self, d: dict) -> dict:
+        return {"mostra": False, "cosa_si_vede": ""}
+
+    def _schema_piano(self, d: dict) -> dict:
+        lettura = d["lettura"]
+        brani = lettura["brani"]
+        n = max(1, min(int(d["massimo"]), len(brani)))
+        gruppi: list[list[dict]] = [[] for _ in range(n)]
+        for i, b in enumerate(brani):
+            gruppi[min(n - 1, i * n // max(1, len(brani)))].append(b)
+        sezioni, concetti = [], []
+        for k, gruppo in enumerate(gruppi, start=1):
+            tutte = [f for b in gruppo for f in frasi(b["testo"])]
+            titolo = _titolo_da(tutte[0], f"Parte {k}") if tutte else f"Parte {k}"
+            punti = [f.rstrip(".") for f in tutte[:3]] or [titolo]
+            concetti += punti
+            sezioni.append({"titolo": titolo, "concetti": punti, "fonti": [b["id"] for b in gruppo][:6]})
+        forma = d["forma"] if d["forma"] != "auto" else "capitoli"
+        return {"titolo": lettura["argomento"], "forma": forma, "concetti": concetti, "sezioni": sezioni, "immagini": []}
+
+    def _schema_sezione(self, d: dict) -> dict:
+        sezione = d["sezione"]
         brani = d.get("brani") or []
-        massimo = int(d.get("massimo") or 60_000)
-        ordinati = sorted(brani, key=lambda b: -len(parole & set(_parole_importanti(b["testo"]))))
-        scelti, totale = [], 0
-        for b in ordinati:
-            if scelti and totale + len(b["testo"]) > massimo:
+        tutte = [f for b in brani for f in frasi(b["testo"])] or [f"{sezione['titolo']}."]
+        fonti = [b["id"] for b in brani][:3]
+        blocchi = [{"tipo": "paragrafo", "titolo": None, "testo": " ".join(tutte[:3]), "fonti": fonti},
+                   {"tipo": "punti", "titolo": "Da sapere", "voci": tutte[:4], "fonti": fonti}]
+        uscita = {"blocchi": blocchi,
+                  "carte": [{"domanda": f"Che cosa ricordi di {sezione['titolo'].lower()}?", "risposta": tutte[0]}]}
+        if d.get("forma") == "schede":
+            uscita["campi"] = [{"nome": "Dal testo", "valore": tutte[0][:80]}]
+        return uscita
+
+    def _schema_tabella(self, d: dict) -> dict:
+        return {"titolo": "Quadro d'insieme", "intestazione": ["Parte", "Da ricordare"],
+                "righe": [[s["titolo"], (s.get("primo") or "")[:90]] for s in d["sezioni"]]}
+
+    def _schema_immagini(self, d: dict) -> dict:
+        return {"immagini": []}
+
+    def _riassunto(self, d: dict) -> dict:
+        parti = []
+        for sezione in d["sezioni"]:
+            righe = [r for r in sezione["testo"].splitlines()[1:] if r.strip()][:5]
+            if not righe:
                 continue
-            scelti.append(b["id"])
-            totale += len(b["testo"])
-        return {"scelti": scelti}
+            if d["forma"] == "punti":
+                parti.append({"titolo": sezione["titolo"], "paragrafi": [], "punti": righe})
+            elif d["forma"] == "discorsivo":
+                parti.append({"titolo": sezione["titolo"], "paragrafi": [" ".join(righe)], "punti": []})
+            else:
+                parti.append({"titolo": sezione["titolo"], "paragrafi": [" ".join(righe[:2])], "punti": righe[2:]})
+        return {"titolo": "Riassunto", "parti": parti}
+
+    def _chiarimento(self, d: dict) -> dict:
+        tutte = [f for b in d.get("brani") or [] for f in frasi(b["testo"])]
+        if not tutte:
+            return {"trovato": False, "risposta": None, "fonti": [], "cosa_manca": "quello che chiedi"}
+        return {"trovato": True, "risposta": "Vuol dire questo. " + " ".join(tutte[:3]),
+                "fonti": [b["id"] for b in d["brani"]][:2], "cosa_manca": None}
+
+    def _simulata(self, d: dict) -> dict:
+        lettura = d["lettura"]
+        brani = lettura["brani"]
+        tutte = [(f, b["id"]) for b in brani for f in frasi(b["testo"])] or [("Il materiale è vuoto.", None)]
+        n = int(d["domande_circa"])
+        domande = []
+        for i, testo in enumerate(_domande_vere(brani)[:n]):
+            domande.append({"tipo": "aperta", "testo": testo, "punti": 10, "sezione": None,
+                            "risposta_attesa": tutte[i % len(tutte)][0], "fonti": [tutte[i % len(tutte)][1]],
+                            "dal_documento": None})
+        for i in range(len(domande), n):
+            frase, fonte = tutte[i % len(tutte)]
+            domande.append({"tipo": "aperta", "testo": f"Spiega questo punto: {frase[:100].lower()}", "punti": 10,
+                            "sezione": None, "risposta_attesa": frase, "fonti": [fonte], "dal_documento": None})
+        return {"titolo": f"Verifica di prova: {lettura['argomento']}"[:100], "domande": domande}
+
+    def _correzione_simulata(self, d: dict) -> dict:
+        uscita = []
+        for v in d["voci"]:
+            esito = self._correttore({"attesa": v["risposta_attesa"], "risposta": v["risposta"]})
+            uscita.append({"n": v["n"], "esito": esito["esito"], "punti": round(v["punti"] * esito["punteggio"]),
+                           "commento": esito["commento"], "mancava": esito["mancava"]})
+        return {"domande": uscita}
 
     def _correttore(self, d: dict) -> dict:
         """Confronta le parole importanti della risposta attesa con quelle scritte."""
@@ -282,47 +361,32 @@ class TestoFinto:
 
     def _scheda(self, d: dict) -> dict:
         documenti = d.get("documenti") or []
-        domande = _domande_vere(documenti)
-        conteggio: dict[str, int] = {}
-        for q in domande:
-            t = q.lower()
-            if re.search(r"\b(quando|in che anno|data)\b", t):
-                tipo = "date"
-            elif re.search(r"\b(che cos|cos'è|definisci|definizione)\b", t):
-                tipo = "definizione"
-            elif "vero o falso" in t:
-                tipo = "vero_falso"
-            elif re.search(r"\b(traduci|traduzione)\b", t):
-                tipo = "traduzione"
-            elif re.search(r"\b(calcola|risolvi)\b", t):
-                tipo = "esercizio"
-            else:
-                tipo = "aperta"
-            conteggio[tipo] = conteggio.get(tipo, 0) + 1
-        totale = sum(conteggio.values())
-        tipi = [{"tipo": t, "quota": round(n / totale, 2)} for t, n in sorted(conteggio.items(), key=lambda x: -x[1])]
-        argomenti: dict[str, dict] = {}
+        domande = []
         for doc in documenti:
-            nome = (doc.get("titolo") or "Argomento").strip()[:60]
-            voce = argomenti.setdefault(nome, {"nome": nome, "volte": 0, "esempio": ""})
-            voce["volte"] += 1
-            prime = _domande_vere([doc])
-            if prime and not voce["esempio"]:
-                voce["esempio"] = prime[0][:150]
+            for q in _domande_vere([doc]):
+                t = q.lower()
+                if re.search(r"\b(quando|in che anno|data)\b", t):
+                    tipo = "date"
+                elif re.search(r"\b(che cos|cos'è|definisci|definizione)\b", t):
+                    tipo = "definizione"
+                elif "vero o falso" in t:
+                    tipo = "vero_falso"
+                elif re.search(r"\b(traduci|traduzione)\b", t):
+                    tipo = "traduzione"
+                elif re.search(r"\b(calcola|risolvi)\b", t):
+                    tipo = "esercizio"
+                else:
+                    tipo = "aperta"
+                domande.append({"doc": doc["id"], "testo": q.rstrip("?"), "tipo": tipo,
+                                "argomento": (doc.get("titolo") or "Argomento").strip()[:60]})
         corregge, premia = [], []
         for doc in documenti:
             for riga in (doc.get("testo") or "").split("\n"):
                 m = re.match(r"^\s*CORREZIONI DEL PROF\s*:\s*(.+)$", riga, re.IGNORECASE)
                 if m and m.group(1).strip() and len(corregge) < 5:
-                    corregge.append(m.group(1).strip()[:150])
+                    corregge.append({"frase": m.group(1).strip()[:150], "prova": m.group(1).strip()})
                 m = re.match(r"^\s*COMMENTO DEL PROF\s*:\s*(.+)$", riga, re.IGNORECASE)
                 if m and m.group(1).strip() and len(premia) < 3:
-                    premia.append(m.group(1).strip()[:150])
-        return {
-            "argomenti": sorted(argomenti.values(), key=lambda a: -a["volte"])[:10],
-            "tipi_domanda": tipi,
-            "cosa_corregge": corregge,
-            "cosa_premia": premia,
-            "lunghezza_risposte": "",
-            "consigli": ["Rileggi le correzioni delle verifiche passate prima della prossima."],
-        }
+                    premia.append({"frase": m.group(1).strip()[:150], "prova": m.group(1).strip()})
+        return {"domande": domande, "cosa_corregge": corregge, "cosa_premia": premia, "lunghezza_risposte": None,
+                "consigli": []}

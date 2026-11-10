@@ -10,7 +10,7 @@ namespace Lectio.Interfaccia;
 /// <summary>
 /// L'accordo fra la pagina (pc/ui) e il programma: le richieste della pagina a <c>https://lectio.locale/locale/*</c>
 /// e <c>/server/*</c> arrivano qui, dentro WebView2. Niente porte aperte sul computer, e la pagina non vede mai
-/// il token. Tutte le risposte sono JSON.
+/// il token. Le risposte sono JSON, tranne le foto degli schemi (byte, mai il token nell'indirizzo).
 /// </summary>
 public sealed class Ponte
 {
@@ -22,7 +22,12 @@ public sealed class Ponte
 
     private static readonly Regex RottaLezione = new(@"^lezioni/(\d{1,12})(/scarica|/scaricamento)?$", RegexOptions.CultureInvariant);
 
+    private static readonly Regex RottaFotoSchema = new(@"^api/schemi/(\d{1,12})/immagini/(\d{1,6})$", RegexOptions.CultureInvariant);
+
     private readonly Motore.Motore motore;
+
+    /// <summary>I PDF salvati in questa sessione: "Apri" può aprire solo questi, mai un percorso mandato dalla pagina.</summary>
+    private readonly Dictionary<string, string> pdfSalvati = new(StringComparer.Ordinal);
 
     public Ponte(Motore.Motore motore) => this.motore = motore;
 
@@ -31,6 +36,12 @@ public sealed class Ponte
 
     /// <summary>Apre un indirizzo nel browser predefinito (già controllato con <see cref="ApribileFuori"/>).</summary>
     public Action<string>? ApriNelBrowser { get; set; }
+
+    /// <summary>Chiede a Windows dove salvare un file, col nome proposto. null = l'utente ha annullato.</summary>
+    public Func<string, Task<string?>>? ChiediDoveSalvare { get; set; }
+
+    /// <summary>Apre un file già salvato col programma predefinito di Windows.</summary>
+    public Action<string>? ApriFile { get; set; }
 
     /// <summary>Accende o spegne i tasti multimediali della tastiera (c'è una lezione nel lettore).</summary>
     public Action<bool>? Tasti { get; set; }
@@ -134,6 +145,11 @@ public sealed class Ponte
         }
         if (percorso.StartsWith("/server/", StringComparison.Ordinal))
         {
+            var foto = metodo == "GET" ? RottaFotoSchema.Match(percorso["/server/".Length..]) : Match.Empty;
+            if (foto.Success)
+            {
+                return await motore.ImmagineSchemaAsync(long.Parse(foto.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(foto.Groups[2].Value, CultureInfo.InvariantCulture)).ConfigureAwait(false);
+            }
             var testo = corpo == null || corpo.Length == 0 ? null : Encoding.UTF8.GetString(corpo);
             return await motore.InoltraAsync(metodo, percorso["/server/".Length..], uri.Query, testo).ConfigureAwait(false);
         }
@@ -166,6 +182,50 @@ public sealed class Ponte
         return d;
     }
 
+    /// <summary>Un nome di file pulito per il PDF: niente caratteri che Windows non vuole, sempre .pdf in fondo.</summary>
+    public static string NomePdf(string? nome)
+    {
+        var pulito = new string((nome ?? "").Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '-' : c).ToArray()).Trim().TrimEnd('.');
+        if (pulito.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) pulito = pulito[..^4].TrimEnd();
+        if (pulito.Length > 80) pulito = pulito[..80].TrimEnd();
+        return (pulito.Length == 0 ? "Lectio" : pulito) + ".pdf";
+    }
+
+    /// <summary>Prima si scarica il PDF, poi si chiede dove metterlo: se il server non risponde non si apre nessuna finestra.</summary>
+    private async Task<JsonObject> SalvaPdfAsync(string? percorso, string? nome)
+    {
+        var (dati, errore) = await motore.LeggiPdfAsync(percorso).ConfigureAwait(false);
+        if (errore != null) return errore;
+        if (ChiediDoveSalvare == null) return new JsonObject { ["errore"] = "Da qui non si può salvare il PDF.", ["codice"] = "non_disponibile" };
+        var dove = await ChiediDoveSalvare(NomePdf(nome)).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(dove)) return new JsonObject { ["annullato"] = true };
+        try
+        {
+            await File.WriteAllBytesAsync(dove, dati!).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            Log.Errore("PDF non salvato", e);
+            return new JsonObject { ["errore"] = "Non sono riuscito a salvarlo lì. Prova un'altra cartella.", ["codice"] = "non_salvato" };
+        }
+        var id = Guid.NewGuid().ToString("N");
+        lock (pdfSalvati) pdfSalvati[id] = dove;
+        return new JsonObject { ["ok"] = true, ["id"] = id, ["nome"] = Path.GetFileName(dove) };
+    }
+
+    private JsonObject ApriPdf(string? id)
+    {
+        string? file = null;
+        if (id != null)
+        {
+            lock (pdfSalvati) pdfSalvati.TryGetValue(id, out file);
+        }
+        if (file == null || ApriFile == null) return new JsonObject { ["errore"] = "Questo PDF non si apre da qui.", ["codice"] = "non_disponibile" };
+        if (!File.Exists(file)) return new JsonObject { ["errore"] = "Il PDF non è più in quella cartella.", ["codice"] = "non_trovato" };
+        ApriFile(file);
+        return new JsonObject { ["ok"] = true };
+    }
+
     private async Task<(int, JsonObject)> LocaleAsync(string metodo, string nome, string? corpo)
     {
         var o = Json.Nodo(corpo) as JsonObject;
@@ -194,6 +254,9 @@ public sealed class Ponte
             "abbina" => ("POST", () => motore.AbbinaAsync(Json.Testo(o?["server"]), Json.Testo(o?["codice"]), Json.Testo(o?["nome"]))),
             "scollega" => ("POST", motore.ScollegaAsync),
             "tutorial-visto" => ("POST", () => Task.FromResult(motore.SegnaTutorialVisto())),
+            "tutorial-novita-visto" => ("POST", () => Task.FromResult(motore.SegnaTutorialNovitaVisto())),
+            "salva-pdf" => ("POST", () => SalvaPdfAsync(Json.Testo(o?["percorso"]), Json.Testo(o?["nome"]))),
+            "apri-pdf" => ("POST", () => Task.FromResult(ApriPdf(Json.Testo(o?["id"])))),
             "fuori-casa" => ("POST", () => Task.FromResult(motore.ImpostaFuoriCasa(Json.Testo(o?["indirizzo"])))),
             "tema" => ("POST", () => Task.FromResult(motore.ImpostaTema(Json.Testo(o?["tema"])))),
             "lezioni/scaricate" => ("GET", () => Task.FromResult(motore.Scaricate())),

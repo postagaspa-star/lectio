@@ -237,6 +237,9 @@ class NuovaLezioneViewModel(
     private val eventoIniziale: Long?,
     private val oggi: () -> LocalDate = LocalDate::now,
     private val attesaSuggeritiMs: Long = ATTESA_SUGGERITI_MS,
+    /** "Ascolta questa parte" di uno schema: argomento e documenti già messi (aspetto.md §33). */
+    private val argomentoIniziale: String = "",
+    private val materialiIniziali: List<Long>? = null,
 ) : ViewModel() {
     private val _stato = MutableStateFlow(StatoNuovaLezione())
     val stato: StateFlow<StatoNuovaLezione> = _stato.asStateFlow()
@@ -269,7 +272,8 @@ class NuovaLezioneViewModel(
                     materia = materie.await().dato?.firstOrNull { m -> m.id == materiaId } ?: it.materia,
                     eventi = per,
                     eventoId = if (it.pronto) it.eventoId else evento?.id,
-                    argomento = it.argomento.ifBlank { evento?.argomento ?: "" },
+                    argomento = it.argomento.ifBlank { argomentoIniziale.ifBlank { evento?.argomento ?: "" } },
+                    sceltiAMano = if (it.pronto) it.sceltiAMano else materialiIniziali?.toSet(),
                     materiale = materiale.await().dato ?: it.materiale,
                     durata = if (it.pronto) it.durata else i?.durataPredefinita?.takeIf { d -> d in DURATE } ?: 20,
                     saltabili = if (it.pronto) it.saltabili else i?.domandeSaltabili ?: false,
@@ -495,8 +499,7 @@ fun NuovaLezioneScreen(vm: NuovaLezioneViewModel, onIndietro: () -> Unit, onCrea
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PulsanteTondo(Icone.Chiudi, "Chiudi", onIndietro, dimensioneIcona = 18.dp)
-                s.materia?.let { PillolaMateria(it.nome, it.colore, Modifier.weight(1f, fill = false)) }
-                Spacer(Modifier.weight(1f))
+                Box(Modifier.weight(1f)) { s.materia?.let { PillolaMateria(it.nome, it.colore) } }
                 if (esempio) PillolaStato(TipoPillola.ESEMPIO) else if (prova) PillolaStato(TipoPillola.PROVA)
             }
             Text(
@@ -505,8 +508,8 @@ fun NuovaLezioneScreen(vm: NuovaLezioneViewModel, onIndietro: () -> Unit, onCrea
                 color = c.testo,
                 modifier = Modifier.semantics { heading() },
             )
-            SuCosa(s, vm)
-            DaQualeMateriale(s, vm)
+            SezioneSuCosa(s.argomento, vm::argomento, s.eventi, s.eventoId, vm::evento)
+            SezioneMateriale(s.materiale, s.pronti, s.scelti, s.suggeriti, s.auto, s.cerca, vm::cerca, vm::tocca, vm::sullArgomento, vm::tutti, vm::nessuno)
             ComeLaVuoi(s, vm)
             SezioneVoce(s, vm)
             Riepilogo(s)
@@ -521,11 +524,11 @@ fun NuovaLezioneScreen(vm: NuovaLezioneViewModel, onIndietro: () -> Unit, onCrea
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SuCosa(s: StatoNuovaLezione, vm: NuovaLezioneViewModel) {
+fun SezioneSuCosa(argomento: String, onArgomento: (String) -> Unit, eventi: List<Evento>, eventoId: Long?, onEvento: (Long?) -> Unit) {
     SezioneNumerata(1, "Su cosa") {
         Etichetta("Argomento")
         CampoBordato(
-            s.argomento, vm::argomento,
+            argomento, onArgomento,
             segnaposto = "Per esempio L'Impero romano",
             stile = L.testi.forteGrande.copy(fontWeight = FontWeight.SemiBold),
             tastiera = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -533,8 +536,8 @@ private fun SuCosa(s: StatoNuovaLezione, vm: NuovaLezioneViewModel) {
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.heightIn(min = 48.dp).padding(end = 2.dp), contentAlignment = Alignment.Center) { Etichetta("Per") }
-            PillolaOpzione("Nessuna data", s.eventoId == null, { vm.evento(null) })
-            s.eventi.forEach { e -> PillolaOpzione(Per.pillola(e), s.eventoId == e.id, { vm.evento(e.id) }) }
+            PillolaOpzione("Nessuna data", eventoId == null, { onEvento(null) })
+            eventi.forEach { e -> PillolaOpzione(Per.pillola(e), eventoId == e.id, { onEvento(e.id) }) }
         }
     }
 }
@@ -543,23 +546,35 @@ private fun SuCosa(s: StatoNuovaLezione, vm: NuovaLezioneViewModel) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DaQualeMateriale(s: StatoNuovaLezione, vm: NuovaLezioneViewModel) {
+fun SezioneMateriale(
+    materiale: List<Materiale>,
+    pronti: List<Materiale>,
+    scelti: Set<Long>,
+    suggeriti: Set<Long>,
+    auto: Boolean,
+    cerca: String,
+    onCerca: (String) -> Unit,
+    onTocca: (Long) -> Unit,
+    onSull: () -> Unit,
+    onTutti: () -> Unit,
+    onNessuno: () -> Unit,
+) {
     val c = L.colori
-    val n = s.scelti.size
-    val totale = s.pronti.size
+    val n = scelti.size
+    val totale = pronti.size
     SezioneNumerata(
         2, "Da quale materiale",
         destra = { Text("$n di $totale scelti", style = L.testi.pillola, color = c.tenue, maxLines = 1) },
     ) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PillolaOpzione("Sull'argomento", s.auto, vm::sullArgomento)
-            PillolaOpzione("Tutti", !s.auto && n == totale && totale > 0, vm::tutti)
-            PillolaOpzione("Nessuno", !s.auto && n == 0, vm::nessuno)
+            PillolaOpzione("Sull'argomento", auto, onSull)
+            PillolaOpzione("Tutti", !auto && n == totale && totale > 0, onTutti)
+            PillolaOpzione("Nessuno", !auto && n == 0, onNessuno)
         }
-        val visibili = s.materiale.filter(SceltaMateriale::visibile)
+        val visibili = materiale.filter(SceltaMateriale::visibile)
         if (visibili.size > 4) {
             CampoBordato(
-                s.cerca, vm::cerca,
+                cerca, onCerca,
                 segnaposto = "Cerca nel materiale",
                 stile = L.testi.secondario.copy(fontWeight = FontWeight.SemiBold),
                 altezza = 48.dp,
@@ -568,14 +583,14 @@ private fun DaQualeMateriale(s: StatoNuovaLezione, vm: NuovaLezioneViewModel) {
                 descrizione = "Cerca nel materiale",
             )
         }
-        val filtrati = SceltaMateriale.filtra(visibili, s.cerca)
-        GruppoMateriale("Appunti e libro", "Nessuno ancora", visibili.filterNot(SceltaMateriale::delProf), filtrati.filterNot(SceltaMateriale::delProf), s, vm)
-        GruppoMateriale("Verifiche e interrogazioni del prof", "Nessuna ancora", visibili.filter(SceltaMateriale::delProf), filtrati.filter(SceltaMateriale::delProf), s, vm)
+        val filtrati = SceltaMateriale.filtra(visibili, cerca)
+        GruppoMateriale("Appunti e libro", "Nessuno ancora", visibili.filterNot(SceltaMateriale::delProf), filtrati.filterNot(SceltaMateriale::delProf), scelti, suggeriti, onTocca)
+        GruppoMateriale("Verifiche e interrogazioni del prof", "Nessuna ancora", visibili.filter(SceltaMateriale::delProf), filtrati.filter(SceltaMateriale::delProf), scelti, suggeriti, onTocca)
     }
 }
 
 @Composable
-private fun GruppoMateriale(titolo: String, vuoto: String, tutti: List<Materiale>, mostrati: List<Materiale>, s: StatoNuovaLezione, vm: NuovaLezioneViewModel) {
+private fun GruppoMateriale(titolo: String, vuoto: String, tutti: List<Materiale>, mostrati: List<Materiale>, scelti: Set<Long>, suggeriti: Set<Long>, onTocca: (Long) -> Unit) {
     val c = L.colori
     Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Etichetta(titolo)
@@ -583,7 +598,7 @@ private fun GruppoMateriale(titolo: String, vuoto: String, tutti: List<Materiale
             tutti.isEmpty() -> Text(vuoto, style = L.testi.testoMedio.copy(fontWeight = FontWeight.Medium), color = c.tenue)
             mostrati.isEmpty() -> Text("Niente con questo nome", style = L.testi.testoMedio.copy(fontWeight = FontWeight.Medium), color = c.tenue)
             else -> mostrati.forEach { m ->
-                RigaScelta(m, m.id in s.scelti, m.id in s.suggeriti && SceltaMateriale.pronto(m)) { vm.tocca(m.id) }
+                RigaScelta(m, m.id in scelti, m.id in suggeriti && SceltaMateriale.pronto(m)) { onTocca(m.id) }
             }
         }
     }
@@ -832,7 +847,7 @@ private fun Riepilogo(s: StatoNuovaLezione) {
 }
 
 @Composable
-private fun RigaRiepilogo(etichetta: String, testo: String, manca: Boolean, forte: Boolean = false) {
+fun RigaRiepilogo(etichetta: String, testo: String, manca: Boolean, forte: Boolean = false) {
     val c = L.colori
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(

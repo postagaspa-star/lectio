@@ -17,9 +17,14 @@
   const DURATE = [15, 20, 30, 45];
   /** §7: tocco sulla pillola della velocità = 0,8 / 1,0 / 1,2 / 1,4 / 1,6. */
   const VELOCITA = [0.8, 1.0, 1.2, 1.4, 1.6];
-  /** §4: i colori delle materie, nell'ordine del contratto. */
-  const COLORI = ['ambra', 'rosa', 'petrolio', 'viola', 'blu', 'verde', 'arancio', 'oliva'];
-  const NOMI_COLORI = { ambra: 'Ambra', rosa: 'Rosa', petrolio: 'Petrolio', viola: 'Viola', blu: 'Blu', verde: 'Verde', arancio: 'Arancio', oliva: 'Oliva' };
+  /** §37.1: i 16 colori delle materie nell'ordine in cui si propone il primo libero. */
+  const COLORI = ['ambra', 'rosa', 'petrolio', 'viola', 'blu', 'verde', 'arancio', 'oliva', 'giada', 'orchidea', 'senape', 'lavanda', 'cacao', 'prugna', 'salvia', 'lavagna'];
+  /** §37.1: l'ordine a schermo, per tinta, così sembrano una sfumatura. */
+  const ORDINE_COLORI = ['rosa', 'arancio', 'cacao', 'ambra', 'senape', 'oliva', 'salvia', 'verde', 'giada', 'petrolio', 'blu', 'lavagna', 'viola', 'lavanda', 'orchidea', 'prugna'];
+  const NOMI_COLORI = {
+    ambra: 'Ambra', rosa: 'Rosa', petrolio: 'Petrolio', viola: 'Viola', blu: 'Blu', verde: 'Verde', arancio: 'Arancio', oliva: 'Oliva',
+    giada: 'Giada', senape: 'Senape', orchidea: 'Orchidea', prugna: 'Prugna', cacao: 'Cacao', lavagna: 'Lavagna', salvia: 'Salvia', lavanda: 'Lavanda',
+  };
   /** §6: i formati che il server legge. */
   const ESTENSIONI = ['.txt', '.md', '.pdf', '.docx', '.odt', '.rtf', '.jpg', '.jpeg', '.png', '.webp'];
   const IMMAGINI = ['.jpg', '.jpeg', '.png', '.webp'];
@@ -689,7 +694,12 @@
     return null;
   }
 
-  /** Il primo degli 8 colori non ancora usato da una materia (per "Nuova materia"). */
+  /** §37.1: la materia che usa già questo colore (la prima), per "già usato da Storia". */
+  function coloreUsatoDa(colore, materie, tranneId) {
+    return (materie || []).find((m) => m.colore === colore && m.id !== tranneId) || null;
+  }
+
+  /** Il primo dei 16 colori non ancora usato da una materia (per "Nuova materia"). */
   function primoColoreLibero(materie) {
     const usati = new Set((materie || []).map((m) => m.colore));
     return COLORI.find((c) => !usati.has(c)) || COLORI[(materie || []).length % COLORI.length];
@@ -843,13 +853,19 @@
       case 'materie': return { vista: 'materie' };
       case 'materia':
         if (id(parti[1]) == null) return { vista: 'materie' };
-        return parti[2] === 'scheda' ? { vista: 'scheda', id: id(parti[1]) } : { vista: 'materia', id: id(parti[1]) };
+        if (parti[2] === 'scheda') return { vista: 'scheda', id: id(parti[1]) };
+        // §31.2: da un avviso si parte dal segmento giusto (Schemi o Simulate).
+        if (parti[2] === 'schemi' || parti[2] === 'simulate') return { vista: 'materia', id: id(parti[1]), segmento: parti[2] };
+        return { vista: 'materia', id: id(parti[1]) };
       case 'lezioni': return { vista: 'lezioni', materia: id(parti[1]) };
       case 'gemini': return { vista: 'gemini' };
       case 'impostazioni': return { vista: 'impostazioni' };
       case 'lettore': return id(parti[1]) == null ? { vista: 'lezioni' } : { vista: 'lettore', id: id(parti[1]) };
       case 'lezione': return id(parti[1]) == null ? { vista: 'lezioni' } : { vista: 'lezione', id: id(parti[1]) };
       case 'racconta': return id(parti[1]) == null ? { vista: 'oggi' } : { vista: 'racconta', id: id(parti[1]) };
+      case 'schema': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'schema', id: id(parti[1]) };
+      case 'simulata': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'simulata', id: id(parti[1]) };
+      case 'riassunto': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'riassunto', id: id(parti[1]) };
       default: return { vista: 'oggi' };
     }
   }
@@ -862,8 +878,355 @@
     return null;
   }
 
+  // --- Schemi (contratto §18, guida §32-33) ------------------------------------------------------
+
+  /** §32 Le tre forme: scheda di Nuovo schema, riga del riepilogo, nome nelle righe e nella testata. */
+  const FORME_SCHEMA = [
+    { forma: 'auto', nome: 'Lo decide Lectio', frase: 'Scelgo io la forma adatta a questo argomento', riepilogo: 'La forma la scelgo io', breve: 'Lo decide Lectio' },
+    { forma: 'capitoli', nome: 'A capitoli', frase: 'Una parte dopo l\'altra, dall\'inizio alla fine', riepilogo: 'A capitoli', breve: 'A capitoli' },
+    { forma: 'schede', nome: 'Schede per opera o autore', frase: 'Una scheda per ogni opera o autore: dati, descrizione, analisi', riepilogo: 'Schede per opera o autore', breve: 'Schede per opera' },
+  ];
+  const LIVELLI_SCHEMA = [
+    { livello: 'essenziale', nome: 'Essenziale' },
+    { livello: 'completo', nome: 'Completo' },
+    { livello: 'approfondito', nome: 'Approfondito' },
+  ];
+  /** §32 Gli spunti di Nuovo schema: ognuno aggiunge o toglie una frase dalle indicazioni. */
+  const SPUNTI_SCHEMA = [
+    { etichetta: 'Tante immagini', frase: 'Metti tante immagini, quando aiutano a capire.' },
+    { etichetta: 'Spiegalo da zero', frase: 'Spiegalo partendo da zero, come se non l\'avessi mai studiato.' },
+    { etichetta: 'Insisti su date e nomi', frase: 'Insisti su date e nomi.' },
+    { etichetta: 'Confronta gli autori', frase: 'Confronta gli autori tra loro: cosa cambia da uno all\'altro.' },
+    { etichetta: 'Descrivi bene le opere', frase: 'Descrivi bene le opere, come se le avessi davanti.' },
+    { etichetta: 'Tanti esempi', frase: 'Usa tanti esempi concreti.' },
+    { etichetta: 'Segui il prof', frase: 'Dai più spazio a quello che il prof chiede di solito.' },
+  ];
+  /** Contratto §18: i blocchi che le app sanno disegnare. Gli altri si saltano. */
+  const TIPI_BLOCCO = ['paragrafo', 'punti', 'passaggi', 'definizione', 'tabella', 'prof', 'immagine'];
+  /** §33.5: i blocchi con "Non ho capito". */
+  const BLOCCHI_CHIARIBILI = ['paragrafo', 'punti', 'passaggi', 'definizione', 'prof'];
+
+  /**
+   * "Il **Discobolo** è…" → [{ t: 'Il ', forte: false }, { t: 'Discobolo', forte: true }, { t: ' è…', forte: false }].
+   * Nel testo c'è solo il grassetto (contratto §18). Due asterischi rimasti spaiati non si fanno vedere.
+   */
+  function pezziGrassetto(testo) {
+    const s = String(testo == null ? '' : testo);
+    const pezzi = [];
+    const re = /\*\*([\s\S]+?)\*\*/g;
+    let dove = 0;
+    let m;
+    const normale = (x) => { const t = x.replace(/\*\*/g, ''); if (t) pezzi.push({ t, forte: false }); };
+    while ((m = re.exec(s))) {
+      normale(s.slice(dove, m.index));
+      pezzi.push({ t: m[1], forte: true });
+      dove = m.index + m[0].length;
+    }
+    normale(s.slice(dove));
+    return pezzi;
+  }
+
+  function senzaGrassetto(testo) {
+    return pezziGrassetto(testo).map((p) => p.t).join('');
+  }
+
+  /** I blocchi di una parte che si sanno disegnare, nell'ordine in cui arrivano. */
+  function blocchiNoti(sezione) {
+    return ((sezione && sezione.blocchi) || []).filter((b) => b && TIPI_BLOCCO.includes(b.tipo));
+  }
+
+  /** §34: il testo del blocco, com'è il `passaggio` da mandare (le voci una per riga, niente asterischi). */
+  function passaggioDelBlocco(b) {
+    if (!b) return '';
+    if (b.tipo === 'punti' || b.tipo === 'passaggi') return (b.voci || []).map(senzaGrassetto).join('\n');
+    if (b.tipo === 'definizione') return senzaGrassetto(b.termine) + ': ' + senzaGrassetto(b.testo);
+    return senzaGrassetto(b.testo);
+  }
+
+  /** Le fonti di un blocco (contratto §17.2): dagli id agli oggetti, senza doppioni e senza id che non si conoscono. */
+  function fontiDelBlocco(b, mappa) {
+    const viste = new Set();
+    const fuori = [];
+    for (const id of (b && b.fonti) || []) {
+      const f = mappa && mappa[id];
+      if (!f || !f.etichetta || viste.has(f.etichetta)) continue;
+      viste.add(f.etichetta);
+      fuori.push(f);
+    }
+    return fuori;
+  }
+
+  /** §33.4 "Libro, pag. 42 · Verifica del 12/10", al massimo due, poi "+1". */
+  function segnoFonti(fonti) {
+    const e = (fonti || []).map((f) => f && f.etichetta).filter(Boolean);
+    if (!e.length) return '';
+    const primi = e.slice(0, 2).join(' · ');
+    return e.length > 2 ? primi + ' +' + (e.length - 2) : primi;
+  }
+
+  /** §33.4: per ogni blocco le fonti da segnare; blocchi di fila con le stesse fonti hanno il segno solo sull'ultimo. */
+  function segniDeiBlocchi(blocchi, mappa) {
+    const chiavi = (blocchi || []).map((b) => fontiDelBlocco(b, mappa).map((f) => f.etichetta).join('|'));
+    return (blocchi || []).map((b, i) => (chiavi[i] && chiavi[i] !== chiavi[i + 1] ? fontiDelBlocco(b, mappa) : null));
+  }
+
+  /** §33.3 Scheda opera: la prima immagine sta con i campi in testa; il resto segue. */
+  function testaOpera(sezione) {
+    const blocchi = blocchiNoti(sezione);
+    const campi = (sezione && sezione.campi) || [];
+    if (!campi.length) return { foto: null, campi: [], blocchi };
+    const foto = blocchi.find((b) => b.tipo === 'immagine') || null;
+    return { foto, campi, blocchi: blocchi.filter((b) => b !== foto) };
+  }
+
+  /** Le parole di tutto lo schema, per "12 min di lettura" (circa 180 parole al minuto, da studio). */
+  function minutiLettura(contenuto) {
+    let parole = 0;
+    const conta = (t) => { parole += String(t || '').trim().split(/\s+/).filter(Boolean).length; };
+    for (const s of (contenuto && contenuto.sezioni) || []) {
+      conta(s.titolo);
+      for (const b of blocchiNoti(s)) {
+        conta(b.titolo); conta(b.testo); conta(b.termine); conta(b.didascalia);
+        (b.voci || []).forEach(conta);
+        (b.righe || []).forEach((r) => r.forEach(conta));
+      }
+    }
+    return Math.max(1, Math.ceil(parole / 180));
+  }
+
+  function nomeForma(forma) {
+    const f = FORME_SCHEMA.find((x) => x.forma === forma);
+    return f && f.forma !== 'auto' ? f.breve : '';
+  }
+
+  function nomeLivello(livello) {
+    const l = LIVELLI_SCHEMA.find((x) => x.livello === livello);
+    return l ? l.nome : 'Completo';
+  }
+
+  /** §33.2 "A capitoli · Completo · 8 parti · 12 min di lettura" (nell'elenco, senza contenuto, solo le prime due). */
+  function riassuntoSchema(s) {
+    if (!s) return '';
+    const c = s.contenuto;
+    const parti = [];
+    const forma = nomeForma((c && c.forma) || s.forma);
+    if (forma) parti.push(forma);
+    parti.push(nomeLivello(s.livello));
+    if (c && Array.isArray(c.sezioni) && c.sezioni.length) {
+      parti.push(plurale(c.sezioni.length, 'parte', 'parti'));
+      parti.push(minutiLettura(c) + ' min di lettura');
+    }
+    return parti.join(' · ');
+  }
+
+  /** Quanto è avanti un lavoro in corso (`fatto` di `totale`), in percentuale. */
+  function percentualeLavoro(x) {
+    return x && Number(x.totale) > 0 ? percentuale(x.fatto, x.totale) : 0;
+  }
+
+  /** §31.2 Riga di uno schema, secondo lo stato. */
+  function statoRigaSchema(s) {
+    switch (s && s.stato) {
+      case 'in_coda': return { tipo: 'coda', frase: 'In coda' };
+      case 'in_preparazione': return { tipo: 'lavoro', frase: s.frase || 'In preparazione', percentuale: percentualeLavoro(s) };
+      case 'errore': return { tipo: 'errore', frase: 'Non è riuscito' };
+      case 'annullato': return { tipo: 'annullato', frase: 'Annullato' };
+      default: return { tipo: 'pronto', frase: riassuntoSchema(Object.assign({}, s, { contenuto: null })) };
+    }
+  }
+
+  /** §33.7: cosa dire di quello che manca. null se è tutto a posto (la scheda non esiste). */
+  function mancanzeSchema(s) {
+    const c = (s && s.contenuto) || {};
+    const mancanti = ((c.copertura && c.copertura.mancanti) || []).filter(Boolean);
+    const avvisi = (c.avvisi || []).filter(Boolean);
+    const nota = (s && s.nota) || null;
+    if (!nota && !mancanti.length && !avvisi.length) return null;
+    return { nota, mancanti: mancanti.slice(0, 5), altri: Math.max(0, mancanti.length - 5), avvisi };
+  }
+
+  /** Il nome del file da proporre per un PDF: niente caratteri che Windows non vuole. */
+  function nomeFilePdf(titolo, riserva) {
+    const n = String(titolo || '').replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').replace(/[. ]+$/g, '').trim().slice(0, 80).trim();
+    return (n || riserva || 'Lectio') + '.pdf';
+  }
+
+  // --- Riassunti scritti (contratto §26, guida §41) -----------------------------------------------
+
+  /** §41.2 Le tre forme, nell'ordine in cui si vedono. */
+  const FORME_RIASSUNTO = [
+    { forma: 'punti', nome: 'Per punti', frase: 'Una cosa per riga' },
+    { forma: 'discorsivo', nome: 'Discorsivo', frase: 'Da leggere di seguito' },
+    { forma: 'misto', nome: 'Via di mezzo', frase: 'Un po\' di testo e i punti da ricordare' },
+  ];
+
+  function riassuntoDellaForma(fatti, forma) {
+    return (fatti || []).find((x) => x.forma === forma) || null;
+  }
+
+  /** §41.2 A destra di ogni riga del foglio: il prezzo, oppure a che punto è quella forma. */
+  function statoFormaRiassunto(fatto, stima, prova) {
+    if (fatto) {
+      if (fatto.stato === 'pronto') return { tipo: 'pronto', testo: 'Pronto' };
+      if (fatto.stato === 'errore') return { tipo: 'errore', testo: 'Si è fermato' };
+      return { tipo: 'lavoro', testo: 'Lo sto scrivendo' };
+    }
+    return { tipo: 'prezzo', testo: prova ? 'Prova' : euro(stima) };
+  }
+
+  /** §41.3 "480 parole · 3 min di lettura" (minuti = parole / 200, almeno 1). */
+  function fraseParole(parole) {
+    const n = Number(parole) || 0;
+    return plurale(n, 'parola', 'parole') + ' · ' + Math.max(1, Math.ceil(n / 200)) + ' min di lettura';
+  }
+
+  /** §41.1 L'ultimo riassunto fatto di uno schema: quello a cui porta "Apri il riassunto". */
+  function ultimoRiassunto(fatti) {
+    return (fatti || []).reduce((ultimo, x) => (!ultimo || Number(x.id) > Number(ultimo.id) ? x : ultimo), null);
+  }
+
+  // --- "Non ho capito" (contratto §19, guida §34) -------------------------------------------------
+
+  const SPUNTI_CHIARIMENTO = [
+    { etichetta: 'Più semplice', frase: 'Spiegalo in modo più semplice.' },
+    { etichetta: 'Un esempio', frase: 'Fammi un esempio.' },
+    { etichetta: 'Una parola', frase: 'Cosa vuol dire questa parola?' },
+  ];
+  const MASSIMO_DOMANDA = 300;
+  /** §34: il contatore del campo si vede solo da qui in su. */
+  const CONTATORE_DOMANDA_DA = 260;
+
+  /** "Costata meno di 1 cent", oppure il costo. */
+  function costoChiarimento(costo) {
+    const c = Number(costo) || 0;
+    return c < 0.01 ? 'Costata meno di 1 cent' : 'Costata ' + euro(c);
+  }
+
+  /** "Al minuto 5:12 · La crisi del Trecento" (il maiuscolo lo mette l'aspetto). */
+  function etichettaMinuto(secondi, capitolo) {
+    return 'Al minuto ' + durataBreve(secondi) + (capitolo ? ' · ' + capitolo : '');
+  }
+
+  // --- Ripasso lampo (contratto §20, guida §35) ---------------------------------------------------
+
+  /** §35.2 I tre esiti, nello stesso ordine dei tasti 1, 2, 3. */
+  const ESITI_LAMPO = [
+    { esito: 'non_sapevo', parola: 'Non lo sapevo', icona: 'ripeti', classe: 'rivedere', tasto: '1' },
+    { esito: 'quasi', parola: 'Quasi', icona: 'quasi', classe: 'quasi', tasto: '2' },
+    { esito: 'sapevo', parola: 'Lo sapevo', icona: 'spunta', classe: 'giusta', tasto: '3' },
+  ];
+
+  /** §31.2: i minuti di un ripasso della materia (20 secondi a scheda, arrotondati in su). */
+  function minutiLampo(schede) {
+    return Math.ceil((Number(schede) || 0) * 20 / 60);
+  }
+
+  /** "8 schede · circa 3 min", "1 scheda · circa 1 min". */
+  function fraseLampo(schede, minuti) {
+    return plurale(Number(schede) || 0, 'scheda', 'schede') + ' · circa ' + (minuti != null ? minuti : minutiLampo(schede)) + ' min';
+  }
+
+  /** §35.3 "12 schede in 3 minuti". */
+  function fraseFineRipasso(schede, ms) {
+    const minuti = Math.max(1, Math.ceil((Number(ms) || 0) / 60000));
+    return plurale(Number(schede) || 0, 'scheda', 'schede') + ' in ' + plurale(minuti, 'minuto', 'minuti');
+  }
+
+  // --- Verifica simulata (contratto §21, guida §36) -----------------------------------------------
+
+  /** §36.1 Le durate che si offrono (il server accetta 10-180). */
+  const DURATE_SIMULATA = [15, 30, 50, 60];
+
+  /** §36.4 L'esito di una domanda corretta: parola, colore, icona. Mai rosso. */
+  function esitoSimulata(esito) {
+    switch (esito) {
+      case 'giusta': return { parola: 'Giusta', classe: 'giusta', icona: 'spunta' };
+      case 'parziale': return { parola: 'Quasi', classe: 'quasi', icona: 'quasi' };
+      case 'non_corretta': return { parola: 'Confronta tu', classe: 'confronta', icona: 'confronta' };
+      default: return { parola: 'Da rivedere', classe: 'rivedere', icona: 'ripeti' };
+    }
+  }
+
+  /** 6.5 → "6,5"; 7 → "7" ("circa" lo scrive la pagina). */
+  function voto(v) {
+    const x = Number(v);
+    if (!Number.isFinite(x)) return '';
+    return Number.isInteger(x) ? String(x) : numero(x, 1);
+  }
+
+  /** §31.2 Riga di una verifica simulata, secondo lo stato. */
+  function statoRigaSimulata(s) {
+    switch (s && s.stato) {
+      case 'in_coda': return { tipo: 'coda', frase: 'In coda' };
+      case 'in_preparazione': return { tipo: 'lavoro', frase: s.frase || 'In preparazione', percentuale: percentualeLavoro(s) };
+      case 'pronta': return { tipo: 'pronta', frase: 'Pronta · ' + s.minuti + ' min' };
+      case 'in_corso': return { tipo: 'meta', frase: 'A metà' };
+      case 'in_correzione': return { tipo: 'correzione', frase: 'La sto correggendo' };
+      case 'corretta': return { tipo: 'corretta', frase: 'Corretta' + (s.esito && s.esito.voto_stimato != null ? ' · stima circa ' + voto(s.esito.voto_stimato) : '') };
+      case 'errore': return { tipo: 'errore', frase: 'Non è riuscita' };
+      case 'annullata': return { tipo: 'annullata', frase: 'Annullata' };
+      default: return { tipo: 'pronta', frase: '' };
+    }
+  }
+
+  /** §36.3 Il tempo: solo minuti, arrotondati in su; "meno di 1 min" alla fine; finito, "+6 min". */
+  function testoTempo(restanti) {
+    const r = Number(restanti) || 0;
+    if (r <= 0) return '+' + Math.max(1, Math.ceil(-r / 60)) + ' min';
+    if (r < 60) return 'meno di 1 min';
+    return Math.ceil(r / 60) + ' min';
+  }
+
+  /** §36.2 "8 domande · 100 punti · 50 minuti". */
+  function riassuntoSimulata(s) {
+    const domande = (s && s.domande) || [];
+    const punti = domande.reduce((t, d) => t + (Number(d.punti) || 0), 0);
+    return plurale(domande.length, 'domanda', 'domande') + ' · ' + plurale(punti, 'punto', 'punti') + ' · ' + plurale((s && s.minuti) || 0, 'minuto', 'minuti');
+  }
+
+  /** §36.3 Le risposte scritte e quelle vuote: { scritte, vuote, frase: "5 scritte su 8 · 3 vuote" }. */
+  function contaRisposte(domande, risposte) {
+    const tutte = domande || [];
+    const scritte = tutte.filter((d) => String((risposte || {})[String(d.n)] || '').trim()).length;
+    const vuote = tutte.length - scritte;
+    return { scritte, vuote, frase: scritte + (scritte === 1 ? ' scritta su ' : ' scritte su ') + tutte.length + ' · ' + vuote + (vuote === 1 ? ' vuota' : ' vuote') };
+  }
+
+  /** Le risposte da mostrare: quelle del server e, sopra, quelle sul computer non ancora arrivate al server. */
+  function unisciRisposte(server, locali, sporche) {
+    const fuori = Object.assign({}, server || {});
+    for (const n of sporche || []) if (locali && locali[n] !== undefined) fuori[n] = locali[n];
+    return fuori;
+  }
+
+  /** §36.4 "62 punti su 100 · la sufficienza è a 58" (la soglia solo se c'è). */
+  function frasePunti(esito) {
+    if (!esito) return '';
+    const base = plurale(Number(esito.punti) || 0, 'punto', 'punti') + ' su ' + (Number(esito.punti_totali) || 0);
+    return esito.soglia != null ? base + ' · la sufficienza è a ' + esito.soglia : base;
+  }
+
+  /** §36.4 "Consegnata dopo 56 minuti su 50", solo se è andato oltre il tempo. */
+  function fraseOltreTempo(secondiUsati, minuti) {
+    const usati = Number(secondiUsati) || 0;
+    const m = Number(minuti) || 0;
+    if (!usati || !m || usati <= m * 60) return null;
+    return 'Consegnata dopo ' + Math.ceil(usati / 60) + ' minuti su ' + m;
+  }
+
+  /** "8 su 10" di una domanda corretta. Le `non_corretta` non hanno punti (contratto §21). */
+  function puntiDomanda(correzione, domanda) {
+    if (!correzione || correzione.esito === 'non_corretta') return null;
+    return (Number(correzione.punti) || 0) + ' su ' + (Number(domanda && domanda.punti) || 0);
+  }
+
+  /** La riga PER di Nuovo schema e Nuova verifica. */
+  function riepilogoData(evento) {
+    return evento ? (evento.tipo === 'orale' ? 'L\'interrogazione di ' : 'La verifica di ') + dataLunga(evento.data) : 'Nessuna data';
+  }
+
   return {
-    GIORNI, MESI, DURATE, VELOCITA, COLORI, NOMI_COLORI, ESTENSIONI, MASSIMO_BYTE, FAMIGLIE_MATERIALE, NOMI_TIPO_MATERIALE, NOMI_TIPO_BREVE, NOMI_TIPI_DOMANDA, FASI,
+    GIORNI, MESI, DURATE, VELOCITA, COLORI, ORDINE_COLORI, NOMI_COLORI, coloreUsatoDa, ESTENSIONI, MASSIMO_BYTE, FAMIGLIE_MATERIALE, NOMI_TIPO_MATERIALE, NOMI_TIPO_BREVE, NOMI_TIPI_DOMANDA, FASI,
     TIPI_LEZIONE, SPUNTI, MASSIMO_INDICAZIONI,
     numero, euro, euroTondo, euroCosto, migliaia, limita, percentuale, dimensione, barraMese, spesaInAvviso,
     data, dataLunga, dataBreve, iso, giorniFra, quando, siAzzera,
@@ -875,5 +1238,11 @@
     LIMITI_SCHEDA, schedaDaMandare, controllaScheda,
     creaSequenza, voceDi, statoVoci, sceltaVoce, etichettaPrepara, prontaIn,
     estensione, controllaFile, eImmagine, righe, testoInterrogazione, codiceValido, prof, plurale, sottoMateria, basataSu, leggiRotta,
+    FORME_SCHEMA, LIVELLI_SCHEMA, SPUNTI_SCHEMA, TIPI_BLOCCO, BLOCCHI_CHIARIBILI, pezziGrassetto, senzaGrassetto, blocchiNoti, passaggioDelBlocco, fontiDelBlocco, segnoFonti, segniDeiBlocchi, testaOpera,
+    minutiLettura, nomeForma, nomeLivello, riassuntoSchema, percentualeLavoro, statoRigaSchema, mancanzeSchema, nomeFilePdf,
+    SPUNTI_CHIARIMENTO, MASSIMO_DOMANDA, CONTATORE_DOMANDA_DA, costoChiarimento, etichettaMinuto,
+    ESITI_LAMPO, minutiLampo, fraseLampo, fraseFineRipasso,
+    DURATE_SIMULATA, esitoSimulata, voto, statoRigaSimulata, testoTempo, riassuntoSimulata, contaRisposte, unisciRisposte, frasePunti, fraseOltreTempo, puntiDomanda, riepilogoData,
+    FORME_RIASSUNTO, riassuntoDellaForma, statoFormaRiassunto, fraseParole, ultimoRiassunto,
   };
 });

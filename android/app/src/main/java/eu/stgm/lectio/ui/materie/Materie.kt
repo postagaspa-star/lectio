@@ -1,8 +1,9 @@
 package eu.stgm.lectio.ui.materie
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -67,7 +70,10 @@ import eu.stgm.lectio.ui.comuni.PilloleStato
 import eu.stgm.lectio.ui.ombra
 import eu.stgm.lectio.ui.tema.L
 import eu.stgm.lectio.ui.tema.NOMI_COLORI
+import eu.stgm.lectio.ui.tema.ORDINE_COLORI
+import eu.stgm.lectio.ui.tema.LocalMovimenti
 import eu.stgm.lectio.ui.tema.materia
+import eu.stgm.lectio.ui.tema.nomeColore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -211,6 +217,7 @@ fun MaterieScreen(vm: MaterieViewModel, onApri: (Long) -> Unit, esempio: Boolean
         FoglioMateria(
             esistente = null,
             usati = s.materie.map { it.colore },
+            usatiDa = s.materie.associate { it.colore to it.nome },
             onSalva = { nome, prof, colore, fatto -> vm.salva(null, nome, prof, colore) { m, e -> fatto(e); if (m != null) foglio = false } },
             onElimina = null,
             onChiudi = { foglio = false },
@@ -220,7 +227,7 @@ fun MaterieScreen(vm: MaterieViewModel, onApri: (Long) -> Unit, esempio: Boolean
 
 /**
  * Nuova materia / Modifica materia (aspetto.md §4): anteprima dal vivo, nome,
- * prof facoltativo, 8 colori (il primo non usato già scelto), Elimina con conferma.
+ * prof facoltativo, 16 colori (il primo non usato già scelto), Elimina con conferma.
  */
 @Composable
 fun FoglioMateria(
@@ -229,6 +236,8 @@ fun FoglioMateria(
     onSalva: (nome: String, prof: String, colore: String, fatto: (String?) -> Unit) -> Unit,
     onElimina: ((fatto: (String?) -> Unit) -> Unit)?,
     onChiudi: () -> Unit,
+    /** Colore -> materia che lo usa: per dire "già usato da Storia". */
+    usatiDa: Map<String, String> = emptyMap(),
 ) {
     val c = L.colori
     var nome by rememberSaveable { mutableStateOf(esistente?.nome ?: "") }
@@ -238,10 +247,11 @@ fun FoglioMateria(
     var inCorso by remember { mutableStateOf(false) }
     var conferma by remember { mutableStateOf(false) }
     val m = materia(colore)
+    val fondoAnteprima by animateColorAsState(m.tenue, tween(if (LocalMovimenti.current) 200 else 0), label = "anteprima")
     Foglio(onChiudi = onChiudi, titolo = if (esistente == null) "Nuova materia" else "Modifica materia") {
         // Anteprima dal vivo della scheda della materia.
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(m.tenue).padding(14.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(fondoAnteprima).padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PiastrellaIniziale(nome.ifBlank { "?" }, colore, fondo = c.superficie)
@@ -260,29 +270,7 @@ fun FoglioMateria(
         CampoConEtichetta("Prof") {
             Campo(prof, { prof = it.take(40) }, segnaposto = "Cognome, se vuoi", tastiera = KeyboardOptions(capitalization = KeyboardCapitalization.Words))
         }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Etichetta("Colore")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                NOMI_COLORI.forEach { nomeColore ->
-                    val pieno = materia(nomeColore).pieno
-                    val scelto = nomeColore == colore
-                    Box(
-                        Modifier.weight(1f).height(44.dp).clickable(role = Role.RadioButton) { colore = nomeColore }
-                            .semantics { contentDescription = nomeColore + if (scelto) ", scelto" else "" },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            Modifier.size(38.dp)
-                                .then(if (scelto) Modifier.border(2.dp, pieno, CircleShape).padding(4.dp) else Modifier)
-                                .clip(CircleShape).background(pieno),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (scelto) Icon(Icone.Spunta, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-        }
+        SceltaColore(colore, { colore = it }, usati, usatiDa, esistente?.colore)
         Spacer(Modifier.height(4.dp))
         PulsantePieno(
             if (esistente == null) "Crea materia" else "Salva",
@@ -314,3 +302,52 @@ fun FoglioMateria(
         )
     }
 }
+
+/**
+ * I 16 colori (aspetto.md §37.1): 6 colonne, caselle 52, cerchi 40. Scelto: spunta bianca e
+ * anello a 3 dp di distanza. Già usato da un'altra materia: puntino bianco, ma si può scegliere.
+ */
+@Composable
+private fun SceltaColore(scelto: String, onScelta: (String) -> Unit, usati: List<String>, usatiDa: Map<String, String>, proprio: String?) {
+    val c = L.colori
+    val chi = usatiDa[scelto]?.takeIf { scelto != proprio }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Etichetta("Colore")
+                Text(" · ${nomeColore(scelto)}", style = L.testi.etichetta.copy(letterSpacing = 0.sp), color = c.testo)
+            }
+            if (chi != null) Text("già usato da $chi", style = L.testi.piccolo.copy(fontWeight = FontWeight.SemiBold), color = c.tenue)
+        }
+        Column(Modifier.fillMaxWidth().selectableGroup()) {
+            ORDINE_COLORI.chunked(COLONNE_COLORI).forEach { riga ->
+                Row(Modifier.fillMaxWidth()) {
+                    riga.forEach { n ->
+                        val pieno = materia(n).pieno
+                        val acceso = n == scelto
+                        val usato = n != proprio && n in usati
+                        val descrizione = nomeColore(n) + (usatiDa[n]?.takeIf { n != proprio }?.let { ", già usato da $it" } ?: "")
+                        Box(
+                            Modifier.weight(1f).height(52.dp)
+                                .selectable(acceso, role = Role.RadioButton) { onScelta(n) }
+                                .semantics { contentDescription = descrizione },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (acceso) Box(Modifier.size(50.dp).border(2.dp, pieno, CircleShape))
+                            Box(Modifier.size(40.dp).clip(CircleShape).background(pieno), contentAlignment = Alignment.Center) {
+                                when {
+                                    acceso -> Icon(Icone.Spunta, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    usato -> Box(Modifier.size(8.dp).clip(CircleShape).background(Color.White))
+                                }
+                            }
+                        }
+                    }
+                    // L'ultima riga resta allineata a sinistra.
+                    repeat(COLONNE_COLORI - riga.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+private const val COLONNE_COLORI = 6

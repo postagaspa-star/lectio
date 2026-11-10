@@ -66,7 +66,7 @@ def test_word_odt_rtf(client, auth, materia):
 
 
 def test_file_rovinati_e_tipi_sconosciuti(client, auth, materia):
-    r = carica_file(client, auth, materia["id"], "rotto.docx", b"non sono uno zip")
+    r = carica_file(client, auth, materia["id"], "rotto.docx", b"PK\x03\x04 non sono uno zip")
     assert r.status_code == 422 and r.json()["campo"] == "file"
     assert "Word" in r.json()["errore"]
     r = carica_file(client, auth, materia["id"], "rotto.pdf", b"%PDF-1.4 niente")

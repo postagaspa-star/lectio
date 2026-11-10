@@ -137,7 +137,7 @@ def test_salute_con_le_chiavi(client, auth):
 
 def test_materie_crea_elenca_cambia(client, auth):
     s = crea_materia(client, auth, "Storia", "Rossi")
-    assert s["colore"] == "ambra" and s["conteggi"] == {"verifiche": 0, "interrogazioni": 0, "appunti": 0, "lezioni": 0}
+    assert s["colore"] == "ambra" and s["conteggi"] == {"verifiche": 0, "interrogazioni": 0, "appunti": 0, "lezioni": 0, "schemi": 0, "simulate": 0, "lampo": 0}
     assert s["centratura"] is None and s["da_ripassare"] == 0
     a = crea_materia(client, auth, "arte", "")  # prof facoltativo
     assert a["colore"] == "rosa" and a["prof"] == ""
@@ -172,7 +172,7 @@ def test_conteggi_della_materia(client, auth, servizi):
     aggiungi_testo(client, auth, m["id"], "Il prof mi ha chiesto di Nerone.", tipo="interrogazione")
     lezione_pronta(client, auth, servizi, m["id"])
     c = client.get(f"/api/materie/{m['id']}", headers=auth).json()["conteggi"]
-    assert c == {"verifiche": 1, "interrogazioni": 1, "appunti": 1, "lezioni": 1}
+    assert c == {"verifiche": 1, "interrogazioni": 1, "appunti": 1, "lezioni": 1, "schemi": 0, "simulate": 0, "lampo": 0}
 
 
 def test_cancella_materia_serve_conferma_e_cancella_tutto(client, auth, servizi):

@@ -69,12 +69,13 @@ def test_le_modifiche_di_andrea_restano_e_le_note_non_si_toccano(client, auth, s
     assert r.json()["note_mie"].startswith("Interroga il lunedì")
     # L'AI risponde tornando indietro (rimette la voce tolta, perde le sue) e prova a scrivere le note.
     server.scheda_forzata = {
-        "argomenti": [{"nome": "Principato", "volte": 4, "esempio": "Che cos'è il principato?"}],
-        "tipi_domanda": [{"tipo": "aperta", "quota": 2}, {"tipo": "date", "quota": 2}],
-        "cosa_corregge": ["Vuole le date precise", "Ortografia"],
-        "cosa_premia": ["I collegamenti"],
-        "lunghezza_risposte": "5 righe",
-        "consigli": ["Studia"],
+        "domande": [{"doc": "V1", "testo": "Che cos'è il principato?", "tipo": "aperta", "argomento": "Principato"},
+                    {"doc": "V1", "testo": "Quando Ottaviano ricevette il titolo di Augusto?", "tipo": "date", "argomento": "Principato"}],
+        "cosa_corregge": [{"frase": "Vuole le date precise", "prova": "Vuole le date precise con il secolo"},
+                          {"frase": "Ortografia", "prova": "Manca la definizione di princeps"}],
+        "cosa_premia": [{"frase": "I collegamenti", "prova": "Buoni i collegamenti tra i fatti."}],
+        "lunghezza_risposte": {"frase": "5 righe", "prova": "Buoni i collegamenti"},
+        "consigli": [{"frase": "Studia", "prova": "Buoni i collegamenti"}],
         "note_mie": "L'AI non deve scrivere qui",
     }
     client.post(f"/api/materie/{m['id']}/scheda/aggiorna", headers=auth)
@@ -86,9 +87,9 @@ def test_le_modifiche_di_andrea_restano_e_le_note_non_si_toccano(client, auth, s
     assert s["lunghezza_risposte"] == "Mezza pagina"
     assert {a["nome"] for a in s["argomenti"]} == {"Principato", "Seiano"}
     assert s["tipi_domanda"] == [{"tipo": "aperta", "quota": 0.5}, {"tipo": "date", "quota": 0.5}]
-    # Le note vanno all'AI solo da leggere, racchiuse; l'uscita dell'AI non le contiene.
+    # Le note sono solo sue: all'AI non arrivano più, i numeri li conta Lectio.
     richiesta = [d for p, d in server.chiamate if p == "/v1/chat/completions"][-1]["messages"][1]["content"]
-    assert "Interroga il lunedì" in richiesta and "solo da leggere" in richiesta
+    assert "Interroga il lunedì" not in richiesta
     # Ogni aggiornamento costa (circa un centesimo) e si vede nella spesa.
     spesa = client.get("/api/spesa", headers=auth).json()
     assert any(v["cosa"] == "Scheda del prof di Storia" and v["costo_eur"] > 0 for v in spesa["voci"])

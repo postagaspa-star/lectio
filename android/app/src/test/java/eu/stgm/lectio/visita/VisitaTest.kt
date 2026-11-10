@@ -32,6 +32,49 @@ class VisitaTest {
     }
 
     @Test
+    fun leNovitaDellaUnoPuntoDueComeNellaGuida() {
+        val (v, aperte) = nuova()
+        v.iniziaNovita()
+        assertEquals(Bersagli.SEGMENTO_SCHEMI, v.passi.first().bersaglio)
+        assertEquals(15, v.passi.size)
+        assertEquals("Ecco fatto", v.passi.last().titolo)
+        assertNull(v.passi.last().bersaglio)
+        v.passi.forEach { p ->
+            assertFalse(p.frase, p.frase.contains('!'))
+            assertTrue(p.frase, p.frase.length <= 90)
+        }
+        assertEquals(SchermataVisita.MATERIA, aperte.last())
+        // Passano da tutte le pagine nuove.
+        assertEquals(
+            setOf(SchermataVisita.MATERIA, SchermataVisita.NUOVO_SCHEMA, SchermataVisita.SCHEMA, SchermataVisita.OGGI, SchermataVisita.LAMPO, SchermataVisita.SIMULATA_IN_CORSO, SchermataVisita.SIMULATA_RISULTATI),
+            v.passi.map { it.schermata }.toSet(),
+        )
+    }
+
+    @Test
+    fun dalleImpostazioniQuellaDiSempreEPoiLeNovita() {
+        val (v, _) = nuova()
+        v.iniziaTutte()
+        assertEquals(8 + 15, v.passi.size)
+        assertEquals(Bersagli.PROSSIMA, v.passi.first().bersaglio)
+        assertEquals(Bersagli.SEGMENTO_SCHEMI, v.passi[8].bersaglio)
+        assertEquals(1, v.passi.count { it.titolo == "Ecco fatto" })
+    }
+
+    @Test
+    fun nelleNovitaSiAvanzaSoloFacendo() {
+        val (v, _) = nuova()
+        v.iniziaNovita()
+        assertFalse(v.azione(Bersagli.NUOVO_SCHEMA))
+        assertEquals(0, v.indice)
+        assertTrue(v.azione(Bersagli.SEGMENTO_SCHEMI))
+        assertEquals(1, v.indice)
+        // Il foglio dell'indice sposta il riflettore senza far avanzare la visita.
+        v.bersaglioTemporaneo = Bersagli.RIGA_INDICE
+        assertEquals(1, v.indice)
+    }
+
+    @Test
     fun parteDaOggiEContaDiOtto() {
         val (v, aperte) = nuova()
         v.inizia()

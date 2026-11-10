@@ -51,6 +51,7 @@
     else A.disegna();
     A.mandaCode();
     if (S.motore.tutorial_visto === false) A.avviaVisita(true);
+    else if (S.motore.tutorial_novita_visto === false) A.avviaVisita(false, 'novita');
   };
 
   // --- Primo avvio: collegare il computer al server di casa (§10) -------------------------------
@@ -102,7 +103,7 @@
   window.lectioApri = function (frammento) {
     if (!S.dom.scorre) return;
     const f = String(frammento || '');
-    if (/^(oggi|materie|lezioni|gemini|impostazioni)$/.test(f) || /^lezione\/\d+$/.test(f)) A.vai('#' + f);
+    if (/^(oggi|materie|lezioni|gemini|impostazioni)$/.test(f) || /^lezione\/\d+$/.test(f) || /^materia\/\d+(\/(schemi|simulate))?$/.test(f) || /^(schema|simulata|riassunto)\/\d+$/.test(f)) A.vai('#' + f);
   };
 
   /** Novità dal server (lezione pronta, file letto…): la pagina aggiorna quello che mostra. */
@@ -110,8 +111,8 @@
     if (S.esempio) return;
     const voci = Array.isArray(lista) ? lista : [];
     for (const v of voci) if (v.lezione_id && A.dimenticaDettaglio) A.dimenticaDettaglio(v.lezione_id);
-    const pronta = voci.find((v) => v.tipo === 'lezione_pronta');
-    if (pronta && document.hasFocus()) A.avviso(pronta.testo || 'La lezione è pronta.');
+    const pronta = voci.find((v) => ['lezione_pronta', 'schema_pronto', 'riassunto_pronto', 'simulata_pronta', 'simulata_corretta'].includes(v.tipo));
+    if (pronta && document.hasFocus()) A.avviso(pronta.testo || 'È pronto.');
     A.aggiornaMotore();
     A.caricaMaterie();
     if (S.aggiornaPagina) S.aggiornaPagina();
@@ -239,6 +240,57 @@
         if (A.lettore.audio) A.lettore.audio.pause();
         break;
       }
+      case 'colori': await vai('#materie', '.scheda-materia'); A.apriMateria(A.materiaDi(1)); await aspetta('.cerchio-colore'); document.querySelector('[data-colore="giada"]').click(); break;
+      case 'schemi': await vai('#materia/1/schemi', '[data-schema]'); await aspetta('[data-simulata]'); S.dom.scorre.scrollTop = S.dom.scorre.scrollHeight; S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 1e6; break;
+      case 'simulate': await vai('#materia/1/simulate', '[data-simulata]'); S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 1e6; break;
+      case 'nuovo-schema': await vai('#materia/1', '[data-visita="nuova-lezione"]'); A.nuovoSchema(1); await aspetta('[data-riep="immagini"]'); await new Promise((r) => setTimeout(r, 100)); break;
+      case 'simulata-nuova': await vai('#materia/1', '[data-visita="nuova-lezione"]'); A.nuovaSimulata(1); await aspetta('[data-riep="pronta"]'); await new Promise((r) => setTimeout(r, 100)); break;
+      case 'schema': await vai('#schema/3', '.sch-parte'); break;
+      case 'schema-sotto': await vai('#schema/3', '.sch-parte'); S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 900; await new Promise((r) => setTimeout(r, 200)); break;
+      case 'schema-fine': await vai('#schema/3', '.sch-parte'); S.dom.scorre.style.scrollBehavior = 'auto'; S.dom.scorre.scrollTop = 1e6; await new Promise((r) => setTimeout(r, 200)); break;
+      case 'schema-opera': await vai('#schema/4', '.sch-parte'); break;
+      case 'schema-lavoro': await vai('#schema/5', '[data-vista="lavoro"]'); A.T.stato = 1e9; break;
+      case 'schema-errore': await vai('#schema/6', '[data-azione="riprova-schema"]'); break;
+      case 'riassunto-scelta': await vai('#schema/3', '.sch-parte'); document.querySelector('[data-azione="riassunto"]').click(); await aspetta('[data-forma-riassunto]'); break;
+      case 'riassunto': await vai('#riassunto/4', '[data-riassunto]'); break;
+      case 'riassunto-punti': await vai('#riassunto/5', '[data-riassunto]'); break;
+      case 'riassunto-manca': await vai('#riassunto/4', '[data-riassunto]'); document.querySelector('[data-forma="discorsivo"]').click(); await aspetta('[data-forma-manca]'); break;
+      case 'non-ho-capito': case 'non-c-e': {
+        await vai('#schema/3', '.sch-parte');
+        document.querySelector('[data-visita="mano"]').click();
+        await aspetta('[data-campo="domanda"]');
+        if (scena === 'non-c-e') { const c = document.querySelector('[data-campo="domanda"]'); c.value = 'Cosa c\'entra Marte?'; c.dispatchEvent(new Event('input')); }
+        document.querySelector('[data-azione="spiegamelo"]').click();
+        await aspetta('[data-capito="risposta"], [data-capito="non-c-e"]');
+        break;
+      }
+      case 'capito-domanda': await vai('#schema/3', '.sch-parte'); document.querySelector('[data-visita="mano"]').click(); await aspetta('[data-campo="domanda"]'); break;
+      case 'lampo': case 'lampo-risposta': case 'lampo-fine': {
+        await vai('#oggi', '[data-azione="inizia-lampo"]');
+        A.T.fermoEsito = 0;
+        document.querySelector('[data-azione="inizia-lampo"]').click();
+        await aspetta('[data-azione="mostra-risposta"]');
+        if (scena !== 'lampo') {
+          document.querySelector('[data-azione="mostra-risposta"]').click();
+          await aspetta('[data-esito]');
+        }
+        if (scena === 'lampo-fine') {
+          const esiti = ['sapevo', 'quasi', 'sapevo', 'non_sapevo', 'sapevo', 'quasi', 'sapevo', 'sapevo'];
+          for (const e of esiti) {
+            await aspetta('[data-esito]');
+            document.querySelector('[data-esito="' + e + '"]').click();
+            await new Promise((r) => setTimeout(r, 30));
+            const m = document.querySelector('[data-azione="mostra-risposta"]');
+            if (m) m.click();
+          }
+          await aspetta('[data-lampo="fine"]');
+        }
+        break;
+      }
+      case 'simulata-pronta': await vai('#simulata/2', '[data-azione="inizia-simulata"]'); break;
+      case 'simulata-corso': await vai('#simulata/3', '.sim-domanda'); break;
+      case 'simulata-consegna': await vai('#simulata/3', '.sim-domanda'); document.querySelector('[data-azione="consegna"]').click(); await aspetta('[data-consegna="conto"]'); break;
+      case 'simulata-risultati': await vai('#simulata/4', '.sim-testata'); break;
       case 'gemini': await vai('#gemini', '.testo-gemini'); await new Promise((r) => setTimeout(r, 100)); break;
       case 'impostazioni': await vai('#impostazioni', '.voce-imp'); break;
       case 'lezioni': await vai('#lezioni', '.riga-lezione-elenco'); break;
@@ -248,7 +300,7 @@
       case 'visita': {
         await vai('#oggi', '[data-visita="prossima"]');
         S.prova = true;
-        await A.avviaVisita(false);
+        await A.avviaVisita(false, parametri.get('modo') || undefined);
         const n = Number(parametri.get('passo') || 1) - 1;
         if (n > 0) {
           for (let i = 1; i <= n; i++) await A.visitaVai(i);

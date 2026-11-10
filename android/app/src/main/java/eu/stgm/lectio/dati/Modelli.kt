@@ -82,6 +82,10 @@ data class Conteggi(
     val interrogazioni: Int = 0,
     val appunti: Int = 0,
     val lezioni: Int = 0,
+    /** v1.5 §20: quanti schemi, quante schede di Ripasso lampo da fare, quante simulate. */
+    val schemi: Int = 0,
+    val lampo: Int = 0,
+    val simulate: Int = 0,
 )
 
 @Serializable
@@ -485,6 +489,8 @@ data class Oggi(
     @SerialName("piu_avanti") val piuAvanti: List<PiuAvanti> = emptyList(),
     val spesa: SpesaBreve = SpesaBreve(),
     @SerialName("modalita_prova") val modalitaProva: Boolean = false,
+    /** v1.5 §20: le schede di oggi del Ripasso lampo. */
+    val lampo: LampoOggi = LampoOggi(),
 )
 
 // --- §11 Novità, §12 Gemini, §13 Impostazioni -------------------------------------------------
@@ -496,6 +502,10 @@ data class Novita(
     val testo: String = "",
     @SerialName("lezione_id") val lezioneId: Long? = null,
     val quando: String? = null,
+    @SerialName("materia_id") val materiaId: Long? = null,
+    @SerialName("schema_id") val schemaId: Long? = null,
+    @SerialName("simulata_id") val simulataId: Long? = null,
+    @SerialName("riassunto_id") val riassuntoId: Long? = null,
 )
 
 @Serializable

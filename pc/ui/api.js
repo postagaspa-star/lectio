@@ -20,6 +20,11 @@
   const ATTESA_SCARICA_MS = 16 * 60000;
   // La correzione di una risposta scritta: il programma aspetta fino a 200 s, la pagina un po' di più.
   const ATTESA_CORREZIONE_MS = 210000;
+  // "Non ho capito": il server può metterci fino a 40 secondi, il programma aspetta 60. Cambia foto ne può chiedere 120.
+  const ATTESA_CHIARIMENTO_MS = 70000;
+  const ATTESA_CAMBIA_FOTO_MS = 130000;
+  // Il PDF: si prepara sul server e poi si sceglie dove salvarlo, senza fretta.
+  const ATTESA_PDF_MS = 5 * 60000;
   const FRASE_RETE = 'Lectio non riesce a raggiungere il server di casa. Controlla la connessione a internet e riprova.';
 
   let esempio = null;
@@ -33,6 +38,9 @@
     if (/^\/locale\/lezioni\/\d+\/scarica$/.test(percorso)) return ATTESA_SCARICA_MS;
     if (percorso.startsWith('/locale/carica')) return ATTESA_CARICA_MS;
     if (/^\/server\/api\/lezioni\/\d+\/domande\/\d+\/risposta$/.test(percorso)) return ATTESA_CORREZIONE_MS;
+    if (percorso === '/locale/salva-pdf') return ATTESA_PDF_MS;
+    if (percorso === '/server/api/chiarimenti') return ATTESA_CHIARIMENTO_MS;
+    if (/^\/server\/api\/schemi\/\d+\/immagini\/\d+\/cambia$/.test(percorso)) return ATTESA_CAMBIA_FOTO_MS;
     if (percorso.startsWith('/server/')) return ATTESA_SERVER_MS;
     return ATTESA_LOCALE_MS;
   }

@@ -16,6 +16,9 @@ public sealed class Percorsi
     public string Config => Path.Combine(Radice, "config.json");
     public string Memoria => Path.Combine(Radice, "memoria");
 
+    /// <summary>Le foto degli schemi già viste, per rileggere uno schema anche senza rete.</summary>
+    public string Immagini => Path.Combine(Radice, "immagini");
+
     /// <summary>Gli MP3 delle lezioni scaricate: la pagina li ascolta da qui (cartella virtuale di WebView2).</summary>
     public string Lezioni => Path.Combine(Radice, "lezioni");
 
@@ -37,6 +40,9 @@ public sealed class Configurazione
 
     /// <summary>La visita guidata è stata vista (o saltata): al prossimo avvio non riparte da sola.</summary>
     public bool TutorialVisto { get; set; }
+
+    /// <summary>La visita delle cose nuove (schemi, ripasso lampo, verifiche simulate) è stata vista o saltata.</summary>
+    public bool TutorialNovitaVisto { get; set; }
 
     /// <summary>Tema scelto nelle impostazioni: "chiaro", "scuro" oppure null (come Windows).</summary>
     public string? Tema { get; set; }

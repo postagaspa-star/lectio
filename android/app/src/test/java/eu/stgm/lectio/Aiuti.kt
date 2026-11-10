@@ -72,13 +72,24 @@ class ServerFinto : AutoCloseable {
 @OptIn(ExperimentalCoroutinesApi::class)
 class RegolaMain : TestWatcher() {
     override fun starting(description: Description) = Dispatchers.setMain(Dispatchers.Unconfined)
-    override fun finished(description: Description) = Dispatchers.resetMain()
+    override fun finished(description: Description) {
+        // Una risposta di rete può arrivare proprio adesso: si riprova invece di far cadere la prova.
+        repeat(100) {
+            try {
+                Dispatchers.resetMain()
+                return
+            } catch (e: IllegalStateException) {
+                Thread.sleep(10)
+            }
+        }
+        Dispatchers.resetMain()
+    }
 }
 
-/** Aspetta (al massimo 5 s) che [condizione] diventi vera. */
-fun aspetta(messaggio: String = "condizione mai vera", condizione: () -> Boolean) = runBlocking {
+/** Aspetta (al massimo 5 s, o [massimoMs]) che [condizione] diventi vera. */
+fun aspetta(messaggio: String = "condizione mai vera", massimoMs: Long = 5_000, condizione: () -> Boolean) = runBlocking {
     try {
-        withTimeout(5_000) {
+        withTimeout(massimoMs) {
             while (!condizione()) delay(10)
         }
     } catch (e: Exception) {

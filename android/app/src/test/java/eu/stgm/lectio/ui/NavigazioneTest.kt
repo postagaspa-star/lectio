@@ -38,6 +38,9 @@ class NavigazioneTest {
             Pagina.Materia(1), Pagina.ModificaScheda(1), Pagina.TestoMateriale(7), Pagina.NuovaLezione(1, null),
             Pagina.NuovaLezione(2, 3), Pagina.Preparazione(13), Pagina.Lettore(12), Pagina.Lettore(12, 32),
             Pagina.ComeAndata(4), Pagina.Prossime, Pagina.Impostazioni, Pagina.Abbinamento,
+            Pagina.Materia(1, 2), Pagina.NuovaLezione(1, 3, "Il Discobolo: storia", listOf(4, 5)), Pagina.NuovaLezione(1, null, "Solo argomento", null),
+            Pagina.NuovoSchema(1), Pagina.NuovoSchema(1, 3, 9), Pagina.Schema(31), Pagina.Riassunto(31, "punti"),
+            Pagina.NuovaSimulata(1), Pagina.NuovaSimulata(1, 3, 9), Pagina.Simulata(41), Pagina.Lampo(), Pagina.Lampo(1),
         ))
         assertEquals(n, Navigazione.decodifica(n.codifica()))
         assertEquals(Navigazione(), Navigazione.decodifica("spazzatura"))

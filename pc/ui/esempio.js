@@ -217,6 +217,189 @@
     { id: 'nas:supertonic', nome: 'Supertonic', tipo: 'gratis', fornitore: 'nas', euro_al_minuto: 0, disponibile: true, minuti_per_minuto: 1.1 },
   ];
 
+  // --- Schemi, riassunti, ripasso lampo e verifiche simulate (contratto §18-21, §26) -----------------------------
+
+  const FONTI = {
+    B1: { materiale_id: 12, titolo: 'Libro, capitolo 9: la dinastia giulio-claudia', tipo: 'libro', pagina: 142, etichetta: 'Libro, pag. 142' },
+    B2: { materiale_id: 12, titolo: 'Libro, capitolo 9: la dinastia giulio-claudia', tipo: 'libro', pagina: 145, etichetta: 'Libro, pag. 145' },
+    V1: { materiale_id: 7, titolo: 'Verifica sulla Repubblica', tipo: 'verifica', pagina: null, etichetta: 'Verifica del 12/10' },
+    I1: { materiale_id: 8, titolo: 'Interrogazione su Augusto', tipo: 'interrogazione', pagina: null, etichetta: 'Interrogazione del 20/10' },
+    A1: { materiale_id: 11, titolo: 'Augusto e il principato', tipo: 'appunti', pagina: null, etichetta: 'Appunti del 22/10' },
+    A2: { materiale_id: 13, titolo: 'Tiberio, Seiano e i processi', tipo: 'appunti', pagina: null, etichetta: 'Appunti del 24/10' },
+    A3: { materiale_id: 14, titolo: 'Caligola e Claudio', tipo: 'appunti', pagina: null, etichetta: 'Appunti del 25/10' },
+    A4: { materiale_id: 15, titolo: 'Nerone e l\'incendio di Roma', tipo: 'appunti', pagina: null, etichetta: 'Appunti del 26/10' },
+  };
+
+  /** Le foto d'esempio: disegni semplici, così le schermate si provano senza il server. */
+  function immagine(n, versione) {
+    const v = Number(versione) || 0;
+    const fondi = [['#E9DCC0', '#B9883E'], ['#CFE0E8', '#4E7C92'], ['#DCD5EA', '#6A58A0']];
+    const [chiaro, scuro] = fondi[(Number(n) + v - 1) % fondi.length];
+    const disegno = (Number(n) + v) % 2
+      ? '<circle cx="400" cy="225" r="150" fill="' + scuro + '"/><circle cx="400" cy="225" r="122" fill="' + chiaro + '"/><path d="M340 300c0-42 16-60 34-70-14-12-22-30-20-50 4-34 34-54 66-48 28 6 48 32 44 62-2 16-10 28-20 36 22 12 36 34 38 70z" fill="' + scuro + '"/>'
+      : '<path d="M0 330 140 210l90 70 130-130 150 120 90-60 200 130v110H0z" fill="' + scuro + '"/><circle cx="640" cy="110" r="46" fill="' + scuro + '" opacity=".55"/>';
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><rect width="800" height="450" fill="' + chiaro + '"/>' + disegno + '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  function contenutoStoria() {
+    return {
+      forma: 'capitoli',
+      sezioni: [
+        {
+          n: 1, titolo: 'Augusto e la nascita del principato', campi: [],
+          blocchi: [
+            { tipo: 'paragrafo', titolo: null, testo: 'Nel 27 avanti Cristo Ottaviano riceve dal senato il nome di **Augusto**. Non si fa chiamare re: a Roma quella parola ricorda la tirannia. Si presenta come **princeps**, il primo cittadino.', fonti: ['B1'] },
+            { tipo: 'paragrafo', titolo: null, testo: 'Le istituzioni della Repubblica restano in piedi, ma il potere vero è suo: comanda l\'esercito e sceglie i governatori delle province.', fonti: ['B1'] },
+            { tipo: 'immagine', n: 1, didascalia: 'Moneta con il ritratto di Augusto', credito: 'Disegno d\'esempio' },
+            { tipo: 'definizione', termine: 'principato', testo: 'Forma di governo in cui le istituzioni della Repubblica restano, ma il potere è nelle mani di un solo uomo.', fonti: ['A1'] },
+            { tipo: 'prof', testo: 'Chiesto nell\'interrogazione del 20/10: la differenza tra principato e monarchia. Vuole la data precisa, il 27 avanti Cristo.', fonti: ['I1'] },
+          ],
+        },
+        {
+          n: 2, titolo: 'Tiberio e i processi', campi: [],
+          blocchi: [
+            { tipo: 'punti', titolo: 'Il governo di Tiberio', voci: ['È il **figlio adottivo** di Augusto.', 'Tiene sotto controllo i **conti** dell\'impero.', 'I processi per **lesa maestà** riempiono Roma di paura.'], fonti: ['A2'] },
+            { tipo: 'passaggi', titolo: null, voci: ['Tiberio non si fida del senato', 'Nel 26 si ritira a Capri', 'Roma resta in mano a Seiano', 'Nel 31 scopre la congiura e Seiano viene ucciso'], fonti: ['A2', 'B2'] },
+            { tipo: 'grafico', titolo: 'Un tipo di blocco che le app non conoscono ancora' },
+          ],
+        },
+        {
+          n: 3, titolo: 'Caligola e Claudio', campi: [],
+          blocchi: [
+            { tipo: 'tabella', titolo: 'I due imperatori a confronto', intestazione: ['Imperatore', 'Anni', 'Cosa fa', 'Come finisce'], righe: [['Caligola', '37-41', 'Governa da padrone assoluto e umilia il senato', 'Ucciso dai pretoriani'], ['Claudio', '41-54', 'Crea uffici con i liberti e conquista la Britannia', 'Muore nel 54']], fonti: ['A3'] },
+            { tipo: 'paragrafo', titolo: 'Perché Claudio sorprende', testo: 'Tutti lo credono debole. Invece organizza bene lo Stato e nel 43 conquista la **Britannia**.', fonti: ['A3', 'B2', 'V1'] },
+          ],
+        },
+        {
+          n: 4, titolo: 'Nerone', campi: [],
+          blocchi: [
+            { tipo: 'paragrafo', titolo: null, testo: 'Nerone diventa imperatore a sedici anni, nel 54. All\'inizio governa bene, guidato da **Seneca**.', fonti: ['A4'] },
+            { tipo: 'paragrafo', titolo: null, testo: 'Nel 64 un incendio distrugge gran parte di Roma: Nerone accusa i cristiani e poi costruisce la Domus Aurea.', fonti: ['A4'] },
+            { tipo: 'immagine', n: 2, didascalia: 'Roma vista dai colli', credito: 'Disegno d\'esempio' },
+          ],
+        },
+        {
+          n: 5, titolo: 'La fine della dinastia', campi: [],
+          blocchi: [
+            { tipo: 'paragrafo', titolo: null, testo: 'Nel 68 il senato dichiara Nerone **nemico pubblico** e lui si uccide. Finisce la dinastia giulio-claudia e l\'impero entra in un anno di guerra civile.', fonti: ['B1'] },
+            { tipo: 'prof', testo: 'Il prof toglie punti se confondi gli imperatori tra loro.', fonti: ['V1'] },
+          ],
+        },
+      ],
+      fonti: copia(FONTI),
+      copertura: { concetti: 42, coperti: 41, mancanti: ['Le riforme dell\'esercito fatte da Augusto'] },
+      avvisi: ['Per la parte 3 non ho trovato una foto giusta.'],
+    };
+  }
+
+  function contenutoOpere() {
+    return {
+      forma: 'schede',
+      sezioni: [
+        {
+          n: 1, titolo: 'L\'Augusto di Prima Porta',
+          campi: [{ nome: 'Autore', valore: 'Non si conosce' }, { nome: 'Datazione', valore: 'Primi anni del principato' }, { nome: 'Luogo', valore: 'Musei Vaticani, Roma' }],
+          blocchi: [
+            { tipo: 'immagine', n: 1, didascalia: 'La statua vista di fronte', credito: 'Disegno d\'esempio' },
+            { tipo: 'paragrafo', titolo: 'Descrizione', testo: 'Augusto è in piedi, con il braccio alzato, come quando un generale parla ai soldati.', fonti: ['B1'] },
+            { tipo: 'paragrafo', titolo: 'Analisi', testo: 'Il corpo è perfetto come quello di un eroe: serve a far vedere il **potere** dell\'imperatore.', fonti: ['B1'] },
+          ],
+        },
+      ],
+      fonti: copia(FONTI),
+      copertura: { concetti: 6, coperti: 6, mancanti: [] },
+      avvisi: [],
+    };
+  }
+
+  function schemi() {
+    const base = { materia_id: 1, evento_id: null, indicazioni: '', materiali: [12, 11, 13, 14, 15], stima_eur: 0.08, creato_il: '2026-10-26T17:00:00+01:00', pronto_il: '2026-10-26T17:05:00+01:00', errore: null, nota: null, fase: null, fatto: 0, totale: 0, frase: null, carte: 0, contenuto: null };
+    return [
+      Object.assign({}, base, { id: 6, argomento: 'La crisi della Repubblica', titolo: 'La crisi della Repubblica', forma: 'auto', livello: 'completo', stato: 'errore', errore: 'Il servizio che scrive i testi non ha risposto. Riprova tra poco.', pronto_il: null, materiali: [10, 7] }),
+      Object.assign({}, base, { id: 5, argomento: 'Augusto e il Senato', titolo: 'Augusto e il Senato', forma: 'capitoli', livello: 'essenziale', stato: 'in_preparazione', fase: 'scrittura', fatto: 2, totale: 8, frase: 'Scrivo la parte 2 di 8', pronto_il: null, materiali: [11, 12] }),
+      Object.assign({}, base, { id: 4, argomento: 'I ritratti degli imperatori', titolo: 'I ritratti degli imperatori', forma: 'schede', livello: 'essenziale', stato: 'pronto', carte: 0, materiali: [12], contenuto: contenutoOpere() }),
+      Object.assign({}, base, { id: 3, evento_id: 3, argomento: 'L\'Impero romano da Augusto a Nerone', titolo: 'L\'Impero romano da Augusto a Nerone', forma: 'capitoli', livello: 'completo', stato: 'pronto', carte: 12, nota: 'Su Claudio e la Britannia i tuoi documenti dicono poco: quella parte è più corta.', contenuto: contenutoStoria() }),
+    ];
+  }
+
+  function riassunti() {
+    const base = { schema_id: 3, materia_id: 1, titolo: 'L\'Impero romano da Augusto a Nerone', frase: null, errore: null, nota: null, stima_eur: 0.01, creato_il: '2026-10-26T18:00:00+01:00', pronto_il: '2026-10-26T18:01:00+01:00' };
+    return [
+      Object.assign({}, base, {
+        id: 4, forma: 'misto', stato: 'pronto', parole: 212, nota: 'Su Claudio i tuoi documenti dicono poco.',
+        contenuto: { parti: [
+          { titolo: 'Da Augusto a Tiberio', paragrafi: ['Nel 27 avanti Cristo Ottaviano diventa **Augusto**. Non si fa chiamare re e tiene in piedi le istituzioni della Repubblica, ma il potere vero è suo.', 'Tiberio, il figlio adottivo, controlla bene i conti. Dal 26 vive a Capri e lascia Roma a Seiano.'], punti: ['Principato: istituzioni repubblicane, potere di uno solo.', 'I processi per **lesa maestà** riempiono Roma di paura.', 'Nel 31 Tiberio scopre la congiura di Seiano.'] },
+          { titolo: 'Caligola e Claudio', paragrafi: ['Caligola umilia il senato e viene ucciso dai pretoriani nel 41. Claudio sembra debole, ma organizza bene lo Stato.'], punti: ['Claudio crea uffici con i liberti.', 'Nel 43 conquista la **Britannia**.'] },
+          { titolo: 'Nerone', paragrafi: ['Nerone parte bene con Seneca. Dopo l\'incendio del 64 accusa i cristiani. Nel 68 il senato lo dichiara nemico pubblico e lui si uccide.'], punti: ['Con lui finisce la dinastia giulio-claudia.'] },
+        ] },
+      }),
+      Object.assign({}, base, {
+        id: 5, forma: 'punti', stato: 'pronto', parole: 96,
+        contenuto: { parti: [
+          { titolo: 'Augusto', paragrafi: [], punti: ['27 avanti Cristo: Ottaviano diventa **Augusto**.', 'Si presenta come princeps, non come re.', 'Comanda l\'esercito e sceglie i governatori.'] },
+          { titolo: 'Dopo Augusto', paragrafi: [], punti: ['Tiberio: conti in ordine, processi, Capri, Seiano.', 'Caligola: padrone assoluto, ucciso nel 41.', 'Claudio: uffici con i liberti, Britannia nel 43.', 'Nerone: incendio del 64, si uccide nel 68.'] },
+        ] },
+      }),
+    ];
+  }
+
+  function carteLampo() {
+    const carta = (id, materia_id, materia, colore, domanda, risposta, fonti, scatola) => ({ id, materia_id, materia, colore, domanda, risposta, fonti: fonti.map((k) => copia(FONTI[k])), scatola });
+    return [
+      carta(1, 1, 'Storia', 'ambra', 'Perché Augusto non si fece mai chiamare re?', 'Perché a Roma la parola re ricordava la tirannia. Si presentò come princeps, il primo cittadino.', ['B1'], 2),
+      carta(2, 1, 'Storia', 'ambra', 'Che differenza c\'è tra principato e monarchia?', 'Nel principato le istituzioni della Repubblica restano in piedi, ma il potere vero è di un solo uomo.', ['A1', 'I1'], 1),
+      carta(3, 1, 'Storia', 'ambra', 'Chi era Seiano?', 'Il prefetto del pretorio: governò Roma mentre Tiberio stava a Capri. Fu ucciso nel 31 dopo la congiura.', ['A2'], 1),
+      carta(4, 2, 'Diritto ed economia', 'petrolio', 'Quale fonte del diritto sta più in alto?', 'La Costituzione, poi le leggi, poi i regolamenti.', [], 3),
+      carta(5, 1, 'Storia', 'ambra', 'Che cosa fece Claudio per la Britannia?', 'La conquistò in parte nel 43 e ne fece una provincia.', ['A3'], 2),
+      carta(6, 4, 'Inglese', 'verde', 'Quando si usa il present perfect?', 'Per azioni passate legate al presente.', [], 2),
+      carta(7, 1, 'Storia', 'ambra', 'Perché nel 68 finisce la dinastia giulio-claudia?', 'Il senato dichiara Nerone nemico pubblico e lui si uccide: non restano eredi.', ['B1'], 1),
+      carta(8, 5, 'Matematica', 'blu', 'Quante soluzioni ha un\'equazione di secondo grado con delta negativo?', 'Nessuna soluzione reale.', [], 2),
+    ];
+  }
+
+  function domandeSimulata() {
+    return [
+      { n: 1, tipo: 'aperta', testo: 'Perché Augusto non si fece mai chiamare re?', punti: 15, sezione: 'Prima parte: il principato' },
+      { n: 2, tipo: 'definizione', testo: 'Che cos\'è il principato?', punti: 10, sezione: 'Prima parte: il principato' },
+      { n: 3, tipo: 'aperta', testo: 'Quali poteri tenne per sé Augusto?', punti: 15, sezione: 'Prima parte: il principato' },
+      { n: 4, tipo: 'date', testo: 'In che anno Tiberio si ritirò a Capri?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
+      { n: 5, tipo: 'aperta', testo: 'Chi era Seiano e perché cadde?', punti: 15, sezione: 'Seconda parte: gli imperatori' },
+      { n: 6, tipo: 'esercizio', testo: 'Sulla linea del tempo segna gli anni di governo di ogni imperatore.', punti: 10, sezione: 'Seconda parte: gli imperatori' },
+      { n: 7, tipo: 'aperta', testo: 'Confronta Caligola e Claudio.', punti: 15, sezione: 'Seconda parte: gli imperatori' },
+      { n: 8, tipo: 'aperta', testo: 'Perché nel 68 finisce la dinastia giulio-claudia?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
+    ];
+  }
+
+  function esitoSimulata() {
+    const f = (k) => copia(FONTI[k]);
+    return {
+      punti: 62, punti_totali: 90, voto_stimato: 6.5, soglia: 54, da_rifare: 4,
+      domande: [
+        { n: 1, esito: 'giusta', punti: 15, commento: 'Esatto: hai detto perché la parola re faceva paura.', mancava: [], risposta_attesa: 'Perché a Roma la parola re ricordava la tirannia.', fonti: [f('B1')] },
+        { n: 2, esito: 'giusta', punti: 9, commento: 'Chiaro. Potevi dire che il potere è di un solo uomo.', mancava: [], risposta_attesa: 'Forma di governo in cui le istituzioni restano, ma il potere è di un solo uomo.', fonti: [f('A1')] },
+        { n: 3, esito: 'parziale', punti: 9, commento: 'Hai detto dell\'esercito, ma manca chi sceglieva i governatori.', mancava: ['governatori delle province'], risposta_attesa: 'Comanda l\'esercito e sceglie i governatori delle province.', fonti: [f('B1')] },
+        { n: 4, esito: 'sbagliata', punti: 0, commento: 'Non è il 31: quello è l\'anno della congiura di Seiano.', mancava: ['26 dopo Cristo'], risposta_attesa: 'Nel 26 dopo Cristo.', fonti: [f('A2')] },
+        { n: 5, esito: 'parziale', punti: 10, commento: 'Bene chi era. Spiega meglio perché cadde.', mancava: ['la congiura', 'il 31'], risposta_attesa: 'Era il prefetto del pretorio. Cadde nel 31, quando Tiberio scoprì la congiura.', fonti: [f('A2'), f('B2')] },
+        { n: 6, esito: 'non_corretta', punti: 0, commento: null, mancava: [], risposta_attesa: null, fonti: [] },
+        { n: 7, esito: 'giusta', punti: 14, commento: 'Confronto chiaro, con i fatti giusti.', mancava: [], risposta_attesa: 'Caligola governa da padrone assoluto; Claudio organizza bene lo Stato.', fonti: [f('A3')] },
+        { n: 8, esito: 'parziale', punti: 5, commento: 'Giusto il senato, ma manca che Nerone si uccide.', mancava: ['Nerone si uccide'], risposta_attesa: 'Il senato lo dichiara nemico pubblico e Nerone si uccide.', fonti: [f('B1')] },
+      ],
+    };
+  }
+
+  function simulate() {
+    const base = { materia_id: 1, evento_id: 3, argomento: 'L\'Impero romano da Augusto a Nerone', titolo: 'Verifica sull\'Impero romano', minuti: 50, materiali: [12, 11, 13, 14, 15], indicazioni: '', fase: null, fatto: 0, totale: 0, frase: null, errore: null, nota: null, stima_eur: 0.03, creata_il: '2026-10-26T17:00:00+01:00', iniziata_il: null, consegnata_il: null, domande: [], risposte: {}, esito: null };
+    const risposte = { 1: 'Perché a Roma la parola re faceva pensare alla tirannia, quindi si presenta come primo cittadino.', 2: 'È un governo dove restano le istituzioni della Repubblica.', 3: 'Il comando dell\'esercito.', 4: 'Nel 31.', 5: 'Era il capo dei pretoriani di Tiberio.', 7: 'Caligola governa da padrone e umilia il senato. Claudio sembra debole ma organizza bene lo Stato.', 8: 'Perché il senato si mette contro Nerone.' };
+    return [
+      Object.assign({}, base, { id: 6, titolo: 'Verifica su Augusto', argomento: 'Augusto', stato: 'in_preparazione', fase: 'scrittura', frase: 'Scrivo le domande', fatto: 1, totale: 2, evento_id: null }),
+      Object.assign({}, base, { id: 5, titolo: 'Verifica sulla Repubblica', argomento: 'La crisi della Repubblica', stato: 'errore', errore: 'Il servizio che scrive i testi non ha risposto. Riprova tra poco.', evento_id: null }),
+      Object.assign({}, base, { id: 4, stato: 'corretta', iniziata_il: '2026-10-25T15:00:00+01:00', consegnata_il: '2026-10-25T15:56:00+01:00', domande: domandeSimulata(), risposte, esito: esitoSimulata() }),
+      Object.assign({}, base, { id: 3, stato: 'in_corso', iniziata_il: '2026-10-27T09:40:00+01:00', minuti: 30, domande: domandeSimulata(), risposte: { 1: risposte[1], 2: risposte[2], 3: risposte[3], 5: risposte[5], 7: risposte[7] } }),
+      Object.assign({}, base, { id: 2, stato: 'pronta', nota: 'Ho preso il formato dalle tue 2 verifiche di Storia.', domande: domandeSimulata() }),
+    ];
+  }
+
   const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 
   /** Ogni data "AAAA-MM-GG…" dentro x spostata di `giorni` (l'ora e il resto restano com'erano). */
@@ -254,10 +437,16 @@
         { domanda_id: 33, lezione_id: 12, lezione: 'L\'Impero romano da Augusto a Nerone', testo: 'Che cosa fece Claudio per la Britannia?', esito: 'saltata', commento: null, quando: '2026-10-26T18:35:00+01:00' },
       ],
       spesa: { mese: oggiVero.slice(0, 7), speso_eur: o.speso != null ? o.speso : 0.8, tetto_eur: 2.0, si_azzera_il: iso(new Date(anno, mese, 1)), voce_gratis: { caratteri_usati: 88000, caratteri_mese: 500000 }, voci: [] },
+      schemi: o.vuoto ? [] : schemi(),
+      riassunti: o.vuoto ? [] : riassunti(),
+      simulate: o.vuoto ? [] : simulate(),
+      lampo: o.vuoto ? [] : carteLampo(),
+      lampo_domani: o.vuoto ? 0 : 3,
+      chiarimenti: [],
       prossimoId: 200,
       chiamate: [],
     };
-    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare']) s[k] = spostaDate(s[k], giorni);
+    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare', 'schemi', 'riassunti', 'simulate']) s[k] = spostaDate(s[k], giorni);
 
     const materia = (id) => s.materie.find((m) => m.id === Number(id)) || null;
     const breve = (m) => (m ? { id: m.id, nome: m.nome, colore: m.colore } : null);
@@ -329,6 +518,81 @@
       if (quota >= 0.15) return { esito: 'parziale', commento: 'Ci sei in parte. Aggiungi le parole che mancano.', mancava: mancanti };
       return { esito: 'sbagliata', commento: 'Questa volta non ci siamo: ascolta la risposta giusta.', mancava: mancanti };
     };
+    // Schemi, verifiche e riassunti chiesti nell'esempio avanzano da soli, come le lezioni.
+    const passi = (x) => Math.floor((Date.now() - x._t0) / 1200);
+    const avanzaSchema = (x) => {
+      if (!x._t0 || (x.stato !== 'in_coda' && x.stato !== 'in_preparazione')) return;
+      const i = passi(x);
+      if (i >= 5) {
+        const base = x.forma === 'schede' ? contenutoOpere() : contenutoStoria();
+        Object.assign(x, { stato: 'pronto', fase: null, frase: null, fatto: 0, totale: 0, pronto_il: new Date().toISOString(), carte: 12, contenuto: base });
+        delete x._t0;
+        return;
+      }
+      if (i >= 1) Object.assign(x, { stato: 'in_preparazione', fase: 'scrittura', fatto: i, totale: 4, frase: 'Scrivo la parte ' + i + ' di 4' });
+    };
+    const avanzaRiassunto = (r) => {
+      if (!r._t0 || (r.stato !== 'in_coda' && r.stato !== 'in_preparazione')) return;
+      const i = passi(r);
+      if (i >= 2) {
+        const modello = riassunti().find((y) => y.forma === 'misto');
+        const parti = modello.contenuto.parti.map((c) => (r.forma === 'punti' ? { titolo: c.titolo, paragrafi: [], punti: c.punti.concat(c.paragrafi) } : r.forma === 'discorsivo' ? { titolo: c.titolo, paragrafi: c.paragrafi.concat([c.punti.join(' ')]), punti: [] } : c));
+        Object.assign(r, { stato: 'pronto', frase: null, pronto_il: new Date().toISOString(), parole: 212, contenuto: { parti } });
+        delete r._t0;
+        return;
+      }
+      if (i >= 1) Object.assign(r, { stato: 'in_preparazione', frase: 'Scrivo il riassunto' });
+    };
+    const avanzaSimulata = (x) => {
+      if (!x._t0) return;
+      const i = passi(x);
+      if (x.stato === 'in_coda' || x.stato === 'in_preparazione') {
+        if (i >= 3) {
+          Object.assign(x, { stato: 'pronta', fase: null, frase: null, fatto: 0, totale: 0, domande: domandeSimulata() });
+          delete x._t0;
+          return;
+        }
+        if (i >= 1) Object.assign(x, { stato: 'in_preparazione', fase: 'scrittura', fatto: i, totale: 2, frase: 'Scrivo le domande' });
+      } else if (x.stato === 'in_correzione' && i >= 2) {
+        Object.assign(x, { stato: 'corretta', esito: esitoSimulata() });
+        delete x._t0;
+      }
+    };
+    const senzaInterni = (x) => {
+      const c = copia(x);
+      delete c._t0;
+      return c;
+    };
+    const riassuntiDi = (x) => (x.stato === 'pronto' ? { stima_eur: 0.01, fatti: s.riassunti.filter((r) => r.schema_id === x.id).map((r) => ({ id: r.id, forma: r.forma, stato: r.stato })) } : null);
+    const schemaPerApi = (x) => Object.assign(senzaInterni(x), { riassunti: riassuntiDi(x) });
+    const schemaInLista = (x) => Object.assign(senzaInterni(x), { contenuto: null, riassunti: null });
+    const riassuntoPerApi = senzaInterni;
+    /** Le risposte attese e le correzioni si vedono solo a verifica corretta (contratto §21). */
+    const simulataPerApi = senzaInterni;
+    const simulataInLista = (x) => {
+      const c = senzaInterni(x);
+      delete c.domande;
+      delete c.risposte;
+      if (c.esito) c.esito = { punti: c.esito.punti, punti_totali: c.esito.punti_totali, voto_stimato: c.esito.voto_stimato, soglia: c.esito.soglia, da_rifare: c.esito.da_rifare };
+      return c;
+    };
+    const bloccoImmagine = (x, n) => {
+      for (const sez of (x.contenuto && x.contenuto.sezioni) || []) for (const b of sez.blocchi) if (b.tipo === 'immagine' && b.n === n) return b;
+      return null;
+    };
+    const immaginiPer = (c) => ({ essenziale: 2, completo: 3, approfondito: 5 }[c.livello] || 3) + (/immagini/.test(String(c.indicazioni || '')) ? 8 : 0);
+    const controllaStudio = (c) => {
+      if (!Array.isArray(c.materiali) || !c.materiali.length) return [422, { errore: 'Scegli almeno un appunto o una verifica', codice: 'non_valido' }];
+      if (String(c.indicazioni || '').trim().length > 600) return [422, { errore: 'Le indicazioni possono avere al massimo 600 caratteri.', codice: 'non_valido' }];
+      return null;
+    };
+    const stimaStudio = (costo, c, minuti, immagini) => {
+      const dopo = Math.round((s.spesa.speso_eur + costo) * 100) / 100;
+      const consentita = dopo <= s.impostazioni.tetto_eur + 1e-9;
+      const fuori = { costo_eur: costo, spesa_mese_eur: s.spesa.speso_eur, impegnato_eur: 0, tetto_eur: s.impostazioni.tetto_eur, dopo_eur: dopo, consentita, motivo: consentita ? null : 'Questo lavoro sforerebbe il tetto di ' + String(s.impostazioni.tetto_eur).replace('.', ',') + ' €.', si_azzera_il: s.spesa.si_azzera_il, minuti_preparazione: minuti };
+      if (immagini != null) fuori.immagini = immagini;
+      return fuori;
+    };
     const tra = (data) => Math.round((new Date(data + 'T00:00:00') - new Date(s.oggi + 'T00:00:00')) / 86400000);
     const oggi = () => {
       const futuri = s.eventi.filter((e) => tra(e.data) >= 0).sort((a, b) => a.data.localeCompare(b.data));
@@ -347,6 +611,7 @@
         da_raccontare: s.eventi.filter((e) => tra(e.data) < 0 && tra(e.data) >= -30 && !e.esito && e.lezione_id).map((e) => ({ evento: copia(e), materia: breve(materia(e.materia_id)) })),
         piu_avanti: futuri.slice(1, 5).map((e) => ({ evento: copia(e), materia: breve(materia(e.materia_id)), tra_giorni: tra(e.data) })),
         spesa: Object.assign(spesa(), { avviso: s.spesa.speso_eur >= 0.8 * s.spesa.tetto_eur }),
+        lampo: { da_fare: s.lampo.length, minuti: Math.ceil(s.lampo.length * 20 / 60) },
         modalita_prova: false,
       };
     };
@@ -358,7 +623,10 @@
       if (p === '/server/api/oggi') return [200, oggi()];
       if (p === '/server/api/salute') return [200, { ok: true, versione: '1.0.0', modalita_prova: false, testo: { stato: 'pronto', fornitore: 'mistral' }, voce_espressiva: { stato: 'pronta', fornitore: 'mistral' }, voce_gratis: { stato: 'pronta', fornitore: 'azure' }, mancano: [], coda: { lezioni_in_preparazione: 0 } }];
       if (p === '/server/api/materie' && metodo === 'GET') {
-        return [200, copia(s.materie).sort((a, b) => a.nome.localeCompare(b.nome)).map((x) => Object.assign(x, { da_ripassare: daRipassare(x.id).length }))];
+        return [200, copia(s.materie).sort((a, b) => a.nome.localeCompare(b.nome)).map((x) => {
+          x.conteggi = Object.assign({}, x.conteggi, { schemi: s.schemi.filter((y) => y.materia_id === x.id).length, lampo: s.lampo.filter((y) => y.materia_id === x.id).length, simulate: s.simulate.filter((y) => y.materia_id === x.id).length });
+          return Object.assign(x, { da_ripassare: daRipassare(x.id).length });
+        })];
       }
       if ((m = /^\/server\/api\/materie\/(\d+)\/da_ripassare$/.exec(p))) return [200, daRipassare(Number(m[1]))];
       if ((m = /^\/server\/api\/lezioni\/(\d+)\/domande\/(\d+)\/risposta$/.exec(p)) && metodo === 'POST') {
@@ -501,11 +769,159 @@
         if (l && m[2] === 'riprova') { l.stato = 'in_coda'; l.errore = null; l._t0 = Date.now(); }
         return [200, l ? listaLezione(l) : {}];
       }
+      // --- Schemi (§18) ---
+      if (p === '/server/api/schemi/stima' && metodo === 'POST') return controllaStudio(corpo || {}) || [200, stimaStudio(0.08, corpo || {}, 4, immaginiPer(corpo || {}))];
+      if (p === '/server/api/schemi' && metodo === 'GET') {
+        s.schemi.forEach(avanzaSchema);
+        const id = Number(qs.get('materia_id')) || null;
+        return [200, s.schemi.filter((x) => !id || x.materia_id === id).map(schemaInLista)];
+      }
+      if (p === '/server/api/schemi' && metodo === 'POST') {
+        const c = corpo || {};
+        const no = controllaStudio(c);
+        if (no) return no;
+        if (!String(c.argomento || '').trim()) return [422, { errore: 'Scrivi l\'argomento.', codice: 'non_valido', campo: 'argomento' }];
+        const st = stimaStudio(0.08, c, 4, 0);
+        if (!st.consentita) return [402, { errore: st.motivo, codice: 'tetto_raggiunto' }];
+        const x = { id: s.prossimoId++, materia_id: Number(c.materia_id), evento_id: c.evento_id || null, argomento: c.argomento, titolo: c.argomento, forma: c.forma || 'auto', livello: c.livello || 'completo', indicazioni: c.indicazioni || '', materiali: c.materiali.slice(), stato: 'in_coda', fase: null, fatto: 0, totale: 0, frase: null, errore: null, nota: null, stima_eur: st.costo_eur, creato_il: new Date().toISOString(), pronto_il: null, carte: 0, contenuto: null, _t0: Date.now() };
+        s.schemi.unshift(x);
+        return [201, schemaPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/schemi\/(\d+)\/immagini\/(\d+)\/cambia$/.exec(p)) && metodo === 'POST') {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        const b = x && bloccoImmagine(x, Number(m[2]));
+        if (!b) return [404, { errore: 'Questa immagine non c\'è più.', codice: 'non_trovato' }];
+        if (b._cambiata) return [404, { errore: 'Non ne ho trovate altre.', codice: 'non_trovato' }];
+        b._cambiata = true;
+        b.didascalia = b.didascalia + ', un\'altra foto';
+        return [200, schemaPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/schemi\/(\d+)\/immagini\/(\d+)$/.exec(p)) && metodo === 'DELETE') {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        if (!x || !x.contenuto) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
+        for (const sez of x.contenuto.sezioni) sez.blocchi = sez.blocchi.filter((b) => !(b.tipo === 'immagine' && b.n === Number(m[2])));
+        return [200, schemaPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/schemi\/(\d+)\/(annulla|riprova)$/.exec(p)) && metodo === 'POST') {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
+        if (m[2] === 'annulla') { x.stato = 'annullato'; delete x._t0; } else { x.stato = 'in_coda'; x.errore = null; x._t0 = Date.now(); }
+        return [200, schemaPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/schemi\/(\d+)\/riassunti$/.exec(p))) {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'GET') { s.riassunti.forEach(avanzaRiassunto); return [200, s.riassunti.filter((r) => r.schema_id === x.id).map(riassuntoPerApi)]; }
+        if (x.stato !== 'pronto') return [409, { errore: 'Lo schema non è ancora pronto.', codice: 'conflitto' }];
+        const forma = String((corpo || {}).forma || '');
+        if (!['punti', 'discorsivo', 'misto'].includes(forma)) return [422, { errore: 'Forma sconosciuta.', codice: 'non_valido' }];
+        const c = s.riassunti.find((r) => r.schema_id === x.id && r.forma === forma);
+        if (c && c.stato !== 'errore') return [201, riassuntoPerApi(c)];
+        const st = stimaStudio(0.01, {}, 1, 0);
+        if (!st.consentita) return [402, { errore: st.motivo, codice: 'tetto_raggiunto' }];
+        if (c) { c.stato = 'in_coda'; c.errore = null; c._t0 = Date.now(); return [201, riassuntoPerApi(c)]; }
+        const r = { id: s.prossimoId++, schema_id: x.id, materia_id: x.materia_id, forma, titolo: x.titolo, stato: 'in_coda', frase: null, errore: null, nota: null, stima_eur: 0.01, creato_il: new Date().toISOString(), pronto_il: null, parole: 0, contenuto: null, _t0: Date.now() };
+        s.riassunti.push(r);
+        return [201, riassuntoPerApi(r)];
+      }
+      if ((m = /^\/server\/api\/schemi\/(\d+)$/.exec(p))) {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'DELETE') { s.schemi = s.schemi.filter((y) => y !== x); return [200, { ok: true }]; }
+        avanzaSchema(x);
+        return [200, schemaPerApi(x)];
+      }
+      // --- Riassunti (§26) ---
+      if ((m = /^\/server\/api\/riassunti\/(\d+)\/riprova$/.exec(p)) && metodo === 'POST') {
+        const r = s.riassunti.find((y) => y.id === Number(m[1]));
+        if (!r) return [404, { errore: 'Questo riassunto non c\'è più.', codice: 'non_trovato' }];
+        r.stato = 'in_coda'; r.errore = null; r._t0 = Date.now();
+        return [200, riassuntoPerApi(r)];
+      }
+      if ((m = /^\/server\/api\/riassunti\/(\d+)$/.exec(p))) {
+        const r = s.riassunti.find((y) => y.id === Number(m[1]));
+        if (!r) return [404, { errore: 'Questo riassunto non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'DELETE') { s.riassunti = s.riassunti.filter((y) => y !== r); return [200, { ok: true }]; }
+        avanzaRiassunto(r);
+        return [200, riassuntoPerApi(r)];
+      }
+      // --- Non ho capito (§19) ---
+      if (p === '/server/api/chiarimenti' && metodo === 'POST') {
+        const c = corpo || {};
+        const domanda = String(c.domanda || '');
+        const passaggio = c.passaggio || 'Il principato tiene in piedi le istituzioni della Repubblica, ma il potere vero è suo.';
+        const trovato = !/marte|astronomia|pianeti/i.test(domanda);
+        const r = {
+          id: s.prossimoId++, passaggio, domanda, trovato, costo_eur: 0.002, quando: new Date().toISOString(),
+          risposta: trovato ? 'In pratica Augusto lascia in piedi il senato e le altre cariche, così sembra che non sia cambiato niente. Ma decide lui: comanda i soldati e sceglie chi governa le province.' : 'Nei tuoi documenti non si parla di questo. Trovi solo la storia di Roma da Augusto a Nerone.',
+          fonti: trovato ? [copia(FONTI.B1), copia(FONTI.A1)] : [],
+        };
+        s.chiarimenti.unshift(r);
+        return [200, copia(r)];
+      }
+      if (p === '/server/api/chiarimenti') return [200, copia(s.chiarimenti).slice(0, 50)];
+      // --- Ripasso lampo (§20) ---
+      if (p === '/server/api/lampo' && metodo === 'GET') {
+        const id = Number(qs.get('materia_id')) || null;
+        const limite = Number(qs.get('limite')) || 12;
+        const da = s.lampo.filter((c) => !id || c.materia_id === id);
+        return [200, { carte: copia(da).slice(0, limite), da_fare: da.length, domani: s.lampo_domani }];
+      }
+      if ((m = /^\/server\/api\/lampo\/(\d+)$/.exec(p))) {
+        const c = s.lampo.find((y) => y.id === Number(m[1]));
+        if (!c) return [404, { errore: 'Questa scheda non c\'è più.', codice: 'non_trovato' }];
+        s.lampo = s.lampo.filter((y) => y !== c);
+        if (metodo === 'DELETE') return [200, { ok: true }];
+        return [200, { scatola: c.scatola + 1, prossima: s.oggi, da_fare: s.lampo.filter((y) => y.materia_id === c.materia_id).length }];
+      }
+      // --- Verifica simulata (§21) ---
+      if (p === '/server/api/simulate/stima' && metodo === 'POST') return controllaStudio(corpo || {}) || [200, stimaStudio(0.03, corpo || {}, 2, null)];
+      if (p === '/server/api/simulate' && metodo === 'GET') {
+        s.simulate.forEach(avanzaSimulata);
+        const id = Number(qs.get('materia_id')) || null;
+        return [200, s.simulate.filter((x) => !id || x.materia_id === id).map(simulataInLista)];
+      }
+      if (p === '/server/api/simulate' && metodo === 'POST') {
+        const c = corpo || {};
+        const no = controllaStudio(c);
+        if (no) return no;
+        if (!String(c.argomento || '').trim()) return [422, { errore: 'Scrivi l\'argomento.', codice: 'non_valido', campo: 'argomento' }];
+        const st = stimaStudio(0.03, c, 2, null);
+        if (!st.consentita) return [402, { errore: st.motivo, codice: 'tetto_raggiunto' }];
+        const x = { id: s.prossimoId++, materia_id: Number(c.materia_id), evento_id: c.evento_id || null, argomento: c.argomento, titolo: 'Verifica su ' + c.argomento, minuti: Number(c.minuti) || 50, materiali: c.materiali.slice(), indicazioni: c.indicazioni || '', stato: 'in_coda', fase: null, fatto: 0, totale: 0, frase: null, errore: null, nota: null, stima_eur: st.costo_eur, creata_il: new Date().toISOString(), iniziata_il: null, consegnata_il: null, domande: [], risposte: {}, esito: null, _t0: Date.now() };
+        s.simulate.unshift(x);
+        return [201, simulataPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/simulate\/(\d+)\/(annulla|riprova|consegna)$/.exec(p)) && metodo === 'POST') {
+        const x = s.simulate.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questa verifica non c\'è più.', codice: 'non_trovato' }];
+        if (m[2] === 'annulla') { x.stato = 'annullata'; delete x._t0; }
+        if (m[2] === 'riprova') { x.stato = x.consegnata_il ? 'in_correzione' : 'in_coda'; x.errore = null; x._t0 = Date.now(); }
+        if (m[2] === 'consegna') {
+          if (x.stato !== 'pronta' && x.stato !== 'in_corso') return [409, { errore: 'Questa verifica non si può più consegnare.', codice: 'conflitto' }];
+          x.stato = 'in_correzione'; x.consegnata_il = new Date().toISOString(); x._t0 = Date.now();
+        }
+        return [200, simulataPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/simulate\/(\d+)$/.exec(p))) {
+        const x = s.simulate.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questa verifica non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'DELETE') { s.simulate = s.simulate.filter((y) => y !== x); return [200, { ok: true }]; }
+        if (metodo === 'PATCH') {
+          if (x.stato !== 'pronta' && x.stato !== 'in_corso') return [409, { errore: 'Questa verifica è già stata consegnata.', codice: 'conflitto' }];
+          Object.assign(x.risposte, (corpo || {}).risposte || {});
+          if ((corpo || {}).iniziata && x.stato === 'pronta') { x.stato = 'in_corso'; x.iniziata_il = new Date().toISOString(); }
+          return [200, simulataPerApi(x)];
+        }
+        avanzaSimulata(x);
+        return [200, simulataPerApi(x)];
+      }
       // Il programma, in esempio: niente scaricamenti e niente tasti; il lettore usa un orologio finto.
-      if (p === '/locale/stato') return [200, { abbinato: true, server: 'https://lectio.esempio.ts.net', versione: '1.0.0', tutorial_visto: true, tema: 'sistema', in_preparazione: false, scaricate: [12, 10], byte_scaricate: 18696000, aggiornamento: { attivo: false } }];
+      if (p === '/locale/stato') return [200, { abbinato: true, server: 'https://lectio.esempio.ts.net', versione: '1.0.0', tutorial_visto: true, tutorial_novita_visto: true, tema: 'sistema', in_preparazione: false, scaricate: [12, 10], byte_scaricate: 18696000, aggiornamento: { attivo: false } }];
       if ((m = /^\/locale\/lezioni\/(\d+)\/scarica$/.exec(p))) return [200, { ok: true, url: null, finto: true, byte: 0 }];
       if ((m = /^\/locale\/lezioni\/(\d+)\/scaricamento$/.exec(p))) return [200, { in_corso: false, percentuale: 100, scaricata: true }];
       if (p === '/locale/lezioni/scaricate') return [200, { lezioni: [{ id: 12, byte: 9496000 }, { id: 10, byte: 9200000 }], byte: 18696000 }];
+      if (p === '/locale/salva-pdf') return [200, { ok: true, id: 1, nome: (corpo || {}).nome || 'Lectio.pdf' }];
       if (p.startsWith('/locale/')) return [200, { ok: true }];
       return [404, { errore: 'Nell\'esempio questa parte non c\'è.', codice: 'non_trovato' }];
     }
@@ -520,5 +936,5 @@
     };
   }
 
-  return { crea, OGGI, TESTO_GEMINI };
+  return { crea, OGGI, TESTO_GEMINI, immagine };
 });

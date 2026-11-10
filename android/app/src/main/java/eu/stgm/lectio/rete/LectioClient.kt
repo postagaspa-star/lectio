@@ -2,15 +2,21 @@ package eu.stgm.lectio.rete
 
 import eu.stgm.lectio.dati.Abbinamento
 import eu.stgm.lectio.dati.CorpoAbbina
+import eu.stgm.lectio.dati.Chiarimento
 import eu.stgm.lectio.dati.CorpoAscolto
+import eu.stgm.lectio.dati.CorpoChiarimento
+import eu.stgm.lectio.dati.CorpoEsitoLampo
+import eu.stgm.lectio.dati.CorpoRiassunto
 import eu.stgm.lectio.dati.CorpoEsito
 import eu.stgm.lectio.dati.CorpoRisposta
+import eu.stgm.lectio.dati.CorpoSalvaSimulata
 import eu.stgm.lectio.dati.Correzione
 import eu.stgm.lectio.dati.DaRipassare
 import eu.stgm.lectio.dati.Dispositivo
 import eu.stgm.lectio.dati.Evento
 import eu.stgm.lectio.dati.Impostazioni
 import eu.stgm.lectio.dati.JsonLectio
+import eu.stgm.lectio.dati.Lampo
 import eu.stgm.lectio.dati.Lezione
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.Materiale
@@ -19,14 +25,23 @@ import eu.stgm.lectio.dati.ModificaScheda
 import eu.stgm.lectio.dati.Novita
 import eu.stgm.lectio.dati.NuovaLezione
 import eu.stgm.lectio.dati.NuovaMateria
+import eu.stgm.lectio.dati.NuovaSimulata
 import eu.stgm.lectio.dati.NuovoEvento
+import eu.stgm.lectio.dati.NuovoSchema
 import eu.stgm.lectio.dati.Oggi
 import eu.stgm.lectio.dati.RichiestaStima
+import eu.stgm.lectio.dati.RichiestaStimaSchema
+import eu.stgm.lectio.dati.RichiestaStimaSimulata
+import eu.stgm.lectio.dati.Riassunto
+import eu.stgm.lectio.dati.RispostaLampo
 import eu.stgm.lectio.dati.RisultatoEsito
 import eu.stgm.lectio.dati.Salute
 import eu.stgm.lectio.dati.SchedaProf
+import eu.stgm.lectio.dati.Schema
+import eu.stgm.lectio.dati.Simulata
 import eu.stgm.lectio.dati.Spesa
 import eu.stgm.lectio.dati.Stima
+import eu.stgm.lectio.dati.StimaStudio
 import eu.stgm.lectio.dati.Suggeriti
 import eu.stgm.lectio.dati.TestoGemini
 import eu.stgm.lectio.dati.Versioni
@@ -103,7 +118,7 @@ object SceltaIndirizzo {
 data class FileDaCaricare(val file: File, val nome: String, val tipoMime: String)
 
 /**
- * Il client delle API di Lectio (docs/contratto-api.md, v1.4). Una finestra sul
+ * Il client delle API di Lectio (docs/contratto-api.md, v1.5). Una finestra sul
  * server: niente logica qui, solo richieste e traduzione degli esiti in frasi.
  *
  * [configurazione] si rilegge a ogni chiamata: dopo un nuovo abbinamento il
@@ -295,7 +310,125 @@ class LectioClient(
     suspend fun modificaImpostazioni(cambi: JsonObject): Esito<Impostazioni> =
         chiama("PATCH", "/api/impostazioni", cambi.toString(), Impostazioni.serializer())
 
+    // --- §18 Schemi ---------------------------------------------------------------------------
+
+    suspend fun stimaSchema(richiesta: RichiestaStimaSchema): Esito<StimaStudio> =
+        chiama("POST", "/api/schemi/stima", JsonLectio.encodeToString(RichiestaStimaSchema.serializer(), richiesta), StimaStudio.serializer())
+
+    suspend fun creaSchema(nuovo: NuovoSchema): Esito<Schema> =
+        chiama("POST", "/api/schemi", JsonLectio.encodeToString(NuovoSchema.serializer(), nuovo), Schema.serializer())
+
+    suspend fun schemi(materiaId: Long): Esito<List<Schema>> =
+        chiama("GET", "/api/schemi?materia_id=$materiaId", null, ListSerializer(Schema.serializer()))
+
+    suspend fun schema(id: Long): Esito<Schema> = chiama("GET", "/api/schemi/$id", null, Schema.serializer())
+    suspend fun annullaSchema(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/schemi/$id/annulla", CORPO_VUOTO)
+    suspend fun riprovaSchema(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/schemi/$id/riprova", CORPO_VUOTO)
+    suspend fun eliminaSchema(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/schemi/$id", null)
+
+    /** Il PDF lo fa il server, con la firma (contratto §25): qui si scarica soltanto. */
+    suspend fun pdfSchema(id: Long, destinazione: File): Esito<Unit> = scaricaFile("/api/schemi/$id/pdf", destinazione)
+
+    suspend fun immagineSchema(id: Long, n: Int, destinazione: File): Esito<Unit> =
+        scaricaFile("/api/schemi/$id/immagini/$n", destinazione)
+
+    /** Ne cerca un'altra coerente; 404 se non ce ne sono altre. */
+    suspend fun cambiaImmagine(id: Long, n: Int): Esito<Schema> =
+        chiama("POST", "/api/schemi/$id/immagini/$n/cambia", CORPO_VUOTO, Schema.serializer())
+
+    suspend fun togliImmagine(id: Long, n: Int): Esito<Schema> =
+        chiama("DELETE", "/api/schemi/$id/immagini/$n", null, Schema.serializer())
+
+    // --- §26 Riassunti ------------------------------------------------------------------------
+
+    suspend fun creaRiassunto(schemaId: Long, forma: String): Esito<Riassunto> =
+        chiama("POST", "/api/schemi/$schemaId/riassunti", JsonLectio.encodeToString(CorpoRiassunto.serializer(), CorpoRiassunto(forma)), Riassunto.serializer())
+
+    suspend fun riassunti(schemaId: Long): Esito<List<Riassunto>> =
+        chiama("GET", "/api/schemi/$schemaId/riassunti", null, ListSerializer(Riassunto.serializer()))
+
+    suspend fun riassunto(id: Long): Esito<Riassunto> = chiama("GET", "/api/riassunti/$id", null, Riassunto.serializer())
+    suspend fun riprovaRiassunto(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/riassunti/$id/riprova", CORPO_VUOTO)
+    suspend fun eliminaRiassunto(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/riassunti/$id", null)
+    suspend fun pdfRiassunto(id: Long, destinazione: File): Esito<Unit> = scaricaFile("/api/riassunti/$id/pdf", destinazione)
+
+    // --- §19 "Non ho capito" ------------------------------------------------------------------
+
+    suspend fun chiarisci(corpo: CorpoChiarimento): Esito<Chiarimento> =
+        chiama("POST", "/api/chiarimenti", JsonLectio.encodeToString(CorpoChiarimento.serializer(), corpo), Chiarimento.serializer())
+
+    suspend fun chiarimenti(materiaId: Long): Esito<List<Chiarimento>> =
+        chiama("GET", "/api/chiarimenti?materia_id=$materiaId", null, ListSerializer(Chiarimento.serializer()))
+
+    // --- §20 Ripasso lampo --------------------------------------------------------------------
+
+    suspend fun lampo(materiaId: Long? = null, limite: Int = 12): Esito<Lampo> =
+        chiama("GET", if (materiaId == null) "/api/lampo?limite=$limite" else "/api/lampo?materia_id=$materiaId&limite=$limite", null, Lampo.serializer())
+
+    suspend fun esitoLampo(id: Long, esito: String): Esito<RispostaLampo> =
+        chiama("POST", "/api/lampo/$id", JsonLectio.encodeToString(CorpoEsitoLampo.serializer(), CorpoEsitoLampo(esito)), RispostaLampo.serializer())
+
+    suspend fun togliCarta(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/lampo/$id", null)
+
+    // --- §21 Verifica simulata ----------------------------------------------------------------
+
+    suspend fun stimaSimulata(richiesta: RichiestaStimaSimulata): Esito<StimaStudio> =
+        chiama("POST", "/api/simulate/stima", JsonLectio.encodeToString(RichiestaStimaSimulata.serializer(), richiesta), StimaStudio.serializer())
+
+    suspend fun creaSimulata(nuova: NuovaSimulata): Esito<Simulata> =
+        chiama("POST", "/api/simulate", JsonLectio.encodeToString(NuovaSimulata.serializer(), nuova), Simulata.serializer())
+
+    suspend fun simulate(materiaId: Long): Esito<List<Simulata>> =
+        chiama("GET", "/api/simulate?materia_id=$materiaId", null, ListSerializer(Simulata.serializer()))
+
+    suspend fun simulata(id: Long): Esito<Simulata> = chiama("GET", "/api/simulate/$id", null, Simulata.serializer())
+    suspend fun annullaSimulata(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/simulate/$id/annulla", CORPO_VUOTO)
+    suspend fun riprovaSimulata(id: Long): Esito<Unit> = chiamaSenzaDato("POST", "/api/simulate/$id/riprova", CORPO_VUOTO)
+    suspend fun eliminaSimulata(id: Long): Esito<Unit> = chiamaSenzaDato("DELETE", "/api/simulate/$id", null)
+
+    /** PATCH: salva quello che c'è (si chiama spesso). */
+    suspend fun salvaSimulata(id: Long, corpo: CorpoSalvaSimulata): Esito<Simulata> =
+        chiama("PATCH", "/api/simulate/$id", JsonLectio.encodeToString(CorpoSalvaSimulata.serializer(), corpo), Simulata.serializer())
+
+    suspend fun consegnaSimulata(id: Long): Esito<Simulata> =
+        chiama("POST", "/api/simulate/$id/consegna", CORPO_VUOTO, Simulata.serializer())
+
+    suspend fun pdfSimulata(id: Long, destinazione: File): Esito<Unit> = scaricaFile("/api/simulate/$id/pdf", destinazione)
+
     // --- File ---------------------------------------------------------------------------------
+
+    /**
+     * Scarica un file del server in [destinazione] (prima in un .tmp, poi rinominato:
+     * un file a metà non sembra mai scaricato).
+     */
+    private suspend fun scaricaFile(percorso: String, destinazione: File): Esito<Unit> {
+        val conf = configurazione()
+        if (conf == null || !conf.completa) return Esito.Errore(Testi.NON_ABBINATO, Testi.CODICE_NON_ABBINATO)
+        val base = indirizzoSicuro(conf) ?: return Esito.Irraggiungibile
+        val url = (base + percorso).toHttpUrlOrNull() ?: return Esito.Irraggiungibile
+        if (!trasportoConsentito(url)) return fallimento(CODICE_NON_PROTETTO, null)
+        return withContext(Dispatchers.IO) {
+            val temporaneo = File(destinazione.parentFile, destinazione.name + ".tmp")
+            try {
+                destinazione.parentFile?.mkdirs()
+                val richiesta = Request.Builder().url(url).header("Authorization", "Bearer ${conf.token}").get().build()
+                httpLento.newCall(richiesta).execute().use { risposta ->
+                    val corpo = risposta.body
+                    if (!risposta.isSuccessful || corpo == null) return@withContext fallimento(risposta.code, corpo?.string())
+                    temporaneo.outputStream().use { uscita -> corpo.byteStream().use { it.copyTo(uscita) } }
+                    destinazione.delete()
+                    if (!temporaneo.renameTo(destinazione)) {
+                        temporaneo.delete()
+                        return@withContext Esito.Errore("Non c'è spazio sul telefono per salvare il file.", "spazio")
+                    }
+                    Esito.Ok(Unit)
+                }
+            } catch (e: IOException) {
+                temporaneo.delete()
+                Esito.Irraggiungibile
+            }
+        }
+    }
 
     /** L'indirizzo dell'audio di una lezione (il lettore aggiunge l'intestazione col token). */
     suspend fun indirizzoAudio(id: Long): String? = indirizzoSicuro()?.let { "$it/api/lezioni/$id/audio" }
@@ -452,9 +585,13 @@ class LectioClient(
             .readTimeout(60, TimeUnit.SECONDS)
             .build()
 
-        /** File grandi in andata (foto, PDF) e in ritorno (audio, APK). */
+        /**
+         * File grandi in andata (foto, PDF) e in ritorno (audio, APK). Connessione sempre nuova:
+         * senza ritentativi, una connessione vecchia già chiusa dal server fa fallire la richiesta.
+         */
         val httpLento: OkHttpClient = http.newBuilder()
             .retryOnConnectionFailure(false)
+            .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
             .readTimeout(180, TimeUnit.SECONDS)
             .writeTimeout(180, TimeUnit.SECONDS)
             .build()

@@ -12,7 +12,9 @@ from .audio import Montatore
 from .config import Settings
 from .finto import TestoFinto
 from .lavoro import Lavoro
+from .immagini import Commons
 from .lezione import Contesto
+from .memoria import VettoriFinti, VettoriMistral
 from .origine import Origine
 from .ocr import OcrFinto, OcrMistral
 from .spesa import Cassa, Prezzi
@@ -42,11 +44,13 @@ def crea_servizi(settings: Settings, transport: httpx.BaseTransport | None = Non
     cassa = Cassa(settings.db_path, prezzi, dormi=dormi)
     if settings.mistral_key:
         testo = TestoMistral(settings.mistral_key, transport=transport)
+        vettori, foto = VettoriMistral(settings.mistral_key, transport=transport), Commons(transport=transport)
         ocr = OcrMistral(settings.mistral_key, transport=transport)
         voce_mistral = VoceMistral(settings.mistral_key, settings.modello_voce, settings.voce_mistral,
                                    transport=transport)
     else:
         testo, ocr, voce_mistral = TestoFinto(), OcrFinto(), None
+        vettori, foto = VettoriFinti(), None
     azure = None
     if settings.azure_pronta:
         azure = VoceAzure(settings.azure_key, settings.azure_regione, transport=transport, dormi=dormi)
@@ -61,7 +65,7 @@ def crea_servizi(settings: Settings, transport: httpx.BaseTransport | None = Non
         nas=VoceNas(settings.voci_url, transport=transport) if settings.voci_url else None,
     )
     ctx = Contesto(settings=settings, cassa=cassa, testo=testo, ocr=ocr, catalogo=catalogo,
-                   montatore=montatore or Montatore())
+                   montatore=montatore or Montatore(), vettori=vettori, foto=foto)
     return Servizi(settings=settings, ctx=ctx, lavoro=Lavoro(ctx), origine=Origine(settings.tailscale_host))
 
 

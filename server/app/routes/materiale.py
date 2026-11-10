@@ -234,6 +234,7 @@ def cambia(materiale_id: int, corpo: MaterialePatch, conn: sqlite3.Connection = 
             conn.execute("UPDATE materiali SET titolo_da = 'utente' WHERE id = ?", (materiale_id,))
         if corpo.tipo is not None and corpo.tipo != r["tipo"]:
             conn.execute("UPDATE materiali SET tipo = ? WHERE id = ?", (corpo.tipo, materiale_id))
+            conn.execute("DELETE FROM pezzi WHERE materiale_id = ?", (materiale_id,))  # cambia la priorità
             if r["stato"] == "pronto" and (corpo.tipo in DEL_PROF or r["tipo"] in DEL_PROF):
                 schede.segna_da_aggiornare(conn, r["materia_id"])
     s.lavoro.sveglia("sfondo")

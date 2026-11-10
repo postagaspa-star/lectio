@@ -377,9 +377,27 @@ def _leggi(contenuto: bytes, est: str) -> Letto:
     raise FileIlleggibile(f"Questo tipo di file non lo so leggere. Vanno bene: {FORMATI_IN_PAROLE}.")
 
 
+_INIZIO_VERO = {"pdf": b"%PDF", "docx": b"PK", "odt": b"PK", "rtf": b"{\\rtf"}
+
+
+def testo_travestito(contenuto: bytes, est: str) -> bool:
+    """Un .pdf (o .docx, .odt, .rtf) che dentro è testo normale, per esempio Markdown."""
+    inizio = _INIZIO_VERO.get(est)
+    if inizio is None or inizio in contenuto[:1024]:
+        return False
+    campione = contenuto[:8192]
+    if b"\x00" in campione and not campione.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return False
+    testo = _decodifica(campione)
+    buoni = sum(1 for c in testo if c.isprintable() or c in "\n\r\t")
+    return bool(testo.strip()) and buoni / len(testo) >= 0.95
+
+
 def leggi(contenuto: bytes, est: str) -> Letto:
     """Il testo del file e le pagine da mandare all'OCR (foto, pagine scansionate).
     Qualsiasi errore di un file costruito male diventa FileIlleggibile."""
+    if testo_travestito(contenuto, est):
+        est = "txt"
     try:
         return _leggi(contenuto, est)
     except FileIlleggibile:

@@ -13,6 +13,8 @@ from . import misure, prompt
 
 log = logging.getLogger("uvicorn.error")
 
+# Una foto piccola pesa come un testo di circa 1.500 token.
+CARATTERI_PER_IMMAGINE = 5_000
 FRASE_NON_USABILE = "L'AI ha risposto in un modo che non riesco a usare, anche dopo averle chiesto di correggersi. Tocca Riprova."
 
 
@@ -40,13 +42,15 @@ def estrai_json(testo: str) -> dict | None:
 
 def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello: str, valida, max_token: int,
                 cosa: str, dati: dict | None = None, lezione_id: int | None = None, materia_id: int | None = None,
-                materiale_id: int | None = None, prima_di_ogni_chiamata=None, costi: list | None = None) -> dict:
+                materiale_id: int | None = None, prima_di_ogni_chiamata=None, costi: list | None = None,
+                riferimento: str | None = None) -> dict:
     """`valida(oggetto) -> list[str]` restituisce gli errori (lista vuota = va bene).
     Se si passa `costi`, ci finisce il costo vero di ogni chiamata fatta."""
     for tentativo in (1, 2):
         stima, token_stimati = 0.0, 0
         if fornitore.a_pagamento:
-            caratteri = sum(len(m["content"]) for m in messaggi)
+            caratteri = sum(len(m["content"]) if isinstance(m["content"], str) else CARATTERI_PER_IMMAGINE
+                            for m in messaggi)
             token_stimati = int(caratteri / misure.CARATTERI_PER_TOKEN) + 50 + max_token
             stima = cassa.prezzi.costo_testo(modello, token_stimati - max_token, max_token)
         etichetta = cosa if tentativo == 1 else f"{cosa} (correzione)"
@@ -61,6 +65,7 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
         risposta = cassa.chiama(
             cosa=etichetta, fornitore=fornitore.nome, stima_eur=stima, quantita_stimata=token_stimati, unita="token",
             lezione_id=lezione_id, materia_id=materia_id, materiale_id=materiale_id, prima=prima_di_ogni_chiamata,
+            riferimento=riferimento,
             fare=lambda: fornitore.genera(compito=compito, messaggi=messaggi, modello=modello, json_atteso=True,
                                           max_token=max_token, dati={**(dati or {}), "tentativo": tentativo}),
             registra=registra,

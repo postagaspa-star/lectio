@@ -57,6 +57,7 @@ import eu.stgm.lectio.dati.Impostazioni
 import eu.stgm.lectio.dati.Sorgente
 import eu.stgm.lectio.dati.SorgenteEsempio
 import eu.stgm.lectio.dati.TemaScelto
+import eu.stgm.lectio.dati.VisitaDaFare
 import eu.stgm.lectio.lavori.AggiornamentoWorker
 import eu.stgm.lectio.lavori.PreparazioneWorker
 import eu.stgm.lectio.lavori.scaricaLezione
@@ -118,6 +119,22 @@ import eu.stgm.lectio.ui.materie.MaterieViewModel
 import eu.stgm.lectio.ui.oggi.AzioniOggi
 import eu.stgm.lectio.ui.oggi.OggiScreen
 import eu.stgm.lectio.ui.oggi.OggiViewModel
+import eu.stgm.lectio.ui.studio.AzioniSchema
+import eu.stgm.lectio.ui.studio.AzioniSimulata
+import eu.stgm.lectio.ui.studio.GenereStudio
+import eu.stgm.lectio.ui.studio.GestorePdf
+import eu.stgm.lectio.ui.studio.LampoScreen
+import eu.stgm.lectio.ui.studio.LampoViewModel
+import eu.stgm.lectio.ui.studio.LetturaSchemaScreen
+import eu.stgm.lectio.ui.studio.LocalGestorePdf
+import eu.stgm.lectio.ui.studio.NonHoCapitoViewModel
+import eu.stgm.lectio.ui.studio.NuovoStudioScreen
+import eu.stgm.lectio.ui.studio.NuovoStudioViewModel
+import eu.stgm.lectio.ui.studio.RiassuntoScreen
+import eu.stgm.lectio.ui.studio.RiassuntoViewModel
+import eu.stgm.lectio.ui.studio.SchemaViewModel
+import eu.stgm.lectio.ui.studio.SimulataScreen
+import eu.stgm.lectio.ui.studio.SimulataViewModel
 import eu.stgm.lectio.ui.tema.L
 import eu.stgm.lectio.ui.tema.LectioTema
 import eu.stgm.lectio.ui.tema.animazioniDiSistema
@@ -188,6 +205,12 @@ class MainActivity : ComponentActivity() {
         if (intent.hasExtra(EXTRA_LEZIONE_LETTORE)) return Arrivo.Lettore(intent.getLongExtra(EXTRA_LEZIONE_LETTORE, -1))
         if (intent.hasExtra(EXTRA_LEZIONE_PREPARAZIONE)) return Arrivo.Preparazione(intent.getLongExtra(EXTRA_LEZIONE_PREPARAZIONE, -1))
         if (intent.getBooleanExtra(EXTRA_APRI_LETTORE, false)) return Arrivo.LettoreAperto
+        val materia = intent.getLongExtra(EXTRA_MATERIA, -1)
+        if (intent.hasExtra(EXTRA_SCHEMA)) return Arrivo.Schema(intent.getLongExtra(EXTRA_SCHEMA, -1), materia)
+        if (intent.hasExtra(EXTRA_SIMULATA)) return Arrivo.Simulata(intent.getLongExtra(EXTRA_SIMULATA, -1), materia)
+        if (intent.hasExtra(EXTRA_RIASSUNTO_SCHEMA)) {
+            return Arrivo.Riassunto(intent.getLongExtra(EXTRA_RIASSUNTO_SCHEMA, -1), intent.getStringExtra(EXTRA_RIASSUNTO_FORMA) ?: "misto", materia)
+        }
         return null
     }
 
@@ -202,6 +225,11 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_APRI_LETTORE = "apri_lettore"
         const val EXTRA_LEZIONE_LETTORE = "lezione_lettore"
         const val EXTRA_LEZIONE_PREPARAZIONE = "lezione_preparazione"
+        const val EXTRA_SCHEMA = "schema"
+        const val EXTRA_SIMULATA = "simulata"
+        const val EXTRA_RIASSUNTO_SCHEMA = "riassunto_schema"
+        const val EXTRA_RIASSUNTO_FORMA = "riassunto_forma"
+        const val EXTRA_MATERIA = "materia"
     }
 }
 
@@ -211,6 +239,9 @@ sealed interface Arrivo {
     data class Lettore(val lezioneId: Long) : Arrivo
     data class Preparazione(val lezioneId: Long) : Arrivo
     data object LettoreAperto : Arrivo
+    data class Schema(val id: Long, val materiaId: Long) : Arrivo
+    data class Simulata(val id: Long, val materiaId: Long) : Arrivo
+    data class Riassunto(val schemaId: Long, val forma: String, val materiaId: Long) : Arrivo
 }
 
 private sealed interface Avvio {
@@ -263,6 +294,7 @@ private fun App(
     val messaggi = remember { SnackbarHostState() }
     val ospite = remember { OspiteFogli() }
     val preparatore = remember { PreparatoreFile(contesto) }
+    val gestorePdf = remember { GestorePdf(contesto, ambito, messaggi) }
 
     // --- La visita guidata in modalità esempio ------------------------------------------------
     val visita = remember { Visita() }
@@ -285,6 +317,11 @@ private fun App(
             SchermataVisita.OGGI -> vai(Navigazione())
             SchermataVisita.MATERIA, SchermataVisita.FOGLIO_AGGIUNGI -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(storia))))
             SchermataVisita.NUOVA_LEZIONE -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(storia), Pagina.NuovaLezione(storia, 3))))
+            SchermataVisita.NUOVO_SCHEMA -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(storia), Pagina.NuovoSchema(storia, 3))))
+            SchermataVisita.SCHEMA -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(storia), Pagina.Schema(SorgenteEsempio.SCHEMA_STORIA))))
+            SchermataVisita.LAMPO -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Lampo())))
+            SchermataVisita.SIMULATA_IN_CORSO -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(storia), Pagina.Simulata(SorgenteEsempio.SIMULATA_IN_CORSO))))
+            SchermataVisita.SIMULATA_RISULTATI -> vai(Navigazione(Scheda.OGGI, listOf(Pagina.Materia(storia), Pagina.Simulata(SorgenteEsempio.SIMULATA_CORRETTA))))
             SchermataVisita.LETTORE -> {
                 val l = esempioDati.lezioneCompleta()
                 // Al passo 8 (pratico) si riparte sempre fermi alla domanda; all'ultimo passo no,
@@ -301,14 +338,23 @@ private fun App(
         lettoreEsempio.ferma()
         aggiuntaEsempio.chiudi()
         vai(Navigazione())
-        ambito.launch { app.archivio.segnaVisitaVista() }
+        ambito.launch { app.archivio.segnaVisitaTuttaVista() }
     }
     // Al primo avvio dopo l'abbinamento parte da sola, una volta (aspetto.md §12).
+    // Chi la conosce già vede solo le novità della 1.2 (aspetto.md §39).
     val vista by app.archivio.visitaVista.collectAsState(initial = true)
-    LaunchedEffect(vista) {
-        if (!vista) {
-            app.archivio.segnaVisitaVista()
-            visita.inizia()
+    val daFare by app.archivio.visitaDaFare.collectAsState(initial = VisitaDaFare.NESSUNA)
+    LaunchedEffect(daFare) {
+        when (daFare) {
+            VisitaDaFare.TUTTA -> {
+                visita.iniziaTutte()
+                app.archivio.segnaVisitaTuttaVista()
+            }
+            VisitaDaFare.NOVITA -> {
+                visita.iniziaNovita()
+                app.archivio.segnaVisitaTuttaVista()
+            }
+            VisitaDaFare.NESSUNA -> Unit
         }
     }
 
@@ -316,7 +362,8 @@ private fun App(
     LaunchedEffect(Unit) {
         app.pianificaInvii()
         val l = app.client.lezioni()
-        if (l is Esito.Ok && l.dato.any { it.inLavoro }) PreparazioneWorker.pianifica(contesto)
+        val seguiti = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.deposito.seguiti() }
+        if ((l is Esito.Ok && l.dato.any { it.inLavoro }) || !seguiti.vuoti) PreparazioneWorker.pianifica(contesto)
         val imp = app.sorgente.impostazioni().dato
         if (imp != null) ricordaImpostazioni(app, imp)
         // La salute con il token porta l'indirizzo da fuori casa scelto sul server.
@@ -344,6 +391,9 @@ private fun App(
             is Arrivo.Lettore -> if (a.lezioneId >= 0) vai(Navigazione(nav.scheda).apri(Pagina.Lettore(a.lezioneId)))
             is Arrivo.Preparazione -> if (a.lezioneId >= 0) vai(Navigazione(nav.scheda).apri(Pagina.Preparazione(a.lezioneId)))
             Arrivo.LettoreAperto -> CentroAscolto.stato.value.lezione?.let { vai(nav.apri(Pagina.Lettore(it.id))) }
+            is Arrivo.Schema -> if (a.id >= 0) vai(daMateria(nav, a.materiaId, 1).apri(Pagina.Schema(a.id)))
+            is Arrivo.Simulata -> if (a.id >= 0) vai(daMateria(nav, a.materiaId, 2).apri(Pagina.Simulata(a.id)))
+            is Arrivo.Riassunto -> if (a.schemaId >= 0) vai(daMateria(nav, a.materiaId, 1).apri(Pagina.Schema(a.schemaId)).apri(Pagina.Riassunto(a.schemaId, a.forma)))
         }
     }
 
@@ -387,11 +437,12 @@ private fun App(
         }
     }
 
-    CompositionLocalProvider(LocalVisita provides visita, LocalOspiteFogli provides ospite) {
+    CompositionLocalProvider(LocalVisita provides visita, LocalOspiteFogli provides ospite, LocalGestorePdf provides gestorePdf) {
         Box(Modifier.fillMaxSize().background(L.colori.fondo)) {
             Column(Modifier.fillMaxSize()) {
                 Box(
-                    Modifier.weight(1f).fillMaxSize().then(if (nav.inCima != null) Modifier.navigationBarsPadding() else Modifier),
+                    // La barra di lettura dello schema arriva fino in fondo e si tiene da sola i margini.
+                    Modifier.weight(1f).fillMaxSize().then(if (nav.inCima != null && nav.inCima !is Pagina.Schema) Modifier.navigationBarsPadding() else Modifier),
                 ) {
                     val muove = eu.stgm.lectio.ui.tema.LocalMovimenti.current
                     AnimatedContent(
@@ -443,6 +494,10 @@ private fun App(
     // La richiesta degli avvisi aspetta la fine della visita: una cosa alla volta.
     if (vista && !visita.attiva) RichiestaNotifiche(app)
 }
+
+/** Da una notifica: si passa dalla materia giusta, così "Indietro" porta lì. */
+private fun daMateria(nav: Navigazione, materiaId: Long, segmento: Int): Navigazione =
+    if (materiaId >= 0) Navigazione(nav.scheda).apri(Pagina.Materia(materiaId, segmento)) else Navigazione(nav.scheda)
 
 private fun transizione(muove: Boolean, avanti: Boolean): ContentTransform {
     if (!muove) return EnterTransition.None togetherWith ExitTransition.None
@@ -497,6 +552,8 @@ private fun Pagine(
             val vm: MateriaViewModel = viewModel(key = "materia-${p.id}-$chiave") {
                 MateriaViewModel(sorgente, p.id, togliLezioniLocali = { ids -> if (!esempio) elimina(ids) })
             }
+            LaunchedEffect(p.segmento) { p.segmento?.let(vm::segmento) }
+            val pdf = LocalGestorePdf.current
             MateriaScreen(
                 vm,
                 AzioniMateria(
@@ -507,6 +564,12 @@ private fun Pagine(
                     nuovaLezione = { e -> nuovaLezioneDa(p.id, e) },
                     apriLezione = { l -> if (l.pronta) apriLettore(l.id) else vai(nav.apri(Pagina.Preparazione(l.id))) },
                     ripassa = { r -> vai(nav.apri(Pagina.Lettore(r.lezioneId, r.domandaId))) },
+                    lampo = { vai(nav.apri(Pagina.Lampo(p.id))) },
+                    nuovoSchema = { e -> vai(nav.apri(Pagina.NuovoSchema(p.id, e))) },
+                    apriSchema = { s -> vai(nav.apri(Pagina.Schema(s.id))) },
+                    nuovaSimulata = { e -> vai(nav.apri(Pagina.NuovaSimulata(p.id, e))) },
+                    apriSimulata = { q -> vai(nav.apri(Pagina.Simulata(q.id))) },
+                    pdf = { d, nome -> pdf?.scarica(sorgente, d, nome) },
                 ),
                 esempio, offline, scaricate,
             )
@@ -520,11 +583,83 @@ private fun Pagine(
             MaterialeScreen(vm, indietro, esempio, offline)
         }
         is Pagina.NuovaLezione -> {
-            val vm: NuovaLezioneViewModel = viewModel(key = "nuova-${p.materiaId}-${p.eventoId}-$chiave") { NuovaLezioneViewModel(sorgente, p.materiaId, p.eventoId) }
+            val vm: NuovaLezioneViewModel = viewModel(key = "nuova-${p.materiaId}-${p.eventoId}-${p.argomento}-${p.materiali}-$chiave") {
+                NuovaLezioneViewModel(sorgente, p.materiaId, p.eventoId, argomentoIniziale = p.argomento.orEmpty(), materialiIniziali = p.materiali)
+            }
             NuovaLezioneScreen(vm, indietro, onCreata = { l ->
                 if (!esempio) PreparazioneWorker.pianifica(contesto)
                 vai(nav.sostituisci(Pagina.Preparazione(l.id)))
             }, esempio, offline)
+        }
+        is Pagina.NuovoSchema -> {
+            // Un modulo nuovo a ogni apertura; dopo una rotazione resta lo stesso.
+            val apertura = rememberSaveable(p) { java.util.UUID.randomUUID().toString() }
+            val vm: NuovoStudioViewModel = viewModel(key = "nuovo-schema-$apertura-$chiave") { NuovoStudioViewModel(sorgente, GenereStudio.SCHEMA, p.materiaId, p.eventoId, p.daSchema) }
+            NuovoStudioScreen(vm, indietro, onSchema = { s ->
+                if (!esempio) PreparazioneWorker.pianifica(contesto)
+                vai(nav.sostituisci(Pagina.Schema(s.id)))
+            }, onSimulata = {}, esempio, offline)
+        }
+        is Pagina.NuovaSimulata -> {
+            val apertura = rememberSaveable(p) { java.util.UUID.randomUUID().toString() }
+            val vm: NuovoStudioViewModel = viewModel(key = "nuova-simulata-$apertura-$chiave") { NuovoStudioViewModel(sorgente, GenereStudio.SIMULATA, p.materiaId, p.eventoId, p.daSimulata) }
+            NuovoStudioScreen(vm, indietro, onSchema = {}, onSimulata = { q ->
+                if (!esempio) PreparazioneWorker.pianifica(contesto)
+                vai(nav.sostituisci(Pagina.Simulata(q.id)))
+            }, esempio, offline)
+        }
+        is Pagina.Schema -> {
+            val vm: SchemaViewModel = viewModel(key = "schema-${p.id}-$chiave") { SchemaViewModel(sorgente, p.id) }
+            val capito: NonHoCapitoViewModel = viewModel(key = "capito-schema-${p.id}-$chiave") { NonHoCapitoViewModel(sorgente) }
+            val statoAudio by lettore.stato.collectAsStateWithLifecycle()
+            LetturaSchemaScreen(
+                vm, capito,
+                AzioniSchema(
+                    indietro = indietro,
+                    apriMateriale = { vai(nav.apri(Pagina.TestoMateriale(it))) },
+                    aggiungiMateriale = { m -> aggiungi(RichiestaAggiunta(m, PassoAggiunta.SCEGLI, TipoMateriale.APPUNTI)) },
+                    ascolta = { sc, parte -> vai(nav.apri(Pagina.NuovaLezione(sc.materiaId, sc.eventoId, parte.titolo, sc.materiali))) },
+                    scegliAltro = { sc -> vai(nav.sostituisci(Pagina.NuovoSchema(sc.materiaId, sc.eventoId, sc.id))) },
+                    ripassa = { m -> vai(nav.apri(Pagina.Lampo(m))) },
+                    apriRiassunto = { forma -> vai(nav.apri(Pagina.Riassunto(p.id, forma))) },
+                    inLavoro = { if (!esempio) PreparazioneWorker.pianifica(contesto) },
+                ),
+                sorgente, esempio, offline,
+                mini = {
+                    if (statoAudio.lezione != null) {
+                        MiniLettore(statoAudio, { statoAudio.lezione?.id?.let(apriLettore) }, {
+                            if (eu.stgm.lectio.ui.lettore.playDelMiniLettoreApre(statoAudio)) statoAudio.lezione?.id?.let(apriLettore) else lettore.playPausa()
+                        })
+                    }
+                },
+            )
+        }
+        is Pagina.Riassunto -> {
+            val vm: RiassuntoViewModel = viewModel(key = "riassunto-${p.schemaId}-${p.forma}-$chiave") { RiassuntoViewModel(sorgente, p.schemaId, p.forma) }
+            RiassuntoScreen(vm, indietro, onInLavoro = { if (!esempio) PreparazioneWorker.pianifica(contesto) }, sorgente, esempio, offline)
+        }
+        is Pagina.Simulata -> {
+            val vm: SimulataViewModel = viewModel(key = "simulata-${p.id}-$chiave") { SimulataViewModel(sorgente, p.id) }
+            // Quello che non è partito lo manda il lavoro in sottofondo appena c'è rete.
+            androidx.compose.runtime.DisposableEffect(p.id) { onDispose { if (!esempio) app.pianificaInvii() } }
+            SimulataScreen(
+                vm,
+                AzioniSimulata(
+                    indietro = indietro,
+                    apriMateriale = { vai(nav.apri(Pagina.TestoMateriale(it))) },
+                    ripassa = { m -> vai(nav.apri(Pagina.Lampo(m))) },
+                    rifai = { q -> vai(nav.sostituisci(Pagina.NuovaSimulata(q.materiaId, q.eventoId, q.id))) },
+                    inLavoro = { if (!esempio) PreparazioneWorker.pianifica(contesto) },
+                ),
+                sorgente, esempio, offline,
+            )
+        }
+        is Pagina.Lampo -> {
+            // Una sessione nuova a ogni apertura; dopo una rotazione resta la stessa.
+            val apertura = rememberSaveable(p) { java.util.UUID.randomUUID().toString() }
+            val vm: LampoViewModel = viewModel(key = "lampo-$apertura-$chiave") { LampoViewModel(sorgente, p.materiaId) }
+            androidx.compose.runtime.DisposableEffect(apertura) { onDispose { if (!esempio) app.pianificaInvii() } }
+            LampoScreen(vm, daMateria = p.materiaId != null, onChiudi = indietro, esempio, offline)
         }
         is Pagina.Preparazione -> {
             val vm: PreparazioneViewModel = viewModel(key = "prep-${p.lezioneId}-$chiave") { PreparazioneViewModel(sorgente, p.lezioneId) }
@@ -543,6 +678,7 @@ private fun Pagine(
                 // Su una rete senza consumo (Wi-Fi di casa) si scarica da sola, per ascoltarla in giro.
                 if (!esempio && p.lezioneId !in scaricate) eu.stgm.lectio.lavori.scaricaSeWifi(contesto, p.lezioneId)
             }
+            val capito: NonHoCapitoViewModel = viewModel(key = "capito-lettore-$chiave") { NonHoCapitoViewModel(sorgente) }
             LettoreScreen(
                 vm,
                 AzioniLettore(chiudi = indietro, scarica = scarica, togli = togli, comeAndata = { vai(nav.apri(Pagina.ComeAndata(it))) }),
@@ -550,6 +686,9 @@ private fun Pagine(
                 scaricamento = inScaricamento[p.lezioneId],
                 esempio = esempio,
                 senzaRete = offline,
+                nonHoCapito = capito,
+                onAggiungiMateriale = { m -> aggiungi(RichiestaAggiunta(m, PassoAggiunta.SCEGLI, TipoMateriale.APPUNTI)) },
+                onApriFonte = { f -> vai(nav.apri(Pagina.TestoMateriale(f.materialeId))) },
             )
         }
         is Pagina.ComeAndata -> {
@@ -581,7 +720,7 @@ private fun Pagine(
                     indietro = indietro,
                     tema = { ambito.launch { app.archivio.cambiaTema(it) } },
                     menoAnimazioni = { ambito.launch { app.archivio.cambiaMenoAnimazioni(it) } },
-                    visita = { visita.inizia() },
+                    visita = { visita.iniziaTutte() },
                     scollega = {
                         ambito.launch {
                             app.lettore.ferma()
@@ -630,7 +769,9 @@ private fun Pagine(
                         vediTutte = { vai(nav.apri(Pagina.Prossime)) },
                         nuovaMateria = chiediNuovaMateria,
                         apriMaterie = { vai(Navigazione(Scheda.MATERIE)) },
-                        visita = { visita.inizia() },
+                        visita = { visita.iniziaTutte() },
+                        lampo = { vai(nav.apri(Pagina.Lampo())) },
+                        apriSimulata = { vai(nav.apri(Pagina.Simulata(it))) },
                     ),
                     esempio, offline, scaricate,
                 )

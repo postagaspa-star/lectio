@@ -76,5 +76,6 @@ public sealed record VoceNovita
     public string? Tipo { get; init; }
     public string? Testo { get; init; }
     public long? LezioneId { get; init; }
+    public long? MateriaId { get; init; }
     public string? Quando { get; init; }
 }

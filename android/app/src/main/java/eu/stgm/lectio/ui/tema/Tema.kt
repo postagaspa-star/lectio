@@ -125,8 +125,21 @@ data class ColoreMateria(val pieno: Color, val tenue: Color, val testo: Color, v
     }
 }
 
-/** Gli 8 colori del contratto (§4), nell'ordine del foglio "Aggiungi materia". */
-val NOMI_COLORI = listOf("ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva")
+/** I 16 colori del contratto (§22) in ordine di proposta: la materia nuova prende il primo libero (aspetto.md §37.1). */
+val NOMI_COLORI = listOf(
+    "ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva",
+    "giada", "orchidea", "senape", "lavanda", "cacao", "prugna", "salvia", "lavagna",
+)
+
+/** Gli stessi 16 nell'ordine a schermo: per tinta, così sembrano una sfumatura (aspetto.md §37.1). */
+val ORDINE_COLORI = listOf(
+    "rosa", "arancio", "cacao", "ambra", "senape", "oliva",
+    "salvia", "verde", "giada", "petrolio", "blu", "lavagna",
+    "viola", "lavanda", "orchidea", "prugna",
+)
+
+/** "Giada": il nome a schermo è la stessa parola con la maiuscola. */
+fun nomeColore(nome: String): String = nome.replaceFirstChar { it.uppercase() }
 
 private val TAVOLOZZA = mapOf(
     "ambra" to Triple(0xFFC27C0E, 0xFFFBF1DE, 0xFF8A5506),
@@ -137,6 +150,14 @@ private val TAVOLOZZA = mapOf(
     "verde" to Triple(0xFF2B8A3E, 0xFFEAF6EC, 0xFF1F6A30),
     "arancio" to Triple(0xFFE8590C, 0xFFFDEDE3, 0xFFB4440A),
     "oliva" to Triple(0xFF5C940D, 0xFFEFF6E3, 0xFF466F0B),
+    "giada" to Triple(0xFF00A089, 0xFFDFF6F0, 0xFF026C5C),
+    "senape" to Triple(0xFF928100, 0xFFF4F1DD, 0xFF695D02),
+    "orchidea" to Triple(0xFFC04EC8, 0xFFFAEBFA, 0xFF8A2C91),
+    "prugna" to Triple(0xFFA34A80, 0xFFFEEAF4, 0xFF883E6B),
+    "cacao" to Triple(0xFF916748, 0xFFF9EEE6, 0xFF76543A),
+    "lavagna" to Triple(0xFF636F8E, 0xFFECF0FA, 0xFF525C75),
+    "salvia" to Triple(0xFF7B9575, 0xFFEBF3EA, 0xFF4E634A),
+    "lavanda" to Triple(0xFFA380C8, 0xFFF4ECFE, 0xFF694D86),
 )
 
 /**
@@ -189,6 +210,14 @@ data class Testi(
     val pulsantePiccolo: TextStyle,
     /** 14 / 700: pillole. */
     val pillola: TextStyle,
+    /** 17 / 400, interlinea 1,55: i paragrafi dello schema, la risposta di "Non ho capito" (§30.2). */
+    val lettura: TextStyle,
+    /** 22 / 800, interlinea 1,25: il titolo di una parte dello schema (§30.2). */
+    val titoloParte: TextStyle,
+    /** 13 / 500: "Libro, pag. 42" (§30.2, sempre nel colore tenue). */
+    val fonte: TextStyle,
+    /** 44 / 800, -0,8, cifre tabellari: il voto stimato (§30.2). */
+    val voto: TextStyle,
 )
 
 private fun testi(f: FontFamily) = Testi(
@@ -208,6 +237,10 @@ private fun testi(f: FontFamily) = Testi(
     pulsante = TextStyle(fontFamily = f, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold),
     pulsantePiccolo = TextStyle(fontFamily = f, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold),
     pillola = TextStyle(fontFamily = f, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold),
+    lettura = TextStyle(fontFamily = f, fontSize = 17.sp, lineHeight = 26.35.sp, fontWeight = FontWeight.Normal),
+    titoloParte = TextStyle(fontFamily = f, fontSize = 22.sp, lineHeight = 27.5.sp, fontWeight = FontWeight.ExtraBold),
+    fonte = TextStyle(fontFamily = f, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
+    voto = TextStyle(fontFamily = f, fontSize = 44.sp, lineHeight = 50.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.8).sp, fontFeatureSettings = "tnum"),
 )
 
 /**

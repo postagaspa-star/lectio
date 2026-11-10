@@ -1,6 +1,7 @@
 package eu.stgm.lectio.dati
 
 import eu.stgm.lectio.logica.Costi
+import eu.stgm.lectio.logica.TestiLampo
 
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.FileDaCaricare
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -27,14 +29,17 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
     override val esempio = true
     override val senzaRete: StateFlow<Boolean> = MutableStateFlow(false)
 
+    /** Solo in memoria: la visita non lascia niente sul telefono. */
+    override val deposito = DepositoStudio()
+
     private fun giorno(dopo: Long): String = oggi.plusDays(dopo).toString()
     private val adessoIso: String = OffsetDateTime.of(oggi.atTime(9, 0), ZoneOffset.ofHours(1)).toString()
     private val primoDelMese: String = oggi.withDayOfMonth(1).plusMonths(1).toString()
 
     // --- Materie ------------------------------------------------------------------------------
 
-    private val storia = Materia(1, "Storia", "Rossi", "ambra", Conteggi(4, 1, 3, 2), Centratura(10, 16, 63), daRipassare = 2)
-    private val diritto = Materia(2, "Diritto ed economia", "Bianchi", "petrolio", Conteggi(2, 0, 2, 1), Centratura(4, 7, 57))
+    private val storia = Materia(1, "Storia", "Rossi", "ambra", Conteggi(4, 1, 3, 2, schemi = 1, lampo = 3, simulate = 2), Centratura(10, 16, 63), daRipassare = 2)
+    private val diritto = Materia(2, "Diritto ed economia", "Bianchi", "petrolio", Conteggi(2, 0, 2, 1, lampo = 1), Centratura(4, 7, 57))
     private val inglese = Materia(3, "Inglese", "Bianchi", "verde", Conteggi(3, 1, 1, 1), null)
     private val scienzeUmane = Materia(4, "Scienze umane", "Rossi", "viola", Conteggi(1, 2, 4, 0), null)
     private val matematica = Materia(5, "Matematica", "Rossi", "blu", Conteggi(2, 0, 0, 0), null)
@@ -201,6 +206,7 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
                 piuAvanti = prossimo.drop(1).take(4).map { PiuAvanti(it, materia(it), giorni(it)) },
                 spesa = SpesaBreve(spesoMese, tetto, (spesoMese / tetto * 100).toInt(), primoDelMese, spesoMese >= tetto * 0.8),
                 modalitaProva = false,
+                lampo = LampoOggi(carteLampo.size, TestiLampo.minuti(carteLampo.size)),
             ),
         )
     }
@@ -455,6 +461,252 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
         return Esito.Ok(impostazioni)
     }
 
+    // --- Schemi, riassunti, "Non ho capito", Ripasso lampo, verifica simulata --------------------
+
+    private val libro = Fonte(25, "Libro, capitolo 5", "libro", 42, "Libro, pag. 42")
+    private val verifica = Fonte(21, "Verifica sull'età di Augusto", "verifica", null, "Verifica del 12/10")
+    private val appunti = Fonte(23, "Augusto e il principato", "appunti", null, "Appunti del 28/10")
+
+    private val contenutoSchema = ContenutoSchema(
+        forma = "capitoli",
+        fonti = mapOf("B1" to libro, "V1" to verifica, "A1" to appunti),
+        copertura = Copertura(8, 7, listOf("Le riforme dell'esercito")),
+        sezioni = listOf(
+            SezioneSchema(
+                1, "Augusto e il principato",
+                blocchi = listOf(
+                    BloccoSchema("paragrafo", testo = "Dopo anni di guerre civili Ottaviano non si fa chiamare re. Prende il titolo di **princeps**, il primo dei cittadini, e lascia in piedi il senato e i consoli.", fonti = listOf("B1")),
+                    BloccoSchema("definizione", termine = "Principato", testo = "Il governo di uno solo che tiene in piedi, di facciata, le **istituzioni della repubblica**.", fonti = listOf("A1")),
+                    BloccoSchema("passaggi", titolo = "Come arriva al potere", voci = listOf("Vince Antonio ad Azio", "Il senato gli dà il titolo di Augusto", "Tiene per sé esercito e province"), fonti = listOf("B1")),
+                    BloccoSchema("prof", testo = "Il prof vuole le date precise: **14 d.C.**, non \"verso il\".", fonti = listOf("V1")),
+                ),
+            ),
+            SezioneSchema(
+                2, "Gli imperatori dopo Augusto",
+                blocchi = listOf(
+                    BloccoSchema("tabella", titolo = "Chi viene dopo", intestazione = listOf("Imperatore", "Regno", "Da ricordare"), righe = listOf(
+                        listOf("Tiberio", "14-37", "Si fida poco del senato"),
+                        listOf("Caligola", "37-41", "Quattro anni, molti capricci"),
+                        listOf("Claudio", "41-54", "Conquista la Britannia"),
+                    ), fonti = listOf("B1")),
+                    BloccoSchema("immagine", n = 1, didascalia = "Una mappa dell'impero al tempo di Augusto", credito = "Immagine di esempio"),
+                    BloccoSchema("punti", titolo = "Da non confondere", voci = listOf("Tiberio è il **figlio adottivo** di Augusto", "Seiano è il capo dei pretoriani"), fonti = listOf("A1")),
+                ),
+            ),
+            SezioneSchema(
+                3, "Perché l'impero regge",
+                blocchi = listOf(
+                    BloccoSchema("paragrafo", testo = "L'impero regge perché le decisioni sono di uno solo ma l'amministrazione resta ordinata: anche con un principe debole, la macchina va avanti.", fonti = listOf("B1", "A1")),
+                ),
+            ),
+        ),
+    )
+
+    private val testoRiassunto = ContenutoRiassunto(
+        listOf(
+            ParteRiassunto("Augusto", paragrafi = listOf("Dopo le guerre civili Ottaviano diventa **Augusto**: non si fa chiamare re, ma tiene per sé esercito e province."), punti = listOf("Princeps: il primo dei cittadini", "Il senato resta, ma decide lui")),
+            ParteRiassunto("Dopo di lui", paragrafi = listOf("Tiberio, Caligola e Claudio cambiano stile, ma il principato resta in piedi.")),
+        ),
+    )
+
+    private val riassuntiEsempio = mutableListOf(
+        Riassunto(51, SCHEMA_STORIA, 1, "misto", "L'età di Augusto", "pronto", prontoIl = adessoIso, creatoIl = adessoIso, parole = 180, contenuto = testoRiassunto),
+    )
+
+    private fun riassuntiDi(id: Long) = RiassuntiSchema(0.01, riassuntiEsempio.filter { it.schemaId == id }.map { RiassuntoBreve(it.id, it.forma, it.stato) })
+
+    private val schemi = mutableListOf(
+        Schema(
+            SCHEMA_STORIA, 1, 3, "L'Impero romano da Augusto a Nerone", "L'età di Augusto", materiali = listOf(23, 24, 25), stato = "pronto",
+            stimaEur = 0.08, creatoIl = adessoIso, prontoIl = adessoIso, carte = 3, contenuto = contenutoSchema,
+        ),
+    )
+
+    private fun Schema.conRiassunti() = copy(riassunti = if (pronto) riassuntiDi(id) else null)
+
+    private val carteLampo = listOf(
+        CartaLampo(61, 1, "Storia", "ambra", "Perché Augusto non si fece mai chiamare re?", "Perché a Roma la parola re ricordava la **tirannia**: preferì il titolo di princeps.", listOf(libro), 1),
+        CartaLampo(62, 1, "Storia", "ambra", "Che cosa erano i pretoriani?", "La guardia del corpo dell'imperatore, di stanza a Roma.", listOf(verifica), 2),
+        CartaLampo(63, 1, "Storia", "ambra", "Quale provincia conquistò Claudio?", "La **Britannia**, nel 43 dopo Cristo.", listOf(libro), 1),
+        CartaLampo(64, 2, "Diritto ed economia", "petrolio", "Che cosa vuol dire fonte del diritto?", "L'atto o il fatto da cui nascono le norme.", emptyList(), 1),
+    )
+
+    private val domandeSimulata = listOf(
+        DomandaSimulata(1, "aperta", "Perché Augusto non si fece mai chiamare re?", 3.0, "Domande aperte"),
+        DomandaSimulata(2, "aperta", "Spiega la differenza tra principato e monarchia.", 4.0, "Domande aperte"),
+        DomandaSimulata(3, "definizione", "Che cosa erano i pretoriani?", 3.0, "Definizioni"),
+        DomandaSimulata(4, "aperta", "Che cosa pensi del governo di Claudio?", 2.0, "Definizioni"),
+    )
+
+    private val esitoSimulata = EsitoSimulata(
+        5.5, 10.0, 5.5, 6.0,
+        listOf(
+            EsitoDomandaSimulata(1, "giusta", 3.0, "Giusto: hai detto le cose importanti.", emptyList(), "Perché la parola re ricordava la tirannia: scelse il titolo di princeps.", listOf(libro)),
+            EsitoDomandaSimulata(2, "parziale", 2.5, "Ci sei in parte: manca chi decide davvero.", listOf("il potere vero del principe"), "Nel principato le istituzioni restano, ma il potere vero è del principe.", listOf(libro, appunti)),
+            EsitoDomandaSimulata(3, "sbagliata", 0.0, "Non erano soldati di frontiera.", emptyList(), "La guardia del corpo dell'imperatore, di stanza a Roma.", listOf(verifica)),
+            EsitoDomandaSimulata(4, "non_corretta"),
+        ),
+        daRifare = 2,
+    )
+
+    private val simulate = mutableListOf(
+        Simulata(
+            SIMULATA_IN_CORSO, 1, 3, "L'Impero romano", "Verifica di allenamento", 50, listOf(21, 23, 24), stato = "in_corso", stimaEur = 0.03, creataIl = adessoIso, iniziataIl = adessoIso,
+            domande = domandeSimulata, risposte = mapOf("1" to "Perché la parola re ricordava la tirannia."),
+        ),
+        Simulata(
+            SIMULATA_CORRETTA, 1, null, "Augusto e Tiberio", "Augusto e Tiberio", 50, listOf(21, 23), stato = "corretta", stimaEur = 0.03, creataIl = adessoIso, iniziataIl = adessoIso, consegnataIl = adessoIso,
+            domande = domandeSimulata,
+            risposte = mapOf("1" to "Perché la parola re ricordava la tirannia.", "2" to "Nel principato restano il senato e i consoli.", "3" to "Erano soldati di frontiera."),
+            esito = esitoSimulata,
+        ),
+    )
+
+    private fun stimaStudio(costo: Double, minuti: Int, immagini: Int = 0): StimaStudio {
+        val dopo = spesoMese + costo
+        return StimaStudio(costo, spesoMese, 0.0, tetto, arrotonda(dopo), dopo <= tetto, null, primoDelMese, minuti, immagini)
+    }
+
+    override suspend fun stimaSchema(richiesta: RichiestaStimaSchema): Esito<StimaStudio> = Esito.Ok(stimaStudio(0.08, 4, 3))
+
+    /** Nella visita lo schema è subito pronto: non si resta ad aspettare un lavoro finto. */
+    override suspend fun creaSchema(nuovo: NuovoSchema): Esito<Schema> {
+        val s = Schema(
+            prossimoId++, nuovo.materiaId, nuovo.eventoId, nuovo.argomento, nuovo.argomento, nuovo.forma, nuovo.livello, nuovo.indicazioni, nuovo.materiali,
+            "pronto", stimaEur = 0.08, creatoIl = adessoIso, prontoIl = adessoIso, contenuto = contenutoSchema,
+        )
+        schemi.add(0, s)
+        return Esito.Ok(s.conRiassunti())
+    }
+
+    override suspend fun schemi(materiaId: Long): Lettura<List<Schema>> =
+        Lettura(schemi.filter { it.materiaId == materiaId }.map { it.copy(contenuto = null).conRiassunti() })
+
+    override suspend fun schema(id: Long): Lettura<Schema> =
+        schemi.firstOrNull { it.id == id }?.let { Lettura(it.conRiassunti()) } ?: Lettura(null, "Non trovo più questo schema.")
+
+    override suspend fun annullaSchema(id: Long): Esito<Unit> {
+        val i = schemi.indexOfFirst { it.id == id }
+        if (i >= 0) schemi[i] = schemi[i].copy(stato = "annullato")
+        return Esito.Ok(Unit)
+    }
+
+    override suspend fun riprovaSchema(id: Long): Esito<Unit> {
+        val i = schemi.indexOfFirst { it.id == id }
+        if (i >= 0) schemi[i] = schemi[i].copy(stato = "pronto", contenuto = contenutoSchema)
+        return Esito.Ok(Unit)
+    }
+
+    override suspend fun eliminaSchema(id: Long): Esito<Unit> {
+        schemi.removeAll { it.id == id }
+        riassuntiEsempio.removeAll { it.schemaId == id }
+        return Esito.Ok(Unit)
+    }
+
+    /** Nella visita il PDF non si scarica: nessun file creato. */
+    override suspend fun scaricaPdf(documento: DocumentoPdf, destinazione: File): Esito<Unit> = Esito.Ok(Unit)
+
+    override suspend fun immagineSchema(id: Long, n: Int, rinfresca: Boolean): Esito<ByteArray> =
+        Esito.Ok(java.util.Base64.getDecoder().decode(FOTO_ESEMPIO))
+
+    override suspend fun cambiaImmagine(id: Long, n: Int): Esito<Schema> =
+        schemi.firstOrNull { it.id == id }?.let { Esito.Ok(it.conRiassunti()) } ?: Esito.Errore("Non trovo più questo schema.")
+
+    override suspend fun togliImmagine(id: Long, n: Int): Esito<Schema> {
+        val i = schemi.indexOfFirst { it.id == id }
+        if (i < 0) return Esito.Errore("Non trovo più questo schema.")
+        val c = schemi[i].contenuto ?: return Esito.Errore("Non trovo più questa foto.")
+        val senza = c.copy(sezioni = c.sezioni.map { s -> s.copy(blocchi = s.blocchi.filterNot { it.tipo == "immagine" && it.n == n }) })
+        schemi[i] = schemi[i].copy(contenuto = senza)
+        return Esito.Ok(schemi[i].conRiassunti())
+    }
+
+    override suspend fun creaRiassunto(schemaId: Long, forma: String): Esito<Riassunto> {
+        riassuntiEsempio.firstOrNull { it.schemaId == schemaId && it.forma == forma }?.let { return Esito.Ok(it) }
+        val r = Riassunto(prossimoId++, schemaId, 1, forma, "L'età di Augusto", "pronto", creatoIl = adessoIso, prontoIl = adessoIso, parole = 180, contenuto = testoRiassunto)
+        riassuntiEsempio += r
+        return Esito.Ok(r)
+    }
+
+    override suspend fun riassunti(schemaId: Long): Lettura<List<Riassunto>> = Lettura(riassuntiEsempio.filter { it.schemaId == schemaId })
+
+    override suspend fun riassunto(id: Long): Lettura<Riassunto> =
+        riassuntiEsempio.firstOrNull { it.id == id }?.let { Lettura(it) } ?: Lettura(null, "Non trovo più questo riassunto.")
+
+    override suspend fun riprovaRiassunto(id: Long): Esito<Unit> = Esito.Ok(Unit)
+
+    override suspend fun eliminaRiassunto(id: Long): Esito<Unit> {
+        riassuntiEsempio.removeAll { it.id == id }
+        return Esito.Ok(Unit)
+    }
+
+    override suspend fun chiarisci(corpo: CorpoChiarimento): Esito<Chiarimento> = Esito.Ok(
+        Chiarimento(
+            prossimoId++, corpo.passaggio, corpo.domanda.ifBlank { null },
+            "Princeps vuol dire **il primo dei cittadini**. Augusto lo sceglie perché a Roma la parola re faceva paura: così il potere è suo, ma nessuno può accusarlo di essere un tiranno.",
+            true, listOf(libro, appunti), 0.01, adessoIso,
+        ),
+    )
+
+    /** Le schede restano in memoria anche dopo l'esito, così la visita si può rifare. */
+    override suspend fun lampo(materiaId: Long?, limite: Int): Lettura<Lampo> {
+        val carte = carteLampo.filter { materiaId == null || it.materiaId == materiaId }.take(limite)
+        return Lettura(Lampo(carte, carte.size, 2))
+    }
+
+    override suspend fun esitoLampo(id: Long, esito: String): Esito<RispostaLampo> = Esito.Ok(RispostaLampo(2, giorno(3), carteLampo.size))
+
+    override suspend fun togliCarta(id: Long): Esito<Unit> = Esito.Ok(Unit)
+
+    override suspend fun stimaSimulata(richiesta: RichiestaStimaSimulata): Esito<StimaStudio> = Esito.Ok(stimaStudio(0.03, 2))
+
+    override suspend fun creaSimulata(nuova: NuovaSimulata): Esito<Simulata> {
+        val s = Simulata(
+            prossimoId++, nuova.materiaId, nuova.eventoId, nuova.argomento, nuova.argomento, nuova.minuti, nuova.materiali, nuova.indicazioni,
+            "pronta", stimaEur = 0.03, creataIl = adessoIso, domande = domandeSimulata,
+        )
+        simulate.add(0, s)
+        return Esito.Ok(s)
+    }
+
+    override suspend fun simulate(materiaId: Long): Lettura<List<Simulata>> =
+        Lettura(simulate.filter { it.materiaId == materiaId }.map { it.copy(domande = emptyList(), risposte = emptyMap(), esito = it.esito?.copy(domande = emptyList())) })
+
+    override suspend fun simulata(id: Long): Lettura<Simulata> =
+        simulate.firstOrNull { it.id == id }?.let { Lettura(it) } ?: Lettura(null, "Non trovo più questa verifica simulata.")
+
+    override suspend fun annullaSimulata(id: Long): Esito<Unit> {
+        val i = simulate.indexOfFirst { it.id == id }
+        if (i >= 0) simulate[i] = simulate[i].copy(stato = "annullata")
+        return Esito.Ok(Unit)
+    }
+
+    override suspend fun riprovaSimulata(id: Long): Esito<Unit> {
+        val i = simulate.indexOfFirst { it.id == id }
+        if (i >= 0) simulate[i] = simulate[i].copy(stato = "pronta", domande = domandeSimulata)
+        return Esito.Ok(Unit)
+    }
+
+    override suspend fun eliminaSimulata(id: Long): Esito<Unit> {
+        simulate.removeAll { it.id == id }
+        return Esito.Ok(Unit)
+    }
+
+    override suspend fun salvaSimulata(id: Long, corpo: CorpoSalvaSimulata): Esito<Simulata> {
+        val i = simulate.indexOfFirst { it.id == id }
+        if (i < 0) return Esito.Errore("Non trovo più questa verifica simulata.")
+        val s = simulate[i]
+        simulate[i] = s.copy(risposte = s.risposte + corpo.risposte, stato = if (corpo.iniziata == true && s.pronta) "in_corso" else s.stato)
+        return Esito.Ok(simulate[i])
+    }
+
+    override suspend fun consegnaSimulata(id: Long): Esito<Simulata> {
+        val i = simulate.indexOfFirst { it.id == id }
+        if (i < 0) return Esito.Errore("Non trovo più questa verifica simulata.")
+        simulate[i] = simulate[i].copy(stato = "corretta", consegnataIl = adessoIso, esito = esitoSimulata)
+        return Esito.Ok(simulate[i])
+    }
+
     /** La lezione d'esempio completa (per il lettore della visita). */
     fun lezioneCompleta(id: Long = LEZIONE_STORIA): Lezione? = lezioni.firstOrNull { it.id == id }
 
@@ -471,6 +723,12 @@ class SorgenteEsempio(private val oggi: LocalDate = LocalDate.now()) : Sorgente 
 
         const val LEZIONE_STORIA = 12L
         const val MATERIA_STORIA = 1L
+        const val SCHEMA_STORIA = 31L
+        const val SIMULATA_IN_CORSO = 41L
+        const val SIMULATA_CORRETTA = 42L
+
+        /** Una piccola immagine in PNG, per la foto dello schema d'esempio. */
+        private const val FOTO_ESEMPIO = "iVBORw0KGgoAAAANSUhEUgAAACAAAAASCAIAAAC1qksFAAAD8ElEQVR42g3N4cpFMACA4e/+e39LKaWUwjo7jWUay05zFkKu6DvPDTx/dUKT0CaIhFeCTHgnqIQuoU/QCUOCSRgTbMKUMCe4hCXBJ3wSQsKa8E2ICVvCnnAknAlXwp3wJPzVKU1KmyJSXiky5Z2iUrqUPkWnDCkmZUyxKVPKnOJSlhSf8kkJKWvKNyWmbCl7ypFyplwpd8qT/oKMJqPNEBmvDJnxzlAZXUafoTOGDJMxZtiMKWPOcBlLhs/4ZISMNeObETO2jD3jyDgzrow748l+QU6T0+aInFeOzHnnqJwup8/ROUOOyRlzbM6UM+e4nCXH53xyQs6a882JOVvOnnPknDlXzp3z5L+goCloC0TBq0AWvAtUQVfQF+iCocAUjAW2YCqYC1zBUuALPgWhYC34FsSCrWAvOArOgqvgLniKX1DSlLQlouRVIkveJaqkK+lLdMlQYkrGElsylcwlrmQp8SWfklCylnxLYslWspccJWfJVXKXPOUvqGgq2gpR8aqQFe8KVdFV9BW6YqgwFWOFrZgq5gpXsVT4ik9FqFgrvhWxYqvYK46Ks+KquCue6hfUNDVtjah51ciad42q6Wr6Gl0z1JiascbWTDVzjatZanzNpybUrDXfmliz1ew1R81Zc9XcNU/9CwSNoBUIwUsgBW+BEnSCXqAFg8AIRoEVTIJZ4ASLwAs+giBYBV9BFGyCXXAITsEluAWP+AWSRtJKhOQlkZK3REk6SS/RkkFiJKPESibJLHGSReIlH0mQrJKvJEo2yS45JKfkktySR/4CRaNoFULxUkjFW6EUnaJXaMWgMIpRYRWTYlY4xaLwio8iKFbFVxEVm2JXHIpTcSluxaN+gabRtBqheWmk5q1Rmk7Ta7Rm0BjNqLGaSTNrnGbReM1HEzSr5quJmk2zaw7Nqbk0t+bRv8DQGFqDMLwM0vA2KENn6A3aMBiMYTRYw2SYDc6wGLzhYwiG1fA1RMNm2A2H4TRchtvwmF9gaSytRVheFml5W5Sls/QWbRksxjJarGWyzBZnWSze8rEEy2r5WqJls+yWw3JaLstteewvcDSO1iEcL4d0vB3K0Tl6h3YMDuMYHdYxOWaHcywO7/g4gmN1fB3RsTl2x+E4HZfjdjzuF3gaT+sRnpdHet4e5ek8vUd7Bo/xjB7rmTyzx3kWj/d8PMGzer6e6Nk8u+fwnJ7Lc3se/wsCTaANiMArIAPvgAp0gT6gA0PABMaADUyBOeACS8AHPoEQWAPfQAxsgT1wBM7AFbgDT/gFkSbSRkTkFZGRd0RFukgf0ZEhYiJjxEamyBxxkSXiI59IiKyRbyRGtsgeOSJn5IrckSfyD8eAbm9jjhFAAAAAAElFTkSuQmCC"
 
         /** Il testo per Gemini del contratto §12 (copia per la modalità esempio e senza rete). */
         val TESTO_GEMINI = """

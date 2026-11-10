@@ -29,15 +29,19 @@ def materia(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
         " (SELECT COUNT(*) FROM materiali WHERE materia_id = :id AND stato = 'pronto' AND tipo = 'interrogazione') AS i,"
         " (SELECT COUNT(*) FROM materiali WHERE materia_id = :id AND stato = 'pronto'"
         "   AND tipo IN ('appunti', 'libro', 'altro')) AS a,"
-        " (SELECT COUNT(*) FROM lezioni WHERE materia_id = :id AND stato = 'pronta') AS l",
-        {"id": r["id"]},
+        " (SELECT COUNT(*) FROM lezioni WHERE materia_id = :id AND stato = 'pronta') AS l,"
+        " (SELECT COUNT(*) FROM schemi WHERE materia_id = :id AND stato = 'pronto') AS s,"
+        " (SELECT COUNT(*) FROM simulate WHERE materia_id = :id AND stato NOT IN ('annullata', 'errore')) AS p,"
+        " (SELECT COUNT(*) FROM carte WHERE materia_id = :id AND prossima <= :oggi) AS c",
+        {"id": r["id"], "oggi": clock.oggi().isoformat()},
     ).fetchone()
     return {
         "id": r["id"],
         "nome": r["nome"],
         "prof": r["prof"],
         "colore": r["colore"],
-        "conteggi": {"verifiche": c["v"], "interrogazioni": c["i"], "appunti": c["a"], "lezioni": c["l"]},
+        "conteggi": {"verifiche": c["v"], "interrogazioni": c["i"], "appunti": c["a"], "lezioni": c["l"], "schemi": c["s"],
+                     "simulate": c["p"], "lampo": c["c"]},
         "centratura": centratura(conn, r["id"]),
         "da_ripassare": ripasso.conta_da_ripassare(conn, r["id"]),
     }

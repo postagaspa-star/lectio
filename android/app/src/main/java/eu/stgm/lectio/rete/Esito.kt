@@ -61,6 +61,7 @@ object Testi {
     const val INDIRIZZO_NON_PROTETTO =
         "Questo indirizzo non è protetto e non è della rete di casa: usa l'indirizzo https di Tailscale."
     const val SENZA_RETE = "Senza rete: vedi solo le lezioni scaricate"
+    const val SENZA_RETE_BREVE = "Senza rete"
 
     const val CODICE_NON_AUTORIZZATO = "non_autorizzato"
     const val CODICE_NON_ABBINATO = "non_abbinato"

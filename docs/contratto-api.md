@@ -1,4 +1,4 @@
-# Lectio — contratto delle API (v1.4)
+# Lectio — contratto delle API (v1.5)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (risposte scritte alle domande, materiale solo nella materia) sono nella sezione 15 e
@@ -452,3 +452,128 @@ Servizio interno: `GET /salute` → `{"ok": true, "motori": [...]}`; `POST /voce
 "testo": "..."}` → `audio/wav` (al massimo 4000 caratteri, i segni `[emotion=…]`/`[pace=…]` si tolgono);
 errori `{"errore": "frase"}` con 400 o 500. Una voce alla volta. Licenze: Kyutai Pocket TTS (codice MIT,
 modelli CC-BY 4.0), Supertonic 3 (codice MIT, modello OpenRAIL-M).
+
+## 17. Memoria sui documenti (v1.5, richieste di Andrea del 10/11)
+
+### 17.1 Le regole
+Vale per lezioni, schemi, "Non ho capito", ripasso lampo, verifica simulata, scheda del prof.
+- **Solo i documenti.** Il testo si basa solo su quello che c'è nel materiale della materia. Niente fatti aggiunti dal
+  modello, neanche se veri. Se manca, non si dice: una lezione o uno schema vengono più corti e la `nota` lo spiega.
+- **Ordine di priorità** per qualsiasi cosa: 1 pagine del libro (`libro`), 2 verifiche (`verifica`), 3 interrogazioni
+  (`interrogazione`), 4 appunti (`appunti`, `altro`). Se due documenti dicono cose diverse vale il numero più basso.
+  Delle verifiche e interrogazioni contano le domande e le correzioni del prof, non le risposte scritte dallo studente.
+- **Dove sta.** Sul NAS: ogni materiale letto si divide in pezzi (tabella `pezzi`) e si indicizza in sottofondo. Il
+  modello riceve solo i pezzi trovati per quella parte. Senza chiave Mistral o a tetto finito si cerca per parole.
+- **Controllo.** Dopo ogni parte scritta, un secondo passaggio confronta ogni frase con i pezzi usati. Quello che non
+  c'è si fa riscrivere una volta; se resta, la frase si toglie.
+- **Linguaggio.** Schemi e lezioni devono sembrare un normale ripasso fatto da una persona. Il server rifiuta le
+  formule tipiche delle AI (`stile.py`) e toglie i segni che le tradiscono (trattino lungo, emoji).
+
+### 17.2 Fonti
+Ogni parte scritta porta gli id dei pezzi usati (`"fonti": ["B3", "V1"]`). L'oggetto che li spiega è
+`{"materiale_id": 12, "titolo": "Libro, capitolo 7", "tipo": "libro", "pagina": 42, "etichetta": "Libro, pag. 42"}`
+(`pagina` può essere `null`). Le app mostrano `etichetta`. Per verifiche e interrogazioni è "Verifica del 12/10".
+
+## 18. Schemi
+`POST /api/schemi/stima` `{"materia_id": 7, "argomento": "La scultura classica", "materiali": [1, 2], "forma": "auto",
+"livello": "completo", "indicazioni": ""}` → `{"costo_eur": 0.08, "spesa_mese_eur": 0.21, "impegnato_eur": 0, "tetto_eur": 2,
+"dopo_eur": 0.29, "consentita": true, "motivo": null, "si_azzera_il": "2026-12-01", "minuti_preparazione": 4, "immagini": 3}`.
+`forma`: `auto` | `capitoli` | `schede`. `livello`: `essenziale` | `completo` | `approfondito`. `materiali` come in 16.2
+(lista non vuota di materiali `pronto`). `indicazioni` come in 16.1.
+
+`POST /api/schemi` (gli stessi campi più `evento_id` facoltativo) → 201 `Schema` in `in_coda`. Tetto superato: come per le
+lezioni. `GET /api/schemi?materia_id=7` → lista di `Schema` senza `contenuto`, dal più recente. `GET /api/schemi/{id}` →
+`Schema`. `POST /api/schemi/{id}/annulla`, `POST /api/schemi/{id}/riprova` (riparte da dove si era fermato),
+`DELETE /api/schemi/{id}`. `GET /api/schemi/{id}/pdf` → `application/pdf`.
+
+`Schema`: `{"id": 3, "materia_id": 7, "evento_id": null, "argomento": "…", "titolo": "…", "forma": "capitoli", "livello":
+"completo", "indicazioni": "", "materiali": [1, 2], "stato": "in_preparazione", "fase": "scrittura", "fatto": 2, "totale": 8,
+"frase": "Scrivo la parte 2 di 8", "errore": null, "nota": null, "stima_eur": 0.08, "creato_il": "…", "pronto_il": null,
+"carte": 12, "contenuto": null}`. `stato`: `in_coda` | `in_preparazione` | `pronto` | `errore` | `annullato`. Si chiede ogni 3-5 s
+finché è in lavorazione. Una novità `schema_pronto` o `schema_errore` avvisa quando finisce.
+
+`contenuto`:
+```
+{"forma": "capitoli",
+ "sezioni": [{"n": 1, "titolo": "…", "campi": [{"nome": "Autore", "valore": "Mirone"}],
+   "blocchi": [
+     {"tipo": "paragrafo", "titolo": "Descrizione", "testo": "Il **Discobolo** …", "fonti": ["B1"]},
+     {"tipo": "punti", "titolo": null, "voci": ["…"], "fonti": ["B1"]},
+     {"tipo": "passaggi", "titolo": null, "voci": ["causa", "effetto", "effetto dopo"], "fonti": ["B2"]},
+     {"tipo": "definizione", "termine": "chiasmo", "testo": "…", "fonti": ["B2"]},
+     {"tipo": "tabella", "titolo": "Date", "intestazione": ["Anno", "Evento"], "righe": [["1122", "…"]], "fonti": []},
+     {"tipo": "prof", "testo": "Chiesto nella verifica del 12/10.", "fonti": ["V1"]},
+     {"tipo": "immagine", "n": 1, "didascalia": "Discobolo di Mirone", "credito": "Foto di X, CC BY-SA 4.0, Wikimedia Commons"}
+   ]}],
+ "fonti": {"B1": {…Fonte}},
+ "copertura": {"concetti": 42, "coperti": 41, "mancanti": ["…"]},
+ "avvisi": ["Per la parte 4 non ho trovato una foto giusta."]}
+```
+`testo` e `voci` possono avere `**grassetto**` e nient'altro. Le formule sono già in caratteri normali (x², √2, (x+3)/(x−1)).
+`campi` c'è solo nella forma `schede` (altrimenti `[]`). Tipi sconosciuti: le app li saltano.
+
+Immagini: `GET /api/schemi/{id}/immagini/{n}` → JPEG. `POST /api/schemi/{id}/immagini/{n}/cambia` → `Schema` (ne cerca un'altra
+coerente; 404 se non ce ne sono altre). `DELETE /api/schemi/{id}/immagini/{n}` → `Schema`. Le immagini sono poche: 2 in `essenziale`,
+3 in `completo`, 5 in `approfondito`; di più solo se le indicazioni lo chiedono (fino a 40). Ognuna è controllata guardandola:
+deve mostrare davvero quello che dice la didascalia. Se non se ne trova una sicura, lo dice `avvisi`.
+
+"Ascolta questa parte": l'app apre Nuova lezione con `argomento` = titolo della sezione e gli stessi `materiali` dello schema.
+
+## 19. "Non ho capito"
+`POST /api/chiarimenti` `{"materia_id": 7, "schema_id": 3, "sezione": 2, "passaggio": "testo del paragrafo", "domanda": "cosa vuol dire chiasmo?"}`
+oppure `{"materia_id": 7, "lezione_id": 5, "posizione_s": 312.4, "domanda": ""}` → 200 (fino a 40 secondi di attesa)
+`{"id": 9, "passaggio": "…", "domanda": "…", "risposta": "…", "trovato": true, "fonti": [{…Fonte}], "costo_eur": 0.002, "quando": "…"}`.
+`domanda` è facoltativa (al massimo 300 caratteri). `trovato: false` = nei documenti non c'è; `risposta` lo dice e dice cosa manca.
+Tetto finito: come le lezioni. `GET /api/chiarimenti?materia_id=7` → gli ultimi 50.
+
+## 20. Ripasso lampo
+`GET /api/lampo?materia_id=7&limite=12` (`materia_id` facoltativo) → `{"carte": [{"id": 4, "materia_id": 7, "materia": "Storia dell'Arte",
+"colore": "rosa", "domanda": "…", "risposta": "…", "fonti": [{…Fonte}], "scatola": 2}], "da_fare": 8, "domani": 3}`.
+`POST /api/lampo/{id}` `{"esito": "sapevo" | "quasi" | "non_sapevo"}` → `{"scatola": 3, "prossima": "2026-11-14", "da_fare": 7}`.
+`DELETE /api/lampo/{id}` toglie una carta. Le carte nascono da sole: dagli schemi pronti, dalle risposte sbagliate o a metà nelle
+lezioni, dalle domande sbagliate nella verifica simulata. Costo: niente per ripassare. Scatole: 1, 2, 4, 9, 21 giorni; con una
+verifica vicina di quella materia la carta torna prima della verifica.
+`GET /api/oggi` ha in più `"lampo": {"da_fare": 8, "minuti": 3}`. `Materia.conteggi` ha in più `"schemi"`, `"lampo"`, `"simulate"`.
+
+## 21. Verifica simulata
+`POST /api/simulate/stima` `{"materia_id": 7, "argomento": "…", "materiali": [1, 2], "minuti": 50, "indicazioni": ""}` → stessi campi della stima
+degli schemi (senza `immagini`). `POST /api/simulate` (più `evento_id`) → 201 `Simulata`. `GET /api/simulate?materia_id=7` (lista di `Simulata` senza `domande` e `risposte`; `esito` ha solo `punti`, `punti_totali`, `voto_stimato`, `soglia`, `da_rifare`),
+`GET /api/simulate/{id}`, `POST /api/simulate/{id}/annulla`, `POST /api/simulate/{id}/riprova`, `DELETE /api/simulate/{id}`,
+`GET /api/simulate/{id}/pdf` → `application/pdf` per farla su carta.
+
+`Simulata`: `{"id": 2, "materia_id": 7, "evento_id": null, "argomento": "…", "titolo": "…", "minuti": 50, "materiali": [1, 2], "indicazioni": "",
+"stato": "pronta", "fase": null, "fatto": 0, "totale": 0, "frase": null, "errore": null, "nota": null, "stima_eur": 0.03, "creata_il": "…",
+"iniziata_il": null, "consegnata_il": null, "domande": [ … ], "risposte": {"1": "testo"}, "esito": null}`.
+`stato`: `in_coda` | `in_preparazione` | `pronta` | `in_corso` | `in_correzione` | `corretta` | `errore` | `annullata`.
+`domande`: `[{"n": 1, "tipo": "aperta", "testo": "…", "punti": 10, "sezione": null}]`. Finché non è `corretta` il server non manda le risposte attese.
+
+`PATCH /api/simulate/{id}` `{"risposte": {"1": "…"}, "iniziata": true}` salva quello che c'è (va chiamato spesso). `POST /api/simulate/{id}/consegna` → `Simulata` in
+`in_correzione`; si chiede ogni 3-5 s. Corretta, `esito` è `{"punti": 62, "punti_totali": 100, "voto_stimato": 6.5, "soglia": 58, "domande": [{"n": 1, "esito": "giusta" |
+"parziale" | "sbagliata" | "non_corretta", "punti": 8, "commento": "…", "mancava": ["…"], "risposta_attesa": "…", "fonti": [{…Fonte}]}], "da_rifare": 3}`.
+`non_corretta` = l'esercizio non ha una soluzione nei documenti: si mostra "confronta tu", e i suoi punti non contano né in `punti` né in `punti_totali`. Gli esercizi si ripropongono solo se sono nei documenti, con gli stessi numeri.
+Il formato (tipi di domande, punti, durata) viene dalle verifiche vere della materia; senza verifiche caricate la `nota` lo dice.
+
+## 22. Colori delle materie
+Sono 16: `ambra`, `rosa`, `petrolio`, `viola`, `blu`, `verde`, `arancio`, `oliva`, `giada`, `senape`, `orchidea`, `prugna`, `cacao`, `lavagna`, `salvia`, `lavanda`. I valori sono in `docs/aspetto.md`. `POST` e `PATCH` delle materie accettano solo questi; un nome che un'app non conosce diventa ambra.
+
+## 23. Scheda del prof: numeri contati
+`argomenti[].volte`, `argomenti[].esempio` e `tipi_domanda` non li scrive più il modello: li conta il server dalle domande vere, una per una, copiate dai documenti.
+Una domanda vale "definizione" solo se chiede davvero di definire qualcosa. `cosa_corregge`, `cosa_premia` e `consigli` restano solo se hanno una prova copiata dai documenti.
+
+## 24. File con il nome sbagliato
+Un file `.pdf` che dentro è testo (per esempio Markdown) si legge come testo. Vale lo stesso per i file di testo con un'altra estensione ammessa.
+
+## 25. Firma
+Ogni PDF creato da Lectio ha in fondo a ogni pagina, in bianco, la firma scritta nel file `firma.txt` della cartella dati del server; gli audio la portano nei dati del file. I PDF li fa il server. Se un'app crea un altro file da salvare o esportare, ci mette la stessa scritta allo stesso modo.
+
+## 26. Riassunti scritti
+Un riassunto si fa a partire da uno schema `pronto`, in una di tre forme: `punti`, `discorsivo`, `misto` (la via di mezzo). Usa solo quello che c'è nello schema e passa dallo stesso controllo degli altri testi (17.1).
+
+`GET /api/schemi/{id}` e le altre risposte con il `contenuto` hanno in più `"riassunti": {"stima_eur": 0.01, "fatti": [{"id": 4, "forma": "misto", "stato": "pronto"}]}` (`null` se lo schema non è pronto). Nella lista degli schemi è `null`.
+
+`POST /api/schemi/{id}/riassunti` `{"forma": "misto"}` → 201 `Riassunto` in `in_coda`. Uno per forma: se quella forma c'è già la restituisce così com'è; se si era fermata per un errore riparte. Schema non pronto: 409. Tetto superato: come per le lezioni.
+`GET /api/schemi/{id}/riassunti` → lista di `Riassunto`. `GET /api/riassunti/{id}` → `Riassunto`. `POST /api/riassunti/{id}/riprova`. `DELETE /api/riassunti/{id}`. Per rifarlo: `DELETE` e poi `POST`. `GET /api/riassunti/{id}/pdf` → `application/pdf`, con la firma (25).
+
+`Riassunto`: `{"id": 4, "schema_id": 3, "materia_id": 7, "forma": "misto", "titolo": "…", "stato": "pronto", "frase": null, "errore": null, "nota": null, "stima_eur": 0.01, "creato_il": "…", "pronto_il": "…", "parole": 480, "contenuto": {"parti": [{"titolo": "…", "paragrafi": ["…"], "punti": ["…"]}]}}`.
+`stato`: `in_coda` | `in_preparazione` | `pronto` | `errore`. Si chiede ogni 3 s finché è in lavorazione. Una novità `riassunto_pronto` o `riassunto_errore` avvisa quando finisce.
+In `punti` i `paragrafi` sono vuoti; in `discorsivo` i `punti` sono vuoti; in `misto` vengono prima i paragrafi e sotto i punti. `titolo` di una parte può essere `null`. `**grassetto**` come negli schemi.

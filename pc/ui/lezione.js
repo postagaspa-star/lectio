@@ -82,6 +82,12 @@
     if (st.eventoId === undefined) st.eventoId = st.eventi.length ? st.eventi[0].id : null;
     const ev = st.eventi.find((e) => e.id === st.eventoId);
     st.argomento = ev && ev.argomento ? ev.argomento : '';
+    // §33.2 "Ascolta questa parte": argomento e materiali arrivano già decisi dallo schema.
+    if (o.argomento) st.argomento = o.argomento;
+    if (Array.isArray(o.materiali)) {
+      st.auto = false;
+      st.manuali = o.materiali.filter((id) => st.materiale.some((x) => x.id === id && L.prontoDaUsare(x)));
+    }
     const predefinita = st.voci.find((v) => v.id === imp.voce_predefinita && v.disponibile !== false);
     st.voceVoluta = predefinita ? predefinita.id : null;
 
@@ -180,7 +186,7 @@
       clearTimeout(st.timerSugg);
       const n = seqSugg.nuova();
       const arg = st.argomento.trim();
-      if (!arg) {
+      if (!arg || o.materiali) {
         st.suggeriti = [];
         dopoCambioMateriale();
         return;

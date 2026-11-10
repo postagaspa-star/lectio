@@ -19,6 +19,7 @@ namespace Lectio.Interfaccia;
 public sealed class FinestraLectio : Form
 {
     private static readonly Regex FrammentoLezione = new(@"^lezione/\d{1,12}$", RegexOptions.CultureInvariant);
+    private static readonly Regex FrammentoStudio = new(@"^(materia/\d{1,12}(/schemi|/simulate)?|schema/\d{1,12}|simulata/\d{1,12}|riassunto/\d{1,12})$", RegexOptions.CultureInvariant);
 
     /// <summary>Le pagine che si possono aprire da fuori (clic su un avviso di Windows).</summary>
     private static readonly HashSet<string> Sezioni = new(StringComparer.Ordinal) { "oggi", "materie", "lezioni", "gemini", "impostazioni" };
@@ -70,11 +71,13 @@ public sealed class FinestraLectio : Form
         SystemEvents.UserPreferenceChanged += SuCambioTema;
         ponte.TemaCambiato += SuTemaScelto;
         ponte.Copia = CopiaNegliAppunti;
+        ponte.ChiediDoveSalvare = ChiediDoveSalvare;
         FormClosed += (_, _) =>
         {
             SystemEvents.UserPreferenceChanged -= SuCambioTema;
             ponte.TemaCambiato -= SuTemaScelto;
             ponte.Copia = null;
+            ponte.ChiediDoveSalvare = null;
         };
     }
 
@@ -102,6 +105,42 @@ public sealed class FinestraLectio : Form
     /// Copia negli appunti di Windows sul filo della finestra (gli appunti vogliono quello). Se un altro programma
     /// li tiene occupati si riprova qualche volta; se non va, false: la pagina lo dice.
     /// </summary>
+    private Task<string?> ChiediDoveSalvare(string nome)
+    {
+        var fatto = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Fai()
+        {
+            try
+            {
+                using var scelta = new SaveFileDialog
+                {
+                    Title = "Salva il PDF",
+                    Filter = "PDF (*.pdf)|*.pdf",
+                    DefaultExt = "pdf",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = nome,
+                };
+                fatto.TrySetResult(!IsDisposed && scelta.ShowDialog(this) == DialogResult.OK ? scelta.FileName : null);
+            }
+            catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException or System.ComponentModel.Win32Exception)
+            {
+                Log.Errore("finestra per salvare non aperta", e);
+                fatto.TrySetResult(null);
+            }
+        }
+        try
+        {
+            if (IsDisposed || !IsHandleCreated) fatto.TrySetResult(null);
+            else BeginInvoke(Fai);
+        }
+        catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException)
+        {
+            fatto.TrySetResult(null);
+        }
+        return fatto.Task;
+    }
+
     private bool CopiaNegliAppunti(string testo)
     {
         if (IsDisposed || !IsHandleCreated) return false;
@@ -131,7 +170,7 @@ public sealed class FinestraLectio : Form
     }
 
     internal static bool FrammentoValido(string? f) =>
-        !string.IsNullOrEmpty(f) && (Sezioni.Contains(f) || FrammentoLezione.IsMatch(f));
+        !string.IsNullOrEmpty(f) && (Sezioni.Contains(f) || FrammentoLezione.IsMatch(f) || FrammentoStudio.IsMatch(f));
 
     /// <summary>L'indirizzo iniziale: solo frammenti controllati qui (pagine note o lezione/numero).</summary>
     public static string IndirizzoIniziale(string? frammento) =>
@@ -356,6 +395,11 @@ public sealed class FinestraLectio : Form
 
     private CoreWebView2WebResourceResponse Risposta(RispostaPonte r)
     {
+        if (r.Byte != null)
+        {
+            return ambiente!.CreateWebResourceResponse(new MemoryStream(r.Byte), r.Stato, "OK",
+                $"Content-Type: {r.TipoContenuto ?? "application/octet-stream"}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff");
+        }
         var intestazioni = "Content-Type: application/json; charset=utf-8\r\nCache-Control: no-store";
         // Gli ultimi dati visti (server irraggiungibile): la pagina lo dice.
         if (r.DaMemoriaDel is DateTimeOffset quando) intestazioni += "\r\nX-Lectio-Memoria: " + quando.ToString("o", CultureInfo.InvariantCulture);

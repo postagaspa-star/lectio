@@ -38,6 +38,7 @@ import androidx.lifecycle.viewModelScope
 import eu.stgm.lectio.dati.Lezione
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.Oggi
+import eu.stgm.lectio.dati.Simulata
 import eu.stgm.lectio.dati.Sorgente
 import eu.stgm.lectio.logica.Formati
 import eu.stgm.lectio.logica.Preparazione
@@ -59,6 +60,7 @@ import eu.stgm.lectio.ui.SimboloLectio
 import eu.stgm.lectio.ui.StatoVuoto
 import eu.stgm.lectio.ui.TitoloPagina
 import eu.stgm.lectio.ui.comuni.PilloleStato
+import eu.stgm.lectio.ui.studio.SchedaLampo
 import eu.stgm.lectio.ui.tema.L
 import eu.stgm.lectio.ui.tema.materia
 import eu.stgm.lectio.visita.Bersagli
@@ -81,6 +83,10 @@ data class StatoOggi(
     val caricamento: Boolean = true,
     val errore: String? = null,
     val primaLettura: Boolean = false,
+    /** Una verifica simulata lasciata a metà: si riprende da qui (aspetto.md §36). */
+    val simulataInCorso: Simulata? = null,
+    /** Ci sono schede già sul telefono: Inizia funziona anche senza rete. */
+    val lampoSalvato: Boolean = false,
 )
 
 class OggiViewModel(private val sorgente: Sorgente) : ViewModel() {
@@ -95,6 +101,10 @@ class OggiViewModel(private val sorgente: Sorgente) : ViewModel() {
             val prossima = oggi.dato?.prossima?.lezione
             val dettaglio = if (prossima != null && prossima.pronta) sorgente.lezione(prossima.id).dato else null
             val voci = (sorgente.voci() as? eu.stgm.lectio.rete.Esito.Ok)?.dato.orEmpty()
+            val inCorso = materie.dato.orEmpty().filter { it.conteggi.simulate > 0 }
+                .firstNotNullOfOrNull { m -> sorgente.simulate(m.id).dato?.firstOrNull { it.inCorso } }
+            // Le schede di oggi restano sul telefono: così il ripasso parte anche senza rete.
+            val lampo = if ((oggi.dato?.lampo?.daFare ?: 0) > 0) sorgente.lampo(null) else null
             _stato.update {
                 it.copy(
                     oggi = oggi.dato ?: it.oggi,
@@ -104,6 +114,8 @@ class OggiViewModel(private val sorgente: Sorgente) : ViewModel() {
                     caricamento = false,
                     errore = if (oggi.dato == null) oggi.errore else null,
                     primaLettura = true,
+                    simulataInCorso = inCorso,
+                    lampoSalvato = lampo?.dato?.carte?.isNotEmpty() == true,
                 )
             }
         }
@@ -122,6 +134,8 @@ data class AzioniOggi(
     val nuovaMateria: () -> Unit = {},
     val apriMaterie: () -> Unit = {},
     val visita: () -> Unit = {},
+    val lampo: () -> Unit = {},
+    val apriSimulata: (Long) -> Unit = {},
 )
 
 /** Oggi (aspetto.md §3, prototipo Main.dc.html): parte dalla prossima verifica. */
@@ -208,6 +222,30 @@ fun OggiScreen(vm: OggiViewModel, azioni: AzioniOggi, esempio: Boolean, senzaRet
                 }
             }
         }
+
+        s.simulataInCorso?.let { q ->
+            val m = s.materie.firstOrNull { it.id == q.materiaId }
+            Scheda {
+                Etichetta("Riprendi")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Piastrella(m?.colore)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(q.nome, style = L.testi.forte, color = c.testo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull(m?.nome, "Verifica simulata").joinToString(" · "), style = L.testi.secondario, color = c.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    PulsanteSecondario("Riprendi", { azioni.apriSimulata(q.id) }, altezza = 48.dp)
+                }
+            }
+        }
+
+        SchedaLampo(
+            o.lampo.daFare, o.lampo.minuti, !senzaRete || esempio || s.lampoSalvato, "Ripasso lampo · niente per oggi",
+            {
+                visita?.azione(Bersagli.LAMPO_OGGI)
+                if (visita?.attiva != true) azioni.lampo()
+            },
+            bersaglioInizia = true,
+        )
 
         o.daRaccontare.forEach { r ->
             Scheda {

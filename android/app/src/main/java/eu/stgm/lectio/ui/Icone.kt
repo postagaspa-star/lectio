@@ -78,6 +78,16 @@ object Icone {
     val Calendario = icona("calendario", 2f, listOf(rettangolo(3.5f, 5f, 17f, 15f, 3f), "M3.5 10h17M8 3v4M16 3v4"))
     val Apri = icona("apri", 2f, listOf("M14 4h6v6", "M10 14L20 4", "M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"))
 
+    // Schemi, Non ho capito, Ripasso lampo, Verifica simulata, Riassunti (aspetto.md §40).
+    val Lampo = icona("lampo", 2f, listOf("M13 2 3 14h9l-1 8 10-12h-9z"))
+    val Domanda = icona("domanda", 2f, listOf("M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z", "M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3", "M12 17h.01"))
+    val Indice = icona("indice", 2f, listOf("M8 6h13", "M8 12h13", "M8 18h13", "M3 6h.01", "M3 12h.01", "M3 18h.01"))
+    val Orologio = icona("orologio", 2f, listOf("M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z", "M12 6v6l4 2"))
+    val Confronta = icona("confronta", 2f, listOf("M17 3l4 4-4 4", "M3 7h18", "M7 21l-4-4 4-4", "M21 17H3"))
+    val Quasi = icona("quasi", 2f, listOf("M5 12h14"))
+    val Riassunto = icona("riassunto", 2f, listOf("M21 6H3", "M17 10H3", "M21 14H3", "M17 18H3"))
+    val Su = icona("su", 2f, listOf("M18 15l-6-6-6 6"))
+
     // Lettore (pieni come nel prototipo).
     val Play = icona("play", 0f, emptyList(), listOf("M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z"))
     val Pausa = icona("pausa", 0f, emptyList(), listOf(rettangolo(6f, 4.5f, 4f, 15f, 1.2f), rettangolo(14f, 4.5f, 4f, 15f, 1.2f)))

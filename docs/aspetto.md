@@ -86,6 +86,16 @@ Nel tema scuro il tenue è il pieno al 22% sulla superficie scura e il testo è 
 | `verde` | `#2B8A3E` | `#EAF6EC` | `#1F6A30` | Inglese |
 | `arancio` | `#E8590C` | `#FDEDE3` | `#B4440A` | Spagnolo |
 | `oliva` | `#5C940D` | `#EFF6E3` | `#466F0B` | Scienze naturali |
+| `giada` | `#00A089` | `#DFF6F0` | `#026C5C` | Fisica |
+| `senape` | `#928100` | `#F4F1DD` | `#695D02` | Filosofia |
+| `orchidea` | `#C04EC8` | `#FAEBFA` | `#8A2C91` | Storia dell'arte |
+| `prugna` | `#A34A80` | `#FEEAF4` | `#883E6B` | Latino |
+| `cacao` | `#916748` | `#F9EEE6` | `#76543A` | Geografia |
+| `lavagna` | `#636F8E` | `#ECF0FA` | `#525C75` | Educazione civica |
+| `salvia` | `#7B9575` | `#EBF3EA` | `#4E634A` | Scienze motorie |
+| `lavanda` | `#A380C8` | `#F4ECFE` | `#694D86` | Religione |
+
+Valori completi delle 8 nuove nel tema scuro, contrasti e scelta del colore: sezione 37.
 
 ### Forme, ombre, movimento
 - Griglia 4/8 px. Margini laterali 20 px sul telefono, 32 sul PC.
@@ -367,3 +377,779 @@ tranne le barrette del capitolo in corso (lente, ferme con meno animazioni).
 - I soldi: nessuna lezione parte se sforerebbe il tetto; il costo si vede prima; la voce gratis è la strada.
 - I dati: verifiche e appunti restano sul NAS; nel repo pubblico solo dati finti (Prof. Rossi, Prof. Bianchi).
 - Ogni esito si vede: niente errori muti, niente attese senza fase.
+
+## 30. Le schermate nuove: regole comuni
+
+Le sezioni 30-40 aggiungono Schemi, Lettura dello schema, "Non ho capito", Ripasso lampo, Verifica simulata e i 16
+colori. Partono da 30 perché nei commenti del codice "§15" e "§16" vogliono già dire contratto API. Campi, stati e
+indirizzi stanno in `docs/contratto-api.md` §17-22; qui ci sono solo aspetto e comportamento. Non è un redesign:
+stessa faccia di Nuova lezione e del Lettore (Figtree, schede bianche, pillole, riepilogo vivo). Non c'è un
+prototipo per queste pagine: valgono le misure scritte qui.
+
+### 30.1 Principi (dalla ricerca)
+
+1. **Si legge come un libro.** Righe da 60-75 lettere, mai oltre 80
+   ([Baymard](https://baymard.com/research-articles/line-length-readability)). Misurato sul file di Figtree con un
+   testo italiano: a 18 px una lettera è larga in media 7,9 px, quindi 580 px sono 73 lettere. Più larga no.
+2. **Grassetto e foto servono a capire, non ad abbellire.** Il grassetto segna solo i termini chiave, una foto sta
+   accanto al testo di cui parla con la didascalia attaccata, niente che non aiuti
+   ([principi di Mayer](https://services.dartmouth.edu/TDClient/1806/Portal/KB/PrintArticle?ID=171655)). Quindi
+   niente foto d'apertura decorative: "Tante immagini" vuol dire più immagini utili.
+3. **Si mostra da dove viene, non quanto è sicuro.** Mai percentuali di sicurezza: un segno "Libro, pag. 42"
+   controllabile con un'occhiata
+   ([ZURB](https://radar.zurb.com/article/your-ai-feature-works-nobody-can-tell-if-its-lying),
+   [NotebookLM](https://blog.google/technology/ai/notebooklm-goes-global-support-for-websites-slides-fact-check/)).
+4. **"Non c'è" è una risposta, non un errore.** Se i documenti non coprono qualcosa si dice chiaro, con un tono
+   calmo (mai rosso) e il passo dopo: **Aggiungi materiale**. Ciò che esce si chiama per nome: "stima", non "voto".
+5. **L'indice si vede sempre.** Sul PC colonna ferma con la parte corrente accesa, tutte le parti dentro; sul
+   telefono un indice sticky nascosto dietro un'icona viene ignorato, quindi la barra porta il nome della parte
+   ([NN/g](https://www.nngroup.com/articles/table-of-contents/)).
+6. **Fogli solo per cose brevi, mai uno sopra l'altro.** X sempre visibile (la maniglia molti non la vedono), il
+   tasto Indietro chiude ([NN/g](https://www.nngroup.com/articles/bottom-sheet/)). Le fonti si aprono dentro il
+   foglio, non in un altro foglio.
+7. **Ci si giudica in tre parole, sempre allo stesso posto.** La risposta si apre con un gesto voluto, la domanda
+   resta visibile, i pulsanti non si spostano
+   ([schede con autovalutazione](https://screensdesign.com/articles/flashcard-answer-reveal-self-grading-ux/)). La
+   parola di mezzo deve spiegarsi da sola: è quella che si usa male
+   ([Anki](https://forums.ankiweb.net/t/how-to-prevent-users-from-misusing-hard-ideas-are-welcome/49092?page=8)).
+8. **Allenamento, non esame.** Le verifiche di prova abbassano l'ansia (g = -0,52 su 24 studi,
+   [Yang e altri 2023](https://link.springer.com/article/10.1007/s10648-023-09801-w)) se la posta è bassa e si possono
+   rifare ([Hechinger](https://hechingerreport.org/proof-points-lowering-test-anxiety-in-the-classroom/)). Il conto
+   alla rovescia al secondo agita, quindi solo minuti, sottile e nascondibile
+   ([Johns Hopkins](https://ctl.jhsph.edu/blog/posts/redesigned-countdown-timer/),
+   [scelta del
+   timer](https://sigcse2023.sigcse.org/details/sigcse-ts-2023-papers/55/Providing-a-Choice-of-Time-Trackers-on-Online-Assessments),
+   [WCAG 2.2.1](https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)).
+9. **Si vede sempre se è salvato.** Stato visibile in ogni momento e mai un pulsante Salva accanto al salvataggio
+   automatico ([saasui](https://www.saasui.design/blog/saas-autosave-save-states-ux-patterns),
+   [Primer](https://primer.style/ui-patterns/saving)).
+
+### 30.2 Testi nuovi nella scala tipografica
+
+| Ruolo | Dimensione / peso | Dove |
+|---|---|---|
+| Testo di lettura | PC 18 / 400, interlinea 1,6; telefono 17 / 400, interlinea 1,55 | paragrafi dello schema, risposta di "Non ho capito" |
+| Titolo di una parte | PC 24 / 800, telefono 22 / 800, interlinea 1,25 | titolo di una sezione dello schema |
+| Titolo nel testo | 19 / 800 | `titolo` di un paragrafo ("Descrizione", "Analisi") |
+| Segno di fonte | 13 / 500, Testo tenue | "Libro, pag. 42" |
+| Voto stimato | 44 / 800, spaziatura -0,8, cifre tabellari | risultati della verifica simulata |
+
+Il Testo molto tenue resta solo da 14 px in su (sezione 1): segni di fonte e crediti delle foto usano il Testo tenue.
+**Fondo blocco** (dentro una scheda bianca): chiaro `#F5F4F0`, scuro `#26262C`.
+
+### 30.3 Stati che valgono ovunque
+
+- **Costi:** ogni pulsante che spende dice quanto, con la stima del server (`Prepara lo schema · 0,08 €`). Finché la
+  stima
+  non arriva il pulsante è spento e senza prezzo. Stessa barra del mese di Nuova lezione. Unica eccezione "Non ho
+  capito": il
+  server non dà una stima prima, costa meno di un centesimo e lo si dice dopo.
+- **Errori:** la frase del server e **Riprova**; il testo scritto non si perde mai.
+- **Senza rete:** la regola della sezione 10 (azioni spente con la frase del perché). I casi particolari sono nelle
+  singole sezioni.
+- **Modalità prova:** pillola "Prova" e costi a 0, come in Nuova lezione.
+- **Tema scuro:** tutto con i gettoni della sezione 1; niente ombre, superfici più chiare.
+
+## 31. Dove si entra
+
+### 31.1 Oggi
+
+Tra **Riprendi** e **Dopo la verifica** una scheda **Ripasso lampo** (raggio 22, padding 14/16, intera toccabile,
+altezza
+minima 72): piastrella 44 con Superficie 2 e icona `lampo` color Testo; "Ripasso lampo" 17/700; sotto "8 schede ·
+circa 3
+min" 14/500 tenue (da `lampo.da_fare` e `lampo.minuti`, "1 scheda" al singolare); a destra pulsante secondario
+**Inizia**
+(accento tenue, alto 48).
+- `da_fare` a 0: una riga alta 56 con la spunta verde e "Ripasso lampo · niente per oggi" 15/600 tenue. Non si tocca.
+- Mai conteggi di giorni, serie o "hai saltato".
+- Sul telefono senza rete, se ci sono schede salvate, **Inizia** resta acceso (sezione 35.5).
+
+### 31.2 Materia
+
+- In testa alla sezione **Da ripassare**, la stessa scheda per quella materia ("5 schede · circa 2 min", da
+  `conteggi.lampo`, minuti = schede × 20 s arrotondati in su). Con 0: "Niente per oggi". La sezione ora compare
+  sempre,
+  anche senza domande da ripassare.
+- La sezione **Lezioni** diventa un binario a tre segmenti uguali, alto 48: **Lezioni** · **Schemi** · **Simulate**.
+  Si parte da Lezioni; da una notifica si parte dal segmento giusto.
+- Il pulsante pieno fisso in basso segue il segmento: **Nuova lezione** · **Nuovo schema** · **Nuova verifica
+  simulata**
+  (dissolvenza 200 ms).
+- **Riga di uno schema** (come le righe delle lezioni): piastrella con icona `testo` color pieno della materia, titolo
+  16/700 (al massimo 2 righe), sotto 14/500 tenue secondo lo stato:
+  pronto "A capitoli · Completo" (forma "A capitoli" o "Schede per opera", `auto` non si scrive; la lista non porta il
+  contenuto, quindi qui niente parti né minuti);
+  `in_coda` "In coda"; `in_preparazione` la `frase` del server e barra sottile `fatto`/`totale`; `errore` "Non è
+  riuscito"
+  (testo errore) e **Riprova**; `annullato` "Annullato". Menu con i puntini: **Scarica PDF** (se pronto),
+  **Elimina** (con conferma).
+- **Riga di una simulata:** piastrella con icona `verifica`. `pronta` "Pronta · 50 min"; `in_corso` "A metà"
+  e pulsante secondario **Riprendi**; `in_correzione` "La sto correggendo"; `corretta` "Corretta" e, se la lista porta
+  `esito`, "· stima circa 6,5"; `errore` come sopra. Menu: **Scarica PDF**, **Elimina** (con conferma).
+- Vuoti: "Nessuno schema ancora", "Nessuna verifica simulata ancora" (15/500 tenue). Il pulsante è già quello fisso.
+
+### 31.3 Lettore
+
+Nella riga sotto i comandi, dopo **Testo**: pillola **Non ho capito** (alta 48, icona `domanda` 18, 14/700,
+Superficie 2).
+A 360 dp ci stanno tutte e tre (circa 270 dp). Non compare mentre è aperta la scheda di una domanda.
+
+## 32. Nuovo schema
+
+Stessa finestra di Nuova lezione sul PC (stesse classi `nl-*`, stessa regola sul contenitore: riepilogo a destra da
+940 px,
+sotto più barra ferma se è più stretto), pagina sul telefono. Intestazione: X tonda, "Nuovo schema" (PC 30/800,
+telefono
+26/800), pillola della materia. Riepilogo a destra largo 380 px.
+
+1. **Su cosa** — identica alla sezione 6: ARGOMENTO e pillole PER (manda `evento_id` se scelta una data).
+2. **Da quale materiale** — identica alla sezione 6: stesse pillole, ricerca, gruppi, suggeriti.
+3. **Come lo vuoi** — tre gruppi:
+   - FORMA. PC: tre schede affiancate (classe `nl-scheda`). Telefono: binario con la frase sotto, colonne `1,6fr 1fr
+     1fr`.
+
+     | `forma` | PC | Telefono | Frase |
+     |---|---|---|---|
+     | `auto` (scelta di partenza) | Lo decide Lectio | Lo decide Lectio | Scelgo io la forma adatta a questo argomento |
+     | `capitoli` | A capitoli | A capitoli | Una parte dopo l'altra, dall'inizio alla fine |
+     | `schede` | Schede per opera o autore | Schede | Una scheda per ogni opera o autore: dati, descrizione, analisi |
+
+   - LIVELLO. Binario **Essenziale** · **Completo** (di partenza) · **Approfondito**, colonne `1fr 1fr 1,25fr`.
+   - LE TUE INDICAZIONI. Come la sezione 6: area di testo, contatore "n / 600", segnaposto "Per esempio: metti una
+     tabella
+     con le date". Spunti a pillola che aggiungono o tolgono una frase:
+
+     | PC | Telefono | Frase |
+     |---|---|---|
+     | Tante immagini | Tante immagini | Metti tante immagini, quando aiutano a capire. |
+     | Spiegalo da zero | Da zero | Spiegalo partendo da zero, come se non l'avessi mai studiato. |
+     | Insisti su date e nomi | Date e nomi | Insisti su date e nomi. |
+     | Confronta gli autori | Confronta | Confronta gli autori tra loro: cosa cambia da uno all'altro. |
+     | Descrivi bene le opere | Descrivi le opere | Descrivi bene le opere, come se le avessi davanti. |
+     | Tanti esempi | Esempi | Usa tanti esempi concreti. |
+     | Segui il prof | Come il prof | Dai più spazio a quello che il prof chiede di solito. |
+
+**Riepilogo** (stessi pezzi della sezione 6):
+- etichetta "IL TUO SCHEMA", titolo 24/800 "Schema essenziale" / "Schema completo" / "Schema approfondito";
+- sotto 15/600 tenue la forma ("A capitoli" · "Schede per opera o autore" · "La forma la scelgo io");
+- righe SU · MATERIALE · INDICAZIONI · PER · IMMAGINI ("circa 3", da `immagini`; riga assente se 0) · PRONTO ("in
+  circa 4 min");
+- cosa manca in ambra 700 come in sezione 6;
+- barra del mese, pulsante **Prepara lo schema · 0,08 €** (56, raggio 16). Spento se manca qualcosa; con
+  `consentita: false`
+  sotto la frase `motivo`.
+
+Telefono e finestra stretta: barra ferma con "Completo · A capitoli · 3 materiali" (15/800, una riga con i puntini),
+"mese: 0,29 € di
+2 €" (13/600) e il pulsante.
+
+Dopo il tocco: si apre la pagina dello schema in preparazione (33.9). Senza rete: "Senza rete non si può preparare
+uno schema."
+
+## 33. Lettura dello schema
+
+Una pagina vera (sul PC nel contenuto, menu laterale visibile; sul telefono a tutto schermo, senza barra in basso,
+con il
+mini-lettore se c'è una lezione caricata).
+
+### 33.1 Disposizione
+
+**PC, contenuto da 900 px in su (a 1280: 976 utili).** Griglia centrata: indice 232 px, spazio 40, schede 672 px.
+Colonna del
+testo `max-width: 580px`: la scheda ha padding 28 a sinistra e 64 a destra (lì sta il pulsante al margine, 33.5).
+
+**PC, contenuto sotto i 900 px (finestra minima 900).** Niente colonna indice: una pillola ferma in alto "Indice · 3
+di 7 ·
+Titolo" (come la barra del telefono) apre il foglio dell'indice. Le schede prendono tutta la larghezza con lo stesso
+padding: il
+testo arriva a 504 px, 64 lettere.
+
+**Telefono.** Margine 12, scheda raggio 20, padding 16: a 360 dp restano 304 dp (41 lettere), a 390 dp 334. In
+orizzontale o su
+tablet il testo si ferma a 580 dp, centrato.
+
+### 33.2 Testata
+
+Riga in alto: freccia indietro (48), pillola della materia, a destra **Scarica PDF** (PC: pillola con icona e
+parola, Superficie 2;
+telefono: tondo 48 con icona `scarica`) e menu puntini (**Elimina**, con conferma). Sotto: titolo (PC 30/800,
+telefono 26/800),
+e "A capitoli · Completo · 8 parti · 12 min di lettura" 14/500 tenue.
+
+Poi, se serve, la **nota di ciò che manca** (33.7), e sul telefono l'**indice nel testo**: scheda con etichetta
+INDICE e righe da
+48 dp (al massimo 6, poi **Mostra tutte (12)**). Sul PC c'è già la colonna.
+
+Ogni sezione del contenuto è una scheda bianca (raggio 22, 16 tra una e l'altra). In testa: tondo 28 con `n` (tenue
+e testo della
+materia, 14/800), titolo. **Ascolta questa parte**: pillola Superficie 2, icona `lezioni` 18, 14/700, alta 44
+(telefono 48); sul
+PC a destra del titolo se c'è posto, sul telefono su una riga sua sotto il titolo. Apre Nuova lezione con
+`argomento` = titolo della
+parte e i materiali dello schema già spuntati.
+
+### 33.3 I blocchi
+
+Distanze: 20 tra blocchi, 16 tra due paragrafi. Tipi sconosciuti: si saltano. `**parola**` diventa peso 700, stesso
+colore, mai
+colori né sottolineature. Allineato a sinistra, mai giustificato.
+
+- **`paragrafo`** — Testo di lettura. `titolo` se c'è: Titolo nel testo sopra.
+- **`punti`** — pallino 7 px pieno della materia, rientro 18, 8 tra le voci. `titolo`: 16/700.
+- **`passaggi`** — in colonna, anche sul PC. Ogni voce: Fondo blocco, raggio 12, padding 10/14, 16/600. Tra una voce
+  e l'altra
+  freccia `giu` 18 px (testo della materia) con 4 sopra e sotto. Ultima voce 16/800. Non si tagliano mai.
+- **`definizione`** — fondo tenue della materia, raggio 14, padding 12/14; `termine` 16/800 testo della materia;
+  `testo` 16/500
+  colore "scuro" della materia (`--m-scuro`).
+- **`tabella`** — `titolo` 16/700. Intestazione 12/700 maiuscola tenue, celle 15/500 con padding 10/12, righe
+  separate da 1 px
+  `--riga`, prima colonna 15/700. Sotto i 480 px con 4 o più colonne ogni riga diventa una schedina (Fondo blocco,
+  raggio 12): prima
+  cella 16/700 e sotto "ETICHETTA valore". Con 3 o meno resta tabella e il testo va a capo.
+- **`prof`** — fondo avviso tenue, barra sinistra 3 px testo avviso, raggio 14, padding 12/14. Etichetta "DAL PROF"
+  (12/700)
+  con icona `verifica` 16, `testo` 16/600 testo avviso. Mai rosso, anche se il testo è "qui hai sbagliato".
+- **`immagine`** — 33.6.
+- **Scheda opera** (forma `schede`, sezione con `campi`) — la prima `immagine` e i `campi` stanno insieme in testa:
+  PC foto a sinistra
+  (240 px), a destra righe con l'etichetta maiuscola 12/700 tenue larga 92 px e il valore 16/600; sotto i 480 px
+  foto a tutta
+  larghezza e poi i campi. I paragrafi "Descrizione" e "Analisi" seguono con Titolo nel testo.
+
+### 33.4 Da dove viene (segno di fonte)
+
+Sotto il blocco, 4 px più in basso, su una riga sua: l'`etichetta` delle fonti (Segno di fonte): "Libro, pag. 42"
+oppure "Libro, pag.
+42 · Verifica del 12/10"; al massimo due, poi "+1". Nessun fondo, nessuna icona. Se blocchi di fila hanno le stesse
+fonti, il segno sta solo
+sull'ultimo della serie. Niente `fonti`: niente segno.
+
+Sul telefono a riposo è testo semplice: si tocca dalla riga degli strumenti (33.5). Sul PC è un link (sottolineato
+al passaggio).
+Una fonte: apre il materiale (5.1). Più fonti: foglio con una riga per fonte. Da una pagina di materiale si torna
+indietro e si è
+nello stesso punto.
+
+### 33.5 "Non ho capito" su un blocco
+
+Vale per `paragrafo`, `punti`, `passaggi`, `definizione`, `prof`.
+
+**Telefono.** Un tocco sul blocco: il blocco prende il Fondo blocco (raggio 12) e sotto scende (200 ms) la riga
+degli strumenti:
+pillola accento tenue **Non ho capito** (alta 48, icona `domanda`, 14/700) e pillola Superficie 2 con la fonte
+("Libro, pag. 42", al
+massimo il 45% della larghezza con i puntini; più fonti: "2 fonti"). Una sola riga aperta alla volta; un altro tocco
+la chiude.
+
+**PC.** Al passaggio del mouse o col fuoco da tastiera il blocco prende il Fondo blocco e nel margine destro compare
+un tondo 40 con
+`domanda` ed etichetta "Non ho capito" al passaggio. Il testo resta selezionabile.
+
+### 33.6 Immagini
+
+Larghezza piena della colonna, raggio 16, proporzioni vere, altezza massima 420 sul PC e 300 sul telefono. Subito
+sotto (8 px) `didascalia`
+14/600, poi `credito` 12/500 tenue. Un tocco apre la foto a tutto schermo (si ingrandisce con due dita o la rotella,
+X per chiudere).
+
+In alto a destra della foto un tondo da 40 con i puntini (area di tocco 48, fondo `rgba(20,20,30,.55)`, icona
+bianca): sempre visibile sul
+telefono, al passaggio o col fuoco sul PC. Menu:
+- **Cambia foto**: la foto pulsa con la scritta "Cerco un'altra foto", poi la nuova entra in dissolvenza (250 ms).
+  Se non ce n'è (404) resta quella
+  di prima e compare l'avviso breve "Non ne ho trovate altre".
+- **Togli foto**: sotto la foto conferma in linea "Toglierla?" con **Togli** e **Lascia**; poi il blocco si richiude
+  (220 ms).
+
+Se la foto non si carica: riquadro Fondo blocco, raggio 16, alto 160, "Foto non disponibile" e **Riprova**. La
+didascalia resta.
+
+### 33.7 Quando qualcosa non si è trovato
+
+Se `nota`, `copertura.mancanti` o `avvisi` hanno contenuto: subito sotto il titolo una scheda con fondo avviso
+tenue, raggio 18, padding
+14/16, testo avviso:
+- icona `domanda`, "Non ho trovato tutto" 16/800;
+- `nota` 15/500; poi "Nei tuoi documenti non c'è:" 15/700 con `mancanti` a punti (al massimo 5, poi "e altri 3");
+- `avvisi` uno per riga 15/500;
+- pulsante secondario **Aggiungi materiale** (apre il foglio della sezione 5).
+
+Se è tutto a posto questa scheda non esiste, e neanche il conteggio dei concetti.
+
+### 33.8 Indice e posizione
+
+- **PC:** colonna ferma (`sticky`, in alto 24 px, scorre da sola se è più alta). Etichetta INDICE, una riga per
+  parte, tutte: 15/600 tenue, al
+  massimo 2 righe, raggio 10, alta almeno 40. Parte corrente: fondo accento tenue, testo accento tenue, 800.
+  Scorrendo si accende quella giusta e la
+  colonna la tiene in vista.
+- **Telefono:** barra di lettura ferma in basso, alta 60 più lo spazio di sistema, Superficie, riga sopra 1 px.
+  Tutta toccabile: icona `indice`,
+  pillola "3 di 7" (13/700, cifre tabellari), titolo della parte 15/700 su una riga con i puntini, freccia in su.
+  Non si nasconde scorrendo.
+- **Foglio dell'indice** (telefono e PC stretto): "Indice" 21/800, X; righe alte almeno 56 con tondo del numero e
+  titolo fino a 2 righe; parte
+  corrente come sul PC. Si apre già portato sulla parte corrente.
+- Salto: scorrimento morbido 300 ms (senza animazioni: subito). Dopo un salto, pillola "Torna dov'eri" per 5 s
+  (sezione 0, punto 5).
+- Riaprendo lo schema si riparte dalla parte letta per ultima, senza dirlo.
+- **In fondo allo schema**, se `carte` > 0: scheda "12 schede sono già in Ripasso lampo." con pulsante secondario
+  **Ripassa adesso**.
+
+### 33.9 Stati
+
+- **In caricamento:** tre segnaposto che pulsano.
+- **`in_coda` / `in_preparazione`:** vista come In preparazione di una lezione: titolo, la `frase` del server, barra
+  `fatto`/`totale`,
+  pulsante testo **Annulla**. Si può uscire; notifica "Lo schema di Storia è pronto" (`schema_pronto`) o l'errore
+  (`schema_errore`).
+- **`errore`:** la frase `errore`, **Riprova** (`riprova`, riparte da dove era), pulsante testo **Elimina**.
+- **`sezioni` vuoto:** "Nei documenti scelti non ho trovato abbastanza per uno schema." e **Scegli altro materiale**
+  (Nuovo schema con i campi
+  già compilati).
+- **Scarica PDF:** l'etichetta diventa "Preparo il PDF…" e il pulsante si spegne. PC: finestra Salva con nome, poi
+  avviso "PDF salvato" con **Apri**.
+  Telefono: va nei Download, poi avviso "PDF nei Download" con **Apri**. Errore: frase del server e **Riprova**.
+- **Senza rete:** ogni schema aperto almeno una volta resta sul dispositivo (testo e foto) e si legge; **Non ho
+  capito**, **Ascolta questa
+  parte**, **Scarica PDF**, **Cambia foto**, **Togli foto** spenti con pillola "Senza rete" in alto. Uno schema mai
+  aperto: "Si apre quando
+  torna la rete." e **Riprova**.
+
+Il PDF lo fa il server: stessi blocchi, niente pulsanti; segni di fonte e crediti restano.
+
+## 34. "Non ho capito"
+
+Foglio dal basso, uguale da uno schema e dal Lettore (PC: `apriFoglio`, largo 600, Esc chiude). Nessun altro foglio
+sopra. La parte importante sta in basso.
+
+**Dall'alto:** maniglia; "Non ho capito" 21/800 e X tonda (48).
+**Passaggio:** riquadro Fondo blocco, raggio 14, padding 10/12, 15/500, massimo 3 righe con i puntini; un tocco lo
+apre tutto.
+- Da uno schema: il testo del blocco (è il `passaggio` che si manda, con `voci` una per riga; `sezione` è la `n`
+  della parte).
+- Dal Lettore: l'audio va in pausa; sopra il riquadro etichetta "AL MINUTO 5:12 · LA CRISI DEL TRECENTO" (minuto e
+  capitolo). Il testo arriva col
+  `passaggio` della risposta; finché non c'è, solo l'etichetta. Si chiude e l'audio riparte da lì, se stava suonando.
+
+**In basso, fermi sopra la tastiera** (è l'unica zona da raggiungere col pollice):
+1. Tre spunti (pillole alte 44, vanno a capo) che riempiono il campo: **Più semplice** ("Spiegalo in modo più
+   semplice.") · **Un esempio** ("Fammi un
+   esempio.") · **Una parola** ("Cosa vuol dire questa parola?").
+2. Campo su una riga che cresce fino a 3 (52, 16 px, Superficie 2, raggio 14), segnaposto "Cosa non ti è chiaro".
+   Tastiera chiusa all'inizio.
+   Contatore solo da 260 ("280 / 300").
+3. Pulsante pieno **Spiegamelo** (56), sempre acceso: il campo è facoltativo. PC: Invio manda, Maiusc+Invio va a capo.
+
+**Attesa** (fino a 40 s): al posto dei comandi tre righe segnaposto che pulsano e "Rileggo i tuoi documenti…"
+15/600; dopo 15 s
+"Ci vuole ancora qualche secondo". La X resta. Il foglio può salire fino all'88% (250 ms) quando arriva la risposta.
+
+**Risposta** (`trovato: true`):
+- `risposta` in Testo di lettura, sopra il piede.
+- Etichetta "DA DOVE L'HO PRESO" e una riga per `fonti` (alta 56): icona del tipo, `etichetta` 15/700, `titolo`
+  13/500 tenue, freccia. Apre il materiale come
+  pagina; tornando indietro il foglio è ancora lì con la risposta.
+- "Costata meno di 1 cent" 13/500 tenue in fondo (sotto 0,01 €; altrimenti il costo).
+- Piede fermo: **Ho capito** (pieno) e **Non ancora** (secondario), metà ciascuno, 52. **Non ancora** rimette campo
+  e **Spiegamelo** sotto la risposta; la nuova
+  si aggiunge sotto e ci si porta lì.
+
+**Non c'è** (`trovato: false`): riquadro ardesia tenue (`--ardesia-tenue`, `--ardesia-testo`), raggio 18, padding
+14/16, icona `domanda`, "Nei tuoi documenti non
+c'è" 16/800, sotto la `risposta` del server (dice cosa manca). Piede: **Aggiungi materiale** (pieno; chiude questo
+foglio e apre quello della sezione 5) e **Chiudi**
+(secondario). Niente spiegazione a memoria.
+
+**Errori:** la frase del server e **Riprova**, testo del campo tenuto. Tetto finito: la frase del server. **Senza
+rete:** **Spiegamelo** spento con "Senza rete non posso
+rileggere i tuoi documenti."
+
+## 35. Ripasso lampo
+
+### 35.1 Disposizione
+
+**Telefono:** pagina intera senza barra in basso, margini 16. **PC:** finestra larga `min(640px, 100%)`, alta
+`calc(100vh - 48px)`. Dall'alto:
+- Riga: X (48), in mezzo "3 di 12" 13/600 cifre tabellari, a destra **Annulla** (compare dopo il primo esito) e menu
+  puntini (**Togli questa scheda**: conferma in linea
+  "Toglierla per sempre?" con **Togli** e **Lascia**).
+- Barra sottile 4 px (binario Superficie 2, accento) a tutta larghezza; avanza in 250 ms.
+- **Scheda** (raggio 22, padding 20, in rilievo, alta almeno metà dello spazio, ancorata in alto, scorre da sola):
+  pillola della materia (`materia`, `colore`); `domanda` 22/800 interlinea 1,3.
+- **Zona in basso** alta 72 più lo spazio di sistema, ferma: stessa posizione per "Mostra la risposta" e per i tre
+  esiti.
+
+### 35.2 Una scheda
+
+1. **Domanda.** Il pulsante pieno **Mostra la risposta** (58, a tutta larghezza) sta nella zona in basso. Prima del
+   tocco la risposta non va nemmeno nei dati letti dai lettori di schermo.
+2. **Risposta.** Sotto la domanda, che resta dov'è: riga 1 px, etichetta "RISPOSTA", `risposta` 17/500 interlinea
+   1,5, segno di fonte (33.4) se ci sono `fonti`. Entra con dissolvenza + 8 px in 220 ms. Il fuoco va alla risposta.
+3. **Esito.** Nella stessa zona, tre pulsanti uguali (gap 8, raggio 18, alti almeno 72, padding laterale 4): icona
+   22 sopra la
+   parola, 15/700 da 390 dp in su e 14/700 sotto.
+
+| Pulsante | `esito` | Icona | Fondo chiaro / scuro | Testo chiaro / scuro |
+|---|---|---|---|---|
+| Non lo sapevo | `non_sapevo` | `ripeti` | `#EEF0F2` / `#2A2D31` | `#343A40` / `#C9CED4` |
+| Quasi | `quasi` | `quasi` | `#FFF4E0` / `#3A2C14` | `#8A5506` / `#FFC56B` |
+| Lo sapevo | `sapevo` | `spunta` | `#EAF6EC` / `#1F3327` | `#1F6A30` / `#8FD9A0` |
+
+Mai accento né rosso: nessuna risposta è "quella da premere". I colori sono quelli di Giusta / Quasi / Da rivedere
+del Lettore.
+
+- **Doppio tocco:** i tre pulsanti non rispondono per i primi 300 ms, così un doppio tocco su "Mostra la risposta"
+  non dà un voto per sbaglio.
+- **Cambio scheda:** quella finita esce a sinistra (-24 px e dissolvenza, 180 ms), la nuova entra da destra (240
+  ms). Niente gesti per dare l'esito.
+- **Annulla:** l'ultimo esito si manda al server solo quando arriva l'esito della scheda dopo o quando si esce.
+  **Annulla** lo butta e riporta la scheda con la risposta aperta. Una volta sola.
+- **PC, tastiera:** Spazio mostra la risposta; 1, 2, 3 danno l'esito; Esc esce. Tasto disegnato piccolo (12/700)
+  nell'angolo di ogni pulsante.
+- **Uscire a metà:** nessuna conferma; quello fatto è salvato.
+
+### 35.3 Fine
+
+Niente festa, niente complimenti. Scheda centrata: "Ripasso finito" 24/800; "12 schede in 3 minuti" 14/500 tenue;
+tre riquadri affiancati coi colori della tabella sopra, numero 24/800 che conta (350 ms) e
+parola 13/700 ("7 Lo sapevo", "3 Quasi", "2 Non lo sapevo"; vanno a capo se serve). Sotto, "Domani 5 schede" 15/600
+tenue (solo se `domani` > 0). Pulsante pieno **Fine**. Se `da_fare` > 0, pulsante testo **Continua con altre**
+(senza
+numeri: nessun arretrato da inseguire).
+
+### 35.4 Niente da fare
+
+`carte` vuoto: scheda centrata, spunta verde, "Per oggi niente da ripassare" 19/800, "Domani 3 schede" 15/600 tenue
+(se `domani` > 0), pulsante pieno **Torna a Oggi** (dalla materia: **Torna alla materia**).
+
+### 35.5 Attese, errori, rete
+
+- Caricamento: segnaposto della scheda. Errore del server: la frase e **Riprova**.
+- **Telefono senza rete:** valgono le ultime schede salvate (si salvano ogni volta che si aprono Oggi o la materia
+  con la rete). Pillola "Senza rete"; gli esiti restano in coda e partono in ordine al ritorno, una volta sola
+  ciascuno.
+  Senza schede salvate: "Senza rete non ho le schede di oggi." e **Riprova**.
+- **PC senza rete:** stessa frase, nessuna copia salvata.
+- Un esito che il server rifiuta: avviso breve "Non ho salvato l'ultimo esito: riprovo", si va avanti.
+
+## 36. Verifica simulata
+
+### 36.1 Nuova verifica simulata
+
+Stessa finestra e stesso schema di Nuova lezione. Intestazione "Nuova verifica simulata" (PC 30/800, telefono
+26/800, va a capo), pillola della materia.
+1. **Su cosa** e 2. **Da quale materiale**: come la sezione 6.
+3. **Come la vuoi**: DURATA binario **15 · 30 · 50 · 60 min** (parte da 50). LE TUE INDICAZIONI: area di testo con
+   contatore, segnaposto "Per esempio: più domande sul Seicento". Niente spunti.
+
+**Riepilogo:** "LA TUA VERIFICA", "Verifica di 50 minuti" 24/800, righe SU · MATERIALE · INDICAZIONI · PER · FORMATO
+("Come le tue 4 verifiche"; con `conteggi.verifiche` a 0 in ambra 700 "Nessuna verifica caricata: uso un formato
+normale") · PRONTA ("in circa 2 min"), barra del mese, **Prepara la verifica · 0,03 €**.
+Telefono: barra ferma "50 min · 3 materiali", mese, pulsante.
+
+In preparazione: come 33.9 con la `frase` del server. Errore e **Riprova** uguali.
+
+### 36.2 Pronta
+
+Pagina centrata (max 640): pillola della materia, titolo 24/800, "8 domande · 100 punti · 50 minuti" 15/600 tenue,
+la `nota` in riquadro avviso se c'è. Pulsante pieno **Inizia** (58) e sotto secondario **Fai su carta** (52).
+**Fai su carta** scarica il PDF come in 33.9; poi l'avviso resta sotto i pulsanti: "Quando hai finito, premi Inizia
+e copia qui le risposte: te le correggo."
+
+### 36.3 Mentre la fai
+
+**Tempo** (`orologio` + "22 min" 13/700 tenue, cifre tabellari, pillola Superficie 2, alta 44, area 48): solo
+minuti, arrotondati in su, mai secondi; "meno di 1 min" alla fine. Un tocco la nasconde: resta il solo tondo con
+`orologio`; la scelta vale anche per le prossime.
+- Colore sempre tenue: mai ambra, mai rosso.
+- Tempo visibile: avviso breve "Mancano 5 minuti" per 4 s. Tempo nascosto: quell'avviso non compare.
+- A tempo finito non si blocca niente: avviso "Il tempo è finito. Puoi continuare." che resta finché non lo chiudi;
+  il tempo diventa "+6 min".
+- Il tempo conta solo con la pagina aperta. Si tiene sul dispositivo (ogni 10 s): uscire equivale a una pausa, senza
+  pulsante Pausa.
+
+**Domanda:** scheda raggio 22, padding 20 (PC 24). Se `sezione` c'è: etichetta sopra la prima domanda del gruppo.
+"DOMANDA 3 · 10 PUNTI" 12/700 tenue, `testo` 18/600 interlinea 1,45.
+**Risposta:** area di testo 16/400, Superficie 2, raggio 14, almeno 5 righe, cresce col testo, segnaposto "Scrivi la
+tua risposta". Sotto a destra lo stato del salvataggio, 13/600 tenue:
+
+| Stato | Testo |
+|---|---|
+| Scrivendo (dopo 800 ms: `PATCH`) | Salvo… |
+| Fatto | Salvata |
+| Senza rete | Salvata sul telefono / Salvata sul computer (copia locale, si manda al ritorno della rete) |
+| Errore | Non riesco a salvare (testo errore) e **Riprova** |
+
+Ogni risposta si scrive prima sul dispositivo, poi si manda. Mai un pulsante Salva.
+
+**Telefono, 390 e 360:** una domanda alla volta. Riga in alto: X, "Domanda 3 di 8" 14/700, tempo. Barra in basso
+sopra la tastiera (alta 60): tondo 48 indietro, **Avanti** (secondario, resto dello spazio), tondo 48 `indice`.
+Ultima domanda: al posto di **Avanti**, **Consegna** (pieno).
+Foglio delle domande (tondo `indice`): griglia di numeri 48 × 48, 6 per riga. Scritta: fondo e testo "fatto" tenue.
+Vuota: bordo 2 px `--riga`. Corrente: bordo 2 px accento. Sotto, **Consegna** (pieno). Niente scorrimento laterale
+tra le domande (confligge con il testo).
+
+**PC da 900 px in su:** tutte le domande in colonna (schede max 672) e a sinistra la colonna ferma da 232: tempo in
+alto, etichetta DOMANDE, righe alte 44 con numero, punti e stato (spunta verde se scritta), **Consegna** secondario
+in fondo. In fondo alle domande **Consegna** pieno. Come un foglio vero: si vede tutto e si salta dove si vuole.
+**PC stretto:** tutte in colonna; barra ferma in alto con tempo, pillola **Domande** (foglio) e **Consegna**
+secondario.
+
+**Uscire** (X): conferma "Uscire? Le risposte restano salvate." con **Esci** e **Resto**. Si riprende da Oggi o
+dalla materia con **Riprendi**.
+
+**Consegna:** foglio "Consegnare?", "5 scritte su 8 · 3 vuote" 16/600; pulsante pieno **Consegna** e secondario
+**Torna alle domande**. Errore: "Non sono riuscito a consegnare. Le risposte sono salve." e **Riprova**. Senza rete:
+spento con "Senza rete non posso correggerla. Le risposte restano salvate."
+
+**Correzione** (`in_correzione`, si chiede ogni 3-5 s): vista come 33.9, "La sto correggendo"; si può uscire.
+
+### 36.4 Risultati
+
+Colonna centrata (max 720 sul PC).
+
+**Testata** (scheda con fondo tenue della materia, raggio 22, padding 20):
+- etichetta "VOTO STIMATO" 12/700 testo della materia;
+- "circa 6,5" Voto stimato, colore "scuro" della materia ("circa" sulla stessa riga; misura 175 px, a 360 dp ci sta);
+- "62 punti su 100 · la sufficienza è a 58" 15/600 (la soglia solo se c'è);
+- "È una stima di Lectio. Il voto vero lo dà il prof." 14/500 testo della materia. Questa frase resta sempre: è un
+  avviso, non un aiuto.
+- "Consegnata dopo 56 minuti su 50" 14/500, solo se è andato oltre il tempo.
+
+**Una riga per domanda**, nell'ordine della verifica (scheda raggio 18, padding 14/16, intestazione tutta toccabile,
+alta almeno 56, freccia che gira in 200 ms):
+"DOMANDA 3" 12/700 tenue, pillola esito a sinistra, punti "8 su 10" 15/700 a destra (cifre tabellari), sotto `testo`
+16/600 (3 righe finché è chiusa). Chiuse le Giuste; aperte tutte le altre.
+
+| `esito` | Parola | Icona | Colori |
+|---|---|---|---|
+| `giusta` | Giusta | `spunta` | fatto tenue / testo fatto |
+| `parziale` | Quasi | `quasi` | avviso tenue / testo avviso |
+| `sbagliata` | Da rivedere | `ripeti` | ardesia tenue / testo ardesia |
+| `non_corretta` | Confronta tu | `confronta` | senza fondo, bordo 2 px tratteggiato `--spenta-bordo`, testo tenue |
+
+Aperta: "LA TUA RISPOSTA" e il testo 15/500 ("Non hai risposto" 15/500 tenue se vuota); "COMMENTO" e `commento`
+16/500; "MANCAVA" e pillole `mancava` (Superficie 2, come nel Lettore); "RISPOSTA ATTESA" in riquadro
+`--risposta-fondo`, testo `--risposta-testo`, raggio 14; segni di fonte (33.4).
+`non_corretta`: niente commento né risposta attesa (se il server non la manda), solo la risposta di Andrea e, in
+tenue 15/500, "Nei tuoi documenti non c'è la soluzione. Confronta tu con il libro o con il prof."
+
+**In fondo** (telefono: fermo in basso): se `da_rifare` > 0, "3 domande da rifare sono già in Ripasso lampo."
+15/600, pulsante pieno **Ripassa adesso**. Sempre: secondario **Rifai la verifica** (riapre 36.1 con tutto già
+compilato, il costo si rivede).
+
+## 37. I 16 colori delle materie
+
+Nomi per il codice (minuscoli, senza accenti; il server e le app accettano solo questi, uno sconosciuto diventa
+ambra). Nomi a schermo: la stessa parola con la maiuscola.
+
+**Valori completi.** PC: come `.m-*` in `stile.css` (quattro valori chiari, tre scuri; il pieno non cambia).
+Android: nella `TAVOLOZZA` vanno pieno, tenue e testo chiari; il tema scuro lo calcola `coloreMateria`.
+
+| Nome | Pieno | Tenue | Testo | Scuro | Tenue scuro | Testo scuro | "Scuro" scuro |
+|---|---|---|---|---|---|---|---|
+| `giada` | `#00A089` | `#DFF6F0` | `#026C5C` | `#012E27` | `#153837` | `#82DDC8` | `#C6F1E6` |
+| `senape` | `#928100` | `#F4F1DD` | `#695D02` | `#2D2801` | `#353119` | `#D8CB7D` | `#EEE8C2` |
+| `orchidea` | `#C04EC8` | `#FAEBFA` | `#8A2C91` | `#3B133E` | `#3F2645` | `#EDB1F0` | `#FADAFB` |
+| `prugna` | `#A34A80` | `#FEEAF4` | `#883E6B` | `#3A1B2E` | `#392535` | `#FCADD9` | `#FFDAED` |
+| `cacao` | `#916748` | `#F9EEE6` | `#76543A` | `#332419` | `#352C29` | `#E8C0A3` | `#F7E2D3` |
+| `lavagna` | `#636F8E` | `#ECF0FA` | `#525C75` | `#232732` | `#2B2D38` | `#B8C8F1` | `#DEE6FB` |
+| `salvia` | `#7B9575` | `#EBF3EA` | `#4E634A` | `#222B20` | `#303633` | `#B5D3AE` | `#DCECD9` |
+| `lavanda` | `#A380C8` | `#F4ECFE` | `#694D86` | `#2D213A` | `#393145` | `#D7BBF7` | `#EDDFFE` |
+
+**Contrasti calcolati** (formula WCAG; il minimo per il testo è 4,5:1, per pallini e spunta 3:1). "PC" usa i valori
+qui sopra; "Android" usa i valori che calcola `coloreMateria` (`lerp` di Compose, spazio Oklab).
+
+| Nome | Chiaro: testo su tenue | Chiaro: scuro su tenue | Scuro PC: testo su tenue | Scuro PC: "scuro" su tenue | Scuro Android: testo su tenue | Scuro Android: "scuro" su tenue | Pieno e spunta bianca | Pieno su `#1B1B20` PC / Android |
+|---|---|---|---|---|---|---|---|---|
+| `giada` | 5,63 | 13,07 | 7,94 | 10,36 | 7,88 | 10,65 | 3,29 | 5,22 / 5,82 |
+| `senape` | 5,83 | 13,05 | 7,95 | 10,57 | 7,65 | 10,76 | 3,92 | 4,38 / 4,98 |
+| `orchidea` | 6,43 | 13,59 | 7,72 | 10,47 | 7,61 | 10,80 | 4,07 | 4,22 / 4,82 |
+| `prugna` | 6,20 | 13,29 | 8,13 | 11,08 | 7,19 | 10,96 | 5,46 | 3,14 / 3,69 |
+| `cacao` | 5,94 | 13,08 | 8,10 | 10,87 | 7,32 | 10,90 | 4,96 | 3,46 / 4,03 |
+| `lavagna` | 5,85 | 13,08 | 8,19 | 10,95 | 7,31 | 10,91 | 5,01 | 3,43 / 3,99 |
+| `salvia` | 5,78 | 12,93 | 7,58 | 10,02 | 7,88 | 10,65 | 3,28 | 5,23 / 5,83 |
+| `lavanda` | 6,08 | 13,15 | 7,26 | 9,76 | 7,91 | 10,64 | 3,24 | 5,29 / 5,90 |
+
+Il testo sul bianco è almeno 6,36:1 e su `#F5F4F0` almeno 5,78:1. Distanza fra colori (differenza percettiva Oklab):
+la coppia nuova più vicina è giada-salvia a 0,081, sopra la coppia già esistente più vicina (verde-oliva, 0,063).
+Dal rosso degli errori (`#C92A2A`, `#E03131`) la nuova più vicina è prugna a 0,130; dall'accento lavanda a 0,101.
+Nessuna è un rosso.
+Per chi non distingue bene i colori alcune coppie si confondono (già oggi ambra-arancio): perciò il colore non è mai
+l'unica informazione, c'è sempre il nome della materia.
+
+### 37.1 La scelta del colore
+
+Sostituisce la riga "8 cerchi da 44 dp" della sezione 4. Due elenchi:
+- **Primo libero** (`COLORI`, si propone il primo non usato): ambra, rosa, petrolio, viola, blu, verde, arancio,
+  oliva, giada, orchidea, senape, lavanda, cacao, prugna, salvia, lavagna.
+- **Ordine a schermo** (per tinta, così sembrano una sfumatura e non coriandoli): rosa, arancio, cacao, ambra,
+  senape, oliva / salvia, verde, giada, petrolio, blu, lavagna / viola, lavanda, orchidea, prugna.
+
+- **Telefono:** 6 colonne, 3 righe (6 + 6 + 4, l'ultima allineata a sinistra). A 360 dp, con il foglio a padding 24,
+  ogni casella è 52 × 52 dp: area di tocco piena, cerchio visibile 40. Scelto: spunta bianca 18, anello 2 dp a 3 dp
+  di distanza (diametro 50, non tocca il vicino). Alto in tutto 156 dp.
+- **PC:** 8 colonne, 2 righe (`repeat(8, 44px)`, gap 12: 436 px); la seconda riga comincia da giada. Sotto i 480 px
+  di foglio anche qui 6 colonne.
+- Accanto all'etichetta COLORE il nome scelto, che cambia dal vivo: "COLORE · Giada"; se è già usato da un'altra
+  materia, sotto 13/600 tenue "già usato da Storia".
+- Un colore usato resta sceglibile e ha un puntino bianco 8 al centro. L'anteprima della scheda resta sopra e cambia
+  colore in 200 ms.
+- Ruoli per i lettori di schermo: gruppo di scelta singola; ogni cerchio dice nome e, se c'è, "già usato da Storia".
+
+## 38. Parole lunghe su schermi stretti
+
+Larghezze misurate col carattere vero (Figtree, peso indicato), a 360 dp e con tutto a grandezza normale.
+
+| Dove | Spazio | Testo | Larghezza | Regola |
+|---|---|---|---|---|
+| Binario Forma, colonne 1,6/1/1 | 124 / 78 / 78 | Lo decide Lectio · A capitoli · Schede (14/700) | 106 · 61 · 48 | ci sta |
+| Binario Livello, colonne 1/1/1,25 | 86 / 86 / 108 | Essenziale · Completo · Approfondito (14/700) | 66 · 64 · 88 | ci sta |
+| Binario Lezioni/Schemi/Simulate | 101 ciascuno | 14/700 | 45 · 48 · 57 | "Verifiche simulate" (117) non ci starebbe: per questo Simulate |
+| Binario Durata | 69 ciascuno | "50 min" 14/700 | 44 | ci sta |
+| Tre esiti, 360 dp | 104 ciascuno | "Non lo sapevo" 14/700 | 91 | una riga |
+| Tre esiti, da 390 dp | 114 ciascuno | "Non lo sapevo" 15/700 | 98 | una riga |
+| Pulsante pieno | 328 | "Prepara lo schema · 0,08 €" 17/800 | 211 | ci sta |
+| Pulsante pieno | 328 | "Nuova verifica simulata" 17/800 | 188 | ci sta |
+| Pillola sezione | 182 con icona | "Ascolta questa parte" | 134 | riga sua sotto il titolo |
+
+Regole:
+- **Etichette e pulsanti:** altezza minima, mai fissa; il testo va a capo tra le parole. Mai troncare un pulsante.
+- **Con i puntini solo:** righe di elenco (titoli in Materiale, barra dell'indice, riassunto della barra ferma). Il
+  titolo intero si vede aprendo.
+- **Binari con i caratteri di sistema ingranditi** (Android oltre 1,3, PC zoom): i segmenti vanno in colonna, alti 48.
+- **Tre esiti con i caratteri ingranditi:** "Non lo / sapevo" su due righe; la zona in basso cresce con loro.
+- **Non contare sulla sillabazione:** niente `hyphens: auto` nelle etichette (sul PC con WebView2 l'italiano non è
+  verificato). Testi scritti da Andrea e titoli del server: `overflow-wrap: anywhere`.
+- **Tabelle:** 33.3. **Campi `Autore`/`Datazione`/`Luogo`:** valore su più righe, etichetta ferma in alto.
+
+## 39. Visita guidata delle cose nuove
+
+Stesso meccanismo della sezione 12 (dati di esempio, riflettore, una frase per passo, si avanza facendo l'azione).
+Parte una volta sola, la prima volta dopo l'aggiornamento che porta queste pagine; si riapre da Impostazioni →
+**Come funziona Lectio**, dopo quella di sempre. Materia d'esempio: Storia.
+
+Passi (telefono):
+1. **Schemi** (binario della materia, tocca Schemi): "Qui trovi gli schemi da leggere." Pratico.
+2. **Nuovo schema** (tocca il pulsante): "Si crea come una lezione." Pratico.
+3. **Come lo vuoi** (forma, livello, riepilogo): "Scegli forma e livello: qui vedi cosa esce e quanto costa." Avanti.
+4. **Un'immagine utile** (spunto Tante immagini): "Vuoi più foto? Basta questo." Avanti.
+5. **Indice** (barra di lettura, tocca): "Da qui salti a ogni parte." Pratico; il foglio si apre.
+6. **Un paragrafo** (tocca il paragrafo d'esempio): "Toccalo per vedere cosa puoi fare." Pratico.
+7. **Non ho capito** (tocca la pillola): "Te lo rispiego solo con i tuoi documenti." Pratico; risposta finta nel
+   foglio.
+8. **Da dove viene** (riga delle fonti): "Qui controlli da dove l'ho preso." Avanti.
+9. **Ripasso lampo** (scheda in Oggi, tocca Inizia): "Poche schede al giorno, tre minuti." Pratico.
+10. **Mostra la risposta** (tocca): "Prima prova a ricordare." Pratico.
+11. **Tre parole** (i tre esiti, tocca Quasi): "Quasi: te ne ricordavi solo una parte." Pratico.
+12. **Verifica simulata** (binario, tocca Simulate): "Una verifica come quelle del tuo prof, per allenarti." Pratico.
+13. **Il tempo** (pillola del tempo, tocca): "Se ti agita, toccalo e sparisce." Pratico.
+14. **La stima** (testata dei risultati): "È una stima. Il voto vero lo dà il prof." Avanti.
+15. Fine: il velo si scioglie, "Ecco fatto", pulsante **Inizia**.
+
+Sul PC gli stessi passi, con clic al posto dei tocchi; al passo 6 il pulsante è quello al margine destro del blocco;
+ai passi 10-11 tasto disegnato (Spazio, poi 2).
+
+## 40. Movimento e icone nuove
+
+Movimento: solo trasformazioni e opacità, curva `cubic-bezier(.2, .8, .2, 1)` dove non è detto altro. Tutto tolto
+con meno animazioni (Android: animazioni disattivate; PC: `prefers-reduced-motion`): i cambi diventano immediati e i
+numeri non contano.
+
+| Cosa | Durata |
+|---|---|
+| Foglio che sale, che si alza per la risposta | 300 ms, 250 ms |
+| Riga degli strumenti, foto tolta | 200 ms, 220 ms |
+| Risposta del Ripasso che compare, zona degli esiti | 220 ms, 200 ms |
+| Scheda che esce, scheda che entra | 180 ms, 240 ms |
+| Barra di avanzamento | 250 ms |
+| Salto nell'indice | 300 ms |
+| Numeri di fine ripasso | 350 ms |
+| Domanda che si apre nei risultati | 240 ms (freccia 200) |
+| Colore scelto (anteprima) | 200 ms |
+
+Le uniche cose che pulsano sono i segnaposto (già in uso, ferme con meno animazioni).
+
+Icone nuove, a tratto 2 px, stesso disegno su PC e Android (`viewBox 0 0 24 24`, percorsi liberi da Feather, licenza
+MIT):
+
+| Nome | Percorso |
+|---|---|
+| `lampo` | `M13 2 3 14h9l-1 8 10-12h-9z` |
+| `domanda` | `M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3 M12 17h.01` |
+| `indice` | `M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01` |
+| `orologio` | `M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z M12 6v6l4 2` |
+| `confronta` | `M17 3l4 4-4 4 M3 7h18 M7 21l-4-4 4-4 M21 17H3` |
+| `quasi` | `M5 12h14` |
+| `riassunto` | `M21 6H3 M17 10H3 M21 14H3 M17 18H3` |
+
+## 41. Riassunti scritti
+
+Da uno schema pronto si ottiene un riassunto in tre forme. Campi e indirizzi: `docs/contratto-api.md` §26. Stessa
+faccia della lettura dello schema.
+
+### 41.1 Dove si entra
+
+Solo dalla lettura dello schema, quando è `pronto`:
+- **Testata.** PC: pillola **Riassunto** (Superficie 2, icona `riassunto`, stessa misura di Scarica PDF) a sinistra di
+  Scarica PDF. Telefono: tondo 48 con icona `riassunto`, a sinistra del tondo di Scarica PDF.
+- **In fondo allo schema**, sotto la scheda del Ripasso lampo: scheda bianca con "Riassunto" 19/800 e pulsante
+  secondario **Fai il riassunto**.
+
+Entrambi aprono il foglio di scelta. Se c'è già almeno un riassunto, la scritta del pulsante in fondo diventa **Apri
+il riassunto** e porta alla pagina (41.3) sull'ultimo fatto.
+
+### 41.2 Foglio di scelta
+
+"Che riassunto vuoi?" 21/800, X sempre visibile. Tre righe una sotto l'altra, Superficie 2, raggio 16, alte almeno
+88, tutte toccabili, 8 tra una e l'altra:
+
+| Nome (17/700) | Frase (14/500, tenue) |
+|---|---|
+| **Per punti** | Una cosa per riga |
+| **Discorsivo** | Da leggere di seguito |
+| **Via di mezzo** | Un po' di testo e i punti da ricordare |
+
+A sinistra di ogni riga una miniatura 56×56 (Fondo blocco, raggio 12) che mostra la forma, con linee grige alte 3 px:
+Per punti = 4 righe corte, ognuna con un pallino nel colore della materia; Discorsivo = 5 righe piene, l'ultima corta;
+Via di mezzo = 2 righe piene e sotto 2 righe corte con pallino.
+
+A destra di ogni riga: il prezzo `riassunti.stima_eur` ("0,01 €", 13/700 tenue; in modalità prova "Prova"); se quella
+forma esiste già al posto del prezzo "Pronto", "Lo sto scrivendo" oppure "Si è fermato".
+
+Un tocco crea subito il riassunto (`POST`) e apre la sua pagina; se esiste già, la apre e basta. Se il tetto è
+finito, il foglio resta aperto e sotto le righe compare la frase del server.
+
+### 41.3 Pagina del riassunto
+
+Una pagina vera, come la lettura dello schema, ma con una sola colonna centrata: scheda bianca, raggio 22, larga al
+massimo 672, testo al massimo 580. Niente indice, niente "Non ho capito", niente segni di fonte.
+
+**Testata.** Freccia indietro (torna allo schema), pillola della materia, a destra **Scarica PDF** (come 33.2) e menu
+puntini con **Rifai** (conferma "Lo riscrivo da capo?", poi `DELETE` e `POST`) ed **Elimina** (con conferma). Sotto:
+titolo (PC 30/800, telefono 26/800) e "480 parole · 3 min di lettura" 14/500 tenue (minuti = parole / 200, almeno 1).
+
+**Le tre forme.** Sotto il titolo una barra a tre segmenti alta 48, a tutta larghezza della colonna: Per punti,
+Discorsivo, Via di mezzo. Segmento attivo: fondo accento tenue, peso 800. Il cambio è una dissolvenza da 180 ms. Se si
+tocca una forma che non esiste ancora, al posto del testo c'è una scheda Fondo blocco con pulsante principale
+**Scrivilo · 0,01 €**.
+
+**Il testo.** Per ogni parte: `titolo` come Titolo nel testo (19/800), `paragrafi` come Testo di lettura (16 tra un
+paragrafo e l'altro), `punti` come il blocco `punti` di 33.3 (pallino 7 px del colore della materia, 8 tra le voci).
+Se ci sono paragrafi e punti, 14 tra i due; 28 tra una parte e l'altra. `**parola**` diventa peso 700. Si può
+selezionare e copiare.
+
+### 41.4 Stati
+
+- **In caricamento:** tre segnaposto che pulsano.
+- **`in_coda` / `in_preparazione`:** la `frase` del server (o "Scrivo il riassunto") e tre segnaposto. Si può uscire;
+  quando è finito arriva la notifica (`riassunto_pronto`, `riassunto_errore`).
+- **`errore`:** la frase `errore`, **Riprova** e pulsante testo **Elimina**.
+- **`nota`:** scheda con fondo avviso tenue sotto il titolo, come 33.7.
+- **Scarica PDF:** come 33.9.
+- **Senza rete:** un riassunto aperto almeno una volta resta sul dispositivo e si legge; Scarica PDF, Rifai, Elimina e
+  le forme non ancora fatte spente, con la pillola "Senza rete" in alto. Se non è mai stato aperto: "Si apre quando torna
+  la rete." e **Riprova**.

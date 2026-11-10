@@ -11,7 +11,7 @@ from .config import VERSIONE, assicura_cartelle, carica_settings, riassunto_conf
 from .db import init_db, ripristina_dopo_riavvio
 from .limiti import LimiteCorpo
 from .rete import ErroreFornitore
-from .routes import eventi, lezioni, materiale, materie, sistema, varie
+from .routes import eventi, lezioni, materiale, materie, sistema, studio, varie
 from .scheda import dopo_le_chiavi
 from .servizi import crea_servizi
 from .spesa import TettoRaggiunto, VoceGratisFinita
@@ -76,4 +76,5 @@ def create_app() -> FastAPI:
     app.include_router(eventi.router, prefix="/api")
     app.include_router(lezioni.router, prefix="/api")
     app.include_router(varie.router, prefix="/api")
+    app.include_router(studio.router, prefix="/api")
     return app

@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.1.0"
+VERSIONE = "1.2.0"
 
 CARTELLA_APP = Path(__file__).resolve().parent
 VERSIONI_PATH_DEFAULT = str(CARTELLA_APP / "versioni.json")

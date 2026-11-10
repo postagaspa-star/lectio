@@ -102,6 +102,22 @@ def _parole(n: int, seme: str = "spiegazione") -> str:
     return " ".join(frasi)
 
 
+def vettore_di(testo: str, dimensioni: int = 64) -> list[float]:
+    """Un vettore che dipende dalle parole: testi con parole in comune risultano vicini."""
+    v = [0.0] * dimensioni
+    for p in re.findall(r"[a-zàèéìòù]{3,}", testo.lower()):
+        v[sum(p.encode()) % dimensioni] += 1.0
+    return v
+
+
+def jpeg_di_prova() -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (900, 700), (120, 90, 60)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
 class ServerFinto:
     def __init__(self):
         self.chiamate: list[tuple[str, dict | str]] = []
@@ -118,6 +134,13 @@ class ServerFinto:
         self.azure_quota_finita = False
         self.voci_spente = False  # le voci del NAS non rispondono
         self.voci_rotte = 0  # quante risposte 500 dare prima di quelle buone
+        self.fuori_coda: list[list] = []  # che cosa risponde il controllo dei fatti, una risposta per chiamata
+        self.mancanti: list[str] = []  # i concetti che il controllo di copertura dice mancare
+        self.foto_buona = True
+        self.piano_senza_foto = False
+        self.chiarimento = None
+        self.simulata = None
+        self.vettori_rotti = False
 
     def conta(self, pezzo: str) -> int:
         return sum(1 for percorso, _ in self.chiamate if pezzo in percorso)
@@ -139,6 +162,20 @@ class ServerFinto:
             return httpx.Response(codice, json={"message": "guasto finto"})
         if percorso == "/v1/chat/completions":
             return self._chat(dati)
+        if percorso == "/v1/embeddings":
+            if self.vettori_rotti:
+                return httpx.Response(500, json={"message": "guasto finto"})
+            return httpx.Response(200, json={"data": [{"index": i, "embedding": vettore_di(t)} for i, t in enumerate(dati["input"])],
+                                             "usage": {"prompt_tokens": sum(len(t) // 4 for t in dati["input"])}})
+        if percorso == "/w/api.php":
+            pagine = {str(i): {"index": i, "title": f"File:Foto {i}.jpg", "imageinfo": [{
+                "mime": "image/jpeg", "width": 1200, "thumburl": f"https://upload.wikimedia.org/foto/{i}.jpg",
+                "url": f"https://upload.wikimedia.org/foto/{i}.jpg",
+                "extmetadata": {"LicenseShortName": {"value": "CC BY-SA 4.0"}, "Artist": {"value": "Autore <b>Prova</b>"}}}]}
+                for i in range(1, 7)}
+            return httpx.Response(200, json={"query": {"pages": pagine}})
+        if percorso.startswith("/foto/"):
+            return httpx.Response(200, content=jpeg_di_prova())
         if percorso == "/v1/audio/speech":
             testo = dati["input"]
             audio = wav_veloce(len(testo) * SECONDI_PER_CARATTERE)
@@ -193,8 +230,58 @@ class ServerFinto:
             testo, self.chat_forzata = self.chat_forzata, None
             return self._risposta_chat(testo, dati)
         primo = dati["messages"][1]["content"] if len(dati["messages"]) > 1 else ""
-        self.ultimo_prompt = primo
-        if "Prepara il PIANO di un RIPASSO" in primo:
+        if isinstance(primo, list):
+            primo = primo[0]["text"]
+        if "Qui sotto ci sono delle frasi numerate" not in primo:
+            self.ultimo_prompt = primo
+        ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
+        if "Qui sotto ci sono delle frasi numerate" in primo:
+            oggetto = {"fuori": self.fuori_coda.pop(0) if self.fuori_coda else []}
+        elif "Qui sotto ci sono i concetti" in primo:
+            oggetto = {"mancanti": self.mancanti}
+        elif "Guarda la foto." in primo:
+            oggetto = {"mostra": self.foto_buona, "cosa_si_vede": "il soggetto"}
+        elif "Prepara il PIANO di uno schema di ripasso" in primo:
+            oggetto = {"titolo": "Augusto sul quaderno", "forma": "capitoli", "concetti": ["Il principato", "Il senato"],
+                       "sezioni": [{"titolo": "Il principato", "concetti": ["Il principato"], "fonti": ids[:2]},
+                                   {"titolo": "Il senato", "concetti": ["Il senato"], "fonti": ids[:2]}],
+                       "immagini": [{"sezione": 1, "soggetto": "Augusto", "ricerca": "Augusto statua", "didascalia": "Augusto"},
+                                    {"sezione": 2, "soggetto": "Personaggio inventato", "ricerca": "nessuno", "didascalia": "No"}]}
+            if self.piano_senza_foto:
+                oggetto["immagini"] = []
+        elif "Elenca le immagini" in primo:
+            oggetto = {"immagini": [{"sezione": 1, "soggetto": "Augusto", "ricerca": "Augusto statua", "didascalia": "Augusto"}]}
+        elif re.search(r"Scrivi la PARTE \d+ di \d+ dello schema", primo):
+            oggetto = {"blocchi": [{"tipo": "paragrafo", "titolo": None, "testo": "Augusto tenne il potere vero.", "fonti": ids[:1]},
+                                   {"tipo": "punti", "titolo": None, "voci": ["Il senato restò di facciata."], "fonti": ids[:1]},
+                                   {"tipo": "sconosciuto", "testo": "non deve restare"}],
+                       "carte": [{"domanda": "Chi tenne il potere vero?", "risposta": "Augusto."}]}
+        elif "Riassumi in UNA tabella" in primo:
+            oggetto = {"titolo": "Quadro d'insieme", "intestazione": ["Chi", "Cosa"], "righe": [["Augusto", "Il potere vero"]]}
+        elif "Scrivi il riassunto di questo schema" in primo:
+            parte: dict = {"titolo": "Il potere", "paragrafi": [], "punti": []}
+            if "Forma: PER PUNTI" in primo:
+                parte["punti"] = ["Augusto tenne il potere vero.", "Il senato restò di facciata."]
+            elif "Forma: DISCORSIVO" in primo:
+                parte["paragrafi"] = ["Augusto tenne il potere vero, mentre il senato restò di facciata."]
+            else:
+                parte["paragrafi"] = ["Augusto tenne il potere vero."]
+                parte["punti"] = ["Il senato restò di facciata."]
+            oggetto = {"titolo": "Augusto in breve", "parti": [parte]}
+        elif "Lo studente non ha capito il passaggio" in primo:
+            oggetto = self.chiarimento or {"trovato": True, "risposta": "Vuol dire che comandava Augusto.", "fonti": ids[:1], "cosa_manca": None}
+        elif "Prepara una verifica di prova da" in primo:
+            oggetto = self.simulata or {"titolo": "Verifica su Augusto", "domande": [
+                {"tipo": "aperta", "testo": "Che cos'è il principato?", "punti": 60, "sezione": None,
+                 "risposta_attesa": "Il governo di Augusto.", "fonti": ids[:1]},
+                {"tipo": "date", "testo": "Quando morì Augusto?", "punti": 40, "sezione": None,
+                 "risposta_attesa": "Nel 14 dopo Cristo.", "fonti": ids[:1]},
+                {"tipo": "esercizio", "testo": "Risolvi 7x + 3 = 24", "punti": 10, "sezione": None, "risposta_attesa": "x = 3", "fonti": []},
+            ]}
+        elif "Correggi ogni risposta confrontandola" in primo:
+            oggetto = {"domande": [{"n": int(n), "esito": "parziale", "punti": int(p) // 2, "commento": "Quasi.", "mancava": ["la data"]}
+                                   for n, p in re.findall(r"Domanda (\d+) \(massimo (\d+) punti\)", primo)]}
+        elif "Prepara il PIANO di un RIPASSO" in primo:
             m = re.search(r'esattamente (\d+) parti in "blocchi" e (\d+) domande', primo)
             n, q = int(m.group(1)), int(m.group(2))
             ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
@@ -234,8 +321,7 @@ class ServerFinto:
             }
         elif "Scrivi il BLOCCO" in primo:
             parole = int(re.search(r"circa (\d+) parole", primo).group(1))
-            oggetto = {"paragrafi": [{"tipo": "aggancio", "testo": "Ti sei mai chiesto perché Augusto non volle la corona?"},
-                                     {"tipo": "spiegazione", "testo": _parole(parole // 2)},
+            oggetto = {"paragrafi": [{"tipo": "spiegazione", "testo": _parole(parole // 2)},
                                      {"tipo": "definizione", "testo": "Il principato è il governo del primo cittadino."},
                                      {"tipo": "esempio", "testo": _parole(parole // 3)}],
                        "domanda": "Perché Augusto non si fece mai chiamare re?",
@@ -265,16 +351,15 @@ class ServerFinto:
             oggetto = {"paragrafi": [{"tipo": "spiegazione", "testo": _parole(parole // 2)},
                                      {"tipo": "definizione", "testo": "Il principato è il governo del primo cittadino."},
                                      {"tipo": "esempio", "testo": _parole(parole // 2, "esempio")}]}
-        elif "Aggiorna la scheda" in primo:
+        elif "Studia come interroga" in primo:
+            doc = next((i for i in ids if i.startswith("V")), "V1")
             oggetto = self.scheda_forzata or {
-                "argomenti": [{"nome": "Principato", "volte": 3, "esempio": "Che cos'è il principato?"}],
-                "tipi_domanda": [{"tipo": "aperta", "quota": 0.7}, {"tipo": "date", "quota": 0.3}],
-                "cosa_corregge": ["Vuole le date precise"], "cosa_premia": ["I collegamenti"],
-                "lunghezza_risposte": "5-8 righe", "consigli": ["Parti dalla definizione"],
+                "domande": [{"doc": doc, "testo": "Che cos'è il principato?", "tipo": "definizione", "argomento": "Principato"},
+                            {"doc": doc, "testo": "Quando Ottaviano ricevette il titolo di Augusto?", "tipo": "date", "argomento": "Principato"}],
+                "cosa_corregge": [{"frase": "Vuole le date precise", "prova": "Vuole le date precise con il secolo"}],
+                "cosa_premia": [{"frase": "I collegamenti", "prova": "Buoni i collegamenti tra i fatti."}],
+                "lunghezza_risposte": None, "consigli": [{"frase": "Parti dalla definizione", "prova": "Manca la definizione di princeps"}],
             }
-        elif "Lo studente vuole una lezione su" in primo:
-            ids = re.findall(r'<materiale id="(B\d+)"', primo)
-            oggetto = {"scelti": ids[:3]}
         elif "Risposta attesa:" in primo:
             oggetto = self.correttore
         else:

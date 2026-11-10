@@ -48,7 +48,12 @@ CARATTERI_BLOCCO_MASSIMI = 14_000
 
 # Un aggiornamento della scheda: fino a 60.000 caratteri di verifiche + risposta.
 TOKEN_SCHEDA_ENTRATA = 20_000
-TOKEN_SCHEDA_USCITA = 2_500
+TOKEN_SCHEDA_USCITA = 6_000
+
+# Schemi e verifiche simulate (contratto 18 e 21).
+CARATTERI_PIANO_SCHEMA = 60_000
+CARATTERI_SEZIONE = 14_000
+PAROLE_SEZIONE = {"essenziale": 110, "completo": 230, "approfondito": 400}
 
 
 class TettoRaggiunto(Exception):
@@ -243,6 +248,14 @@ class Cassa:
         ):
             eur += max(0.0, float(r["stima_eur"]) - float(r["speso"]))
             caratteri += max(0, int(r["stima_caratteri"]) - int(r["usati"]))
+        for tabella, parola, stati in (("schemi", "schema", "'in_coda', 'in_preparazione'"),
+                                       ("riassunti", "riassunto", "'in_coda', 'in_preparazione'"),
+                                       ("simulate", "simulata", "'in_coda', 'in_preparazione', 'in_correzione'")):
+            for r in conn.execute(
+                f"SELECT t.stima_eur, (SELECT COALESCE(SUM(costo_eur), 0) FROM spese WHERE riferimento = '{parola}:' || t.id)"
+                f" AS speso FROM {tabella} t WHERE t.stato IN ({stati})"
+            ):
+                eur += max(0.0, float(r["stima_eur"]) - float(r["speso"]))
         if prova:
             return eur, caratteri
         try:
@@ -264,7 +277,7 @@ class Cassa:
     @contextmanager
     def chiamata(self, *, cosa: str, fornitore: str, stima_eur: float = 0.0, caratteri_gratis: int = 0,
                  quantita_stimata: float = 0, unita: str = "", lezione_id: int | None = None,
-                 materiale_id: int | None = None, materia_id: int | None = None):
+                 materiale_id: int | None = None, materia_id: int | None = None, riferimento: str | None = None):
         """UN tentativo di chiamata a un fornitore:
 
             with cassa.chiamata(cosa="Voce · pezzo 3", fornitore="mistral", stima_eur=0.002) as r:
@@ -284,10 +297,10 @@ class Cassa:
                     raise VoceGratisFinita()
                 riga_id = conn.execute(
                     "INSERT INTO spese (quando, mese, cosa, fornitore, quantita, unita, costo_eur, lezione_id,"
-                    " materiale_id, materia_id, stato) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prenotata')",
+                    " materiale_id, materia_id, stato, riferimento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prenotata', ?)",
                     (clock.iso(ora), clock.mese(ora), f"{cosa} (in corso)", fornitore,
                      float(caratteri_gratis or quantita_stimata), unita or ("caratteri" if caratteri_gratis else ""),
-                     stima_eur, lezione_id, materiale_id, materia_id),
+                     stima_eur, lezione_id, materiale_id, materia_id, riferimento),
                 ).lastrowid
         ricevuta = Ricevuta(self, riga_id, cosa, fornitore, lezione_id, materiale_id, materia_id)
         try:
@@ -305,7 +318,8 @@ class Cassa:
 
     def chiama(self, *, cosa: str, fornitore: str, fare, registra=None, stima_eur: float = 0.0,
                caratteri_gratis: int = 0, quantita_stimata: float = 0, unita: str = "", lezione_id: int | None = None,
-               materiale_id: int | None = None, materia_id: int | None = None, prima=None):
+               materiale_id: int | None = None, materia_id: int | None = None, prima=None,
+               riferimento: str | None = None):
         """`fare()` fa UN tentativo; `registra(ricevuta, risultato)` scrive il costo vero.
         Sugli errori temporanei si ritenta (2, 4, 8 secondi), e ogni tentativo è una chiamata
         nuova: tetto ricontrollato, prenotazione nuova. `prima()` si chiama prima di ognuno
@@ -317,7 +331,8 @@ class Cassa:
             try:
                 with self.chiamata(cosa=etichetta, fornitore=fornitore, stima_eur=stima_eur,
                                    caratteri_gratis=caratteri_gratis, quantita_stimata=quantita_stimata, unita=unita,
-                                   lezione_id=lezione_id, materiale_id=materiale_id, materia_id=materia_id) as r:
+                                   lezione_id=lezione_id, materiale_id=materiale_id, materia_id=materia_id,
+                                   riferimento=riferimento) as r:
                     risultato = fare()
                     if registra is not None:
                         registra(r, risultato)
@@ -373,9 +388,6 @@ class Cassa:
         domande = struttura["domande"] if struttura["tipo"] == "interrogazione" else struttura["finali"]
         t = misure.CARATTERI_PER_TOKEN
         appunti = min(caratteri_appunti, CARATTERI_APPUNTI_LETTI)
-        scelta = 0.0
-        if appunti > APPUNTI_MASSIMI:  # la scelta dei pezzi sull'argomento: circa 230 caratteri a pezzo
-            scelta = self.prezzi.costo_testo(modello_piano, int((appunti / 1100 * 230 + 3000) / t), 800)
         materiali = min(appunti, APPUNTI_MASSIMI) + min(caratteri_verifiche, CARATTERI_VERIFICHE_MASSIMI)
         piano = self.prezzi.costo_testo(modello_piano, int((materiali + 7000) / t), 300 + 250 * blocchi + 120 * domande)
         per_blocco = min(materiali, CARATTERI_BLOCCO_MASSIMI) + 6000
@@ -383,7 +395,11 @@ class Cassa:
         # Uscita: il testo parlato più la cornice JSON (tipi dei paragrafi, virgolette).
         uscita = misure.caratteri_stimati(durata_min) * 1.25
         scrittura = self.prezzi.costo_testo(modello_scrittura, int(entrata / t), int(uscita / t))
-        return scelta + piano + scrittura
+        # Ogni parte si rilegge contro i documenti; circa metà delle parti si fa riscrivere una volta.
+        parti = blocchi + 2
+        rilettura = parti * self.prezzi.costo_testo(modello_piano, int((per_blocco + 5000) / t), 400)
+        riscritture = 0.5 * (scrittura + rilettura)
+        return piano + scrittura + rilettura + riscritture
 
     def stima_lezione(self, conn: sqlite3.Connection, *, durata_min: int, tipo_voce: str, caratteri_appunti: int,
                       caratteri_verifiche: int, prova: bool, modello_piano: str, modello_scrittura: str,
@@ -435,6 +451,55 @@ class Cassa:
             "voce_gratis_caratteri_rimasti": rimasti,
             "si_azzera_il": clock.primo_del_mese_prossimo().isoformat(),
         }
+
+    def stima_schema(self, caratteri: int, livello: str, immagini: int, modello_piano: str,
+                     modello_scrittura: str) -> float:
+        """Piano, sezioni con il loro controllo, copertura, tabella finale, foto guardate una per una."""
+        t = misure.CARATTERI_PER_TOKEN
+        letti = min(caratteri, CARATTERI_PIANO_SCHEMA)
+        divisore = {"essenziale": 9000, "completo": 5000, "approfondito": 3500}[livello]
+        sezioni = min(30, max(3, round(min(caratteri, 150_000) / divisore)))
+        parole = PAROLE_SEZIONE[livello]
+        piano = self.prezzi.costo_testo(modello_scrittura, int((letti + 6000) / t), 900 + 200 * sezioni)
+        per_sezione = self.prezzi.costo_testo(modello_scrittura, int((CARATTERI_SEZIONE + 6000) / t), int(parole * 2.4) + 500)
+        rilettura = self.prezzi.costo_testo(modello_piano, int((CARATTERI_SEZIONE + 5000) / t), 400)
+        copertura = self.prezzi.costo_testo(modello_piano, int(parole * sezioni * 8 / t) + 1500, 600)
+        tabella = self.prezzi.costo_testo(modello_scrittura, int(parole * sezioni * 8 / t) + 1500, 1200)
+        foto = (immagini * 2 + 3) * self.prezzi.costo_testo(modello_piano, 1800, 80)
+        return piano + sezioni * (per_sezione + rilettura) * 1.5 + copertura + tabella + foto + per_sezione
+
+    def stima_simulata(self, caratteri: int, minuti: int, modello_piano: str, modello_scrittura: str) -> float:
+        """La preparazione, il suo controllo e la correzione alla fine."""
+        t = misure.CARATTERI_PER_TOKEN
+        domande = max(4, round(minuti / 5))
+        scrittura = self.prezzi.costo_testo(modello_scrittura, int((min(caratteri, 45_000) + 8000) / t), 500 + 260 * domande)
+        rilettura = self.prezzi.costo_testo(modello_piano, int((min(caratteri, 45_000) + 6000) / t), 600)
+        correzione = self.prezzi.costo_testo(modello_scrittura, int((domande * 1200 + 5000) / t), 120 * domande + 300)
+        return (scrittura + rilettura) * 1.5 + correzione
+
+    def stima_riassunto(self, caratteri: int, modello_piano: str, modello_scrittura: str) -> float:
+        """Il riassunto e il suo controllo, con una riscrittura possibile."""
+        t = misure.CARATTERI_PER_TOKEN
+        letti = int((min(caratteri, 90_000) + 3000) / t)
+        scritti = min(6000, int(caratteri / t * 0.8) + 600)
+        return (self.prezzi.costo_testo(modello_scrittura, letti, scritti) + self.prezzi.costo_testo(modello_piano, letti, 400)) * 1.5
+
+    def decisione(self, conn: sqlite3.Connection, costo: float, *, prova: bool, modello_ocr: str, modello_piano: str,
+                  quale: str) -> dict:
+        """Ci sta nel tetto del mese? Conta anche quello che è già in lavorazione."""
+        costo = 0.0 if prova else arrotonda_su(costo)
+        impegnato, _ = self.impegni(conn, prova=prova, modello_ocr=modello_ocr, modello_piano=modello_piano)
+        speso = arrotonda_su(self.speso(conn) + impegnato)
+        limite = self.tetto(conn)
+        dopo = arrotonda(speso + costo)
+        consentita, motivo = True, None
+        if dopo > limite + 1e-9:
+            consentita = False
+            motivo = (f"{quale} sforerebbe il tetto di {euro(limite)}: alza il tetto nelle impostazioni o aspetta il "
+                      f"{data_breve(clock.primo_del_mese_prossimo())}")
+        return {"costo_eur": costo, "spesa_mese_eur": speso, "impegnato_eur": arrotonda_su(impegnato), "tetto_eur": limite,
+                "dopo_eur": dopo, "consentita": consentita, "motivo": motivo,
+                "si_azzera_il": clock.primo_del_mese_prossimo().isoformat()}
 
     def stima_ocr(self, conn: sqlite3.Connection, *, pagine: int, prova: bool, modello_ocr: str,
                   modello_piano: str) -> tuple[float, bool, str]:

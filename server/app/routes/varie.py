@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 
-from .. import clock, db, forme
+from .. import clock, db, forme, lampo
 from ..auth import richiede_token
 from ..db import get_conn
 from ..errori import ErroreApi, non_valido
@@ -60,6 +60,7 @@ def oggi(conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(serv
         "riprendi": forme.lezione(conn, r) if r else None,
         "da_raccontare": da_raccontare,
         "piu_avanti": piu_avanti,
+        "lampo": lampo.per_oggi(conn),
         "spesa": {k: spesa[k] for k in ("speso_eur", "tetto_eur", "percentuale", "si_azzera_il", "avviso")},
         "modalita_prova": s.settings.modalita_prova,
     }

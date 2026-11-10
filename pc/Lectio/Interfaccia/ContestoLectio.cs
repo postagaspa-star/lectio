@@ -42,7 +42,7 @@ public sealed class ContestoLectio : ApplicationContext
     {
         this.motore = motore;
         this.opzioni = opzioni;
-        ponte = new Ponte(motore) { ApriNelBrowser = ApriNelBrowser };
+        ponte = new Ponte(motore) { ApriNelBrowser = ApriNelBrowser, ApriFile = ApriFile };
 
         invocatore = new Control();
         invocatore.CreateControl();
@@ -113,6 +113,19 @@ public sealed class ContestoLectio : ApplicationContext
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             Log.Errore("indirizzo esterno non aperto", e);
+        }
+    }
+
+    /// <summary>Apre col programma predefinito un PDF che l'utente ha appena salvato (il ponte accetta solo quelli).</summary>
+    public static void ApriFile(string file)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(file) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Log.Errore("file non aperto", e);
         }
     }
 

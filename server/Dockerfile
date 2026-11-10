@@ -1,9 +1,10 @@
 # Lectio sul NAS: un volume su /data (database, materiale, lezioni) e uno su /apk (file da scaricare).
 FROM python:3.14-slim
 
-# ffmpeg monta l'audio delle lezioni; espeak-ng è la voce di prova (modalità prova, senza chiavi).
+# ffmpeg monta l'audio delle lezioni; espeak-ng è la voce di prova (modalità prova, senza chiavi);
+# DejaVu ha tutti i simboli delle formule nei PDF.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg espeak-ng \
+    && apt-get install -y --no-install-recommends ffmpeg espeak-ng fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv/lectio

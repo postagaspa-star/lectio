@@ -3,6 +3,7 @@ package eu.stgm.lectio.dati
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.FileDaCaricare
 import eu.stgm.lectio.rete.LectioClient
+import eu.stgm.lectio.rete.mappa
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,6 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
+import java.io.File
+
+/** Quale documento scaricare come PDF. */
+sealed interface DocumentoPdf {
+    data class DiSchema(val id: Long) : DocumentoPdf
+    data class DiSimulata(val id: Long) : DocumentoPdf
+    data class DiRiassunto(val id: Long) : DocumentoPdf
+}
 
 /**
  * Da dove le schermate prendono i dati. Due strade con la stessa forma: il server
@@ -69,6 +78,47 @@ interface Sorgente {
     suspend fun gemini(): Lettura<TestoGemini>
     suspend fun impostazioni(): Lettura<Impostazioni>
     suspend fun modificaImpostazioni(cambi: JsonObject): Esito<Impostazioni>
+
+    // --- v1.5: schemi, riassunti, "Non ho capito", Ripasso lampo, verifica simulata ------------
+
+    /** Quello che resta sul dispositivo (verifiche in corso, coda dei ripassi, dove si era). */
+    val deposito: DepositoStudio
+
+    suspend fun stimaSchema(richiesta: RichiestaStimaSchema): Esito<StimaStudio>
+    suspend fun creaSchema(nuovo: NuovoSchema): Esito<Schema>
+    suspend fun schemi(materiaId: Long): Lettura<List<Schema>>
+    suspend fun schema(id: Long): Lettura<Schema>
+    suspend fun annullaSchema(id: Long): Esito<Unit>
+    suspend fun riprovaSchema(id: Long): Esito<Unit>
+    suspend fun eliminaSchema(id: Long): Esito<Unit>
+    suspend fun scaricaPdf(documento: DocumentoPdf, destinazione: File): Esito<Unit>
+
+    /** I byte della foto: dal telefono se c'è già, altrimenti dal server. [rinfresca] = rileggila dal server. */
+    suspend fun immagineSchema(id: Long, n: Int, rinfresca: Boolean = false): Esito<ByteArray>
+    suspend fun cambiaImmagine(id: Long, n: Int): Esito<Schema>
+    suspend fun togliImmagine(id: Long, n: Int): Esito<Schema>
+
+    suspend fun creaRiassunto(schemaId: Long, forma: String): Esito<Riassunto>
+    suspend fun riassunti(schemaId: Long): Lettura<List<Riassunto>>
+    suspend fun riassunto(id: Long): Lettura<Riassunto>
+    suspend fun riprovaRiassunto(id: Long): Esito<Unit>
+    suspend fun eliminaRiassunto(id: Long): Esito<Unit>
+
+    suspend fun chiarisci(corpo: CorpoChiarimento): Esito<Chiarimento>
+
+    suspend fun lampo(materiaId: Long?, limite: Int = 12): Lettura<Lampo>
+    suspend fun esitoLampo(id: Long, esito: String): Esito<RispostaLampo>
+    suspend fun togliCarta(id: Long): Esito<Unit>
+
+    suspend fun stimaSimulata(richiesta: RichiestaStimaSimulata): Esito<StimaStudio>
+    suspend fun creaSimulata(nuova: NuovaSimulata): Esito<Simulata>
+    suspend fun simulate(materiaId: Long): Lettura<List<Simulata>>
+    suspend fun simulata(id: Long): Lettura<Simulata>
+    suspend fun annullaSimulata(id: Long): Esito<Unit>
+    suspend fun riprovaSimulata(id: Long): Esito<Unit>
+    suspend fun eliminaSimulata(id: Long): Esito<Unit>
+    suspend fun salvaSimulata(id: Long, corpo: CorpoSalvaSimulata): Esito<Simulata>
+    suspend fun consegnaSimulata(id: Long): Esito<Simulata>
 }
 
 /** Il server di casa, con la cache per quando non c'è rete. */
@@ -78,6 +128,7 @@ class SorgenteServer(
     private val audio: ArchivioAudio? = null,
     /** Ogni salute letta (con il token): da qui arriva l'indirizzo da fuori casa (contratto 15.5). */
     private val alSalute: suspend (Salute) -> Unit = {},
+    override val deposito: DepositoStudio = DepositoStudio(),
 ) : Sorgente {
     override val esempio = false
 
@@ -193,4 +244,97 @@ class SorgenteServer(
     override suspend fun impostazioni() =
         segna(leggiConCache(cache, "impostazioni", Impostazioni.serializer()) { client.impostazioni() })
     override suspend fun modificaImpostazioni(cambi: JsonObject) = segna(client.modificaImpostazioni(cambi))
+
+    // --- Schemi -------------------------------------------------------------------------------
+
+    override suspend fun stimaSchema(richiesta: RichiestaStimaSchema) = segna(client.stimaSchema(richiesta))
+    override suspend fun creaSchema(nuovo: NuovoSchema) = segna(client.creaSchema(nuovo))
+    override suspend fun schemi(materiaId: Long) =
+        segna(leggiConCache(cache, "schemi-$materiaId", ListSerializer(Schema.serializer())) { client.schemi(materiaId) })
+    override suspend fun schema(id: Long) =
+        segna(leggiConCache(deposito.durevole, "schema-$id", Schema.serializer()) { client.schema(id) })
+    override suspend fun annullaSchema(id: Long) = segna(client.annullaSchema(id))
+    override suspend fun riprovaSchema(id: Long) = segna(client.riprovaSchema(id))
+    override suspend fun eliminaSchema(id: Long): Esito<Unit> {
+        val e = segna(client.eliminaSchema(id))
+        if (e is Esito.Ok) withContext(Dispatchers.IO) { deposito.togliSchema(id) }
+        return e
+    }
+
+    override suspend fun scaricaPdf(documento: DocumentoPdf, destinazione: File) = segna(
+        when (documento) {
+            is DocumentoPdf.DiSchema -> client.pdfSchema(documento.id, destinazione)
+            is DocumentoPdf.DiSimulata -> client.pdfSimulata(documento.id, destinazione)
+            is DocumentoPdf.DiRiassunto -> client.pdfRiassunto(documento.id, destinazione)
+        },
+    )
+
+    override suspend fun immagineSchema(id: Long, n: Int, rinfresca: Boolean): Esito<ByteArray> {
+        val file = deposito.fileImmagine(id, n) ?: return Esito.Errore("Foto non disponibile")
+        if (!rinfresca && withContext(Dispatchers.IO) { file.exists() }) return Esito.Ok(withContext(Dispatchers.IO) { file.readBytes() })
+        return segna(client.immagineSchema(id, n, file)).mappa { withContext(Dispatchers.IO) { file.readBytes() } }
+    }
+
+    override suspend fun cambiaImmagine(id: Long, n: Int) = aggiornaCopiaSchema(segna(client.cambiaImmagine(id, n)))
+    override suspend fun togliImmagine(id: Long, n: Int): Esito<Schema> {
+        val e = aggiornaCopiaSchema(segna(client.togliImmagine(id, n)))
+        if (e is Esito.Ok) withContext(Dispatchers.IO) { deposito.togliImmagine(id, n) }
+        return e
+    }
+
+    /** Dopo Cambia o Togli foto la copia sul telefono è quella nuova. */
+    private suspend fun aggiornaCopiaSchema(e: Esito<Schema>): Esito<Schema> {
+        if (e is Esito.Ok) withContext(Dispatchers.IO) { deposito.durevole.scrivi("schema-${e.dato.id}", JsonLectio.encodeToString(Schema.serializer(), e.dato)) }
+        return e
+    }
+
+    // --- Riassunti ----------------------------------------------------------------------------
+
+    override suspend fun creaRiassunto(schemaId: Long, forma: String) = segna(client.creaRiassunto(schemaId, forma))
+    override suspend fun riassunti(schemaId: Long) =
+        segna(leggiConCache(deposito.durevole, "riassunti-$schemaId", ListSerializer(Riassunto.serializer())) { client.riassunti(schemaId) })
+    override suspend fun riassunto(id: Long) = segna(leggiConCache(deposito.durevole, "riassunto-$id", Riassunto.serializer()) { client.riassunto(id) })
+    override suspend fun riprovaRiassunto(id: Long) = segna(client.riprovaRiassunto(id))
+    override suspend fun eliminaRiassunto(id: Long): Esito<Unit> {
+        val e = segna(client.eliminaRiassunto(id))
+        if (e is Esito.Ok) withContext(Dispatchers.IO) { deposito.durevole.cancella("riassunto-$id") }
+        return e
+    }
+
+    // --- "Non ho capito", Ripasso lampo --------------------------------------------------------
+
+    override suspend fun chiarisci(corpo: CorpoChiarimento) = segna(client.chiarisci(corpo))
+
+    override suspend fun lampo(materiaId: Long?, limite: Int) = segna(
+        leggiConCache(deposito.durevole, if (materiaId == null) "lampo-tutte" else "lampo-$materiaId", Lampo.serializer()) { client.lampo(materiaId, limite) },
+    )
+    override suspend fun esitoLampo(id: Long, esito: String) = segna(client.esitoLampo(id, esito))
+    override suspend fun togliCarta(id: Long): Esito<Unit> {
+        val e = segna(client.togliCarta(id))
+        if (e is Esito.Ok) withContext(Dispatchers.IO) { deposito.togliCartaSalvata(id) }
+        return e
+    }
+
+    // --- Verifica simulata --------------------------------------------------------------------
+
+    override suspend fun stimaSimulata(richiesta: RichiestaStimaSimulata) = segna(client.stimaSimulata(richiesta))
+    override suspend fun creaSimulata(nuova: NuovaSimulata) = segna(client.creaSimulata(nuova))
+    override suspend fun simulate(materiaId: Long) =
+        segna(leggiConCache(cache, "simulate-$materiaId", ListSerializer(Simulata.serializer())) { client.simulate(materiaId) })
+    override suspend fun simulata(id: Long) =
+        segna(leggiConCache(deposito.durevole, "simulata-det-$id", Simulata.serializer()) { client.simulata(id) })
+    override suspend fun annullaSimulata(id: Long) = segna(client.annullaSimulata(id))
+    override suspend fun riprovaSimulata(id: Long) = segna(client.riprovaSimulata(id))
+    override suspend fun eliminaSimulata(id: Long): Esito<Unit> {
+        val e = segna(client.eliminaSimulata(id))
+        if (e is Esito.Ok) {
+            withContext(Dispatchers.IO) {
+                deposito.durevole.cancella("simulata-det-$id")
+                deposito.togliCopia(id)
+            }
+        }
+        return e
+    }
+    override suspend fun salvaSimulata(id: Long, corpo: CorpoSalvaSimulata) = segna(client.salvaSimulata(id, corpo))
+    override suspend fun consegnaSimulata(id: Long) = segna(client.consegnaSimulata(id))
 }

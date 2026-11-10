@@ -486,7 +486,7 @@
       const chiavi = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && (k.startsWith(CHIAVE_POS) || k === CHIAVE_CODA)) chiavi.push(k);
+        if (k && (k.startsWith(CHIAVE_POS) || k === CHIAVE_CODA || k.startsWith('lectio.schema.') || k.startsWith('lectio.simulata.'))) chiavi.push(k);
       }
       chiavi.forEach((k) => localStorage.removeItem(k));
     } catch (e) { /* senza memoria del browser non c'è niente da togliere */ }
@@ -663,6 +663,20 @@
   }
   A.lettoreRidisegna = disegnaTutto;
 
+  /** §34 Dal lettore: l'audio va in pausa e, chiuso il foglio, riparte da lì se stava suonando. */
+  function apriNonHoCapito() {
+    if (!P.lezione || !P.audio) return;
+    const stavaSuonando = !P.audio.paused;
+    if (stavaSuonando) P.audio.pause();
+    const posizione = adesso();
+    const cap = capitoloCorrente();
+    A.nonHoCapito({
+      materia: materia(), lezioneId: P.lezione.id, posizione,
+      etichetta: L.etichettaMinuto(posizione, cap ? cap.titolo : ''),
+      suChiusura: () => { if (stavaSuonando && P.audio && P.audio.paused && !P.domanda) suona(); },
+    });
+  }
+
   function capitoloCorrente() {
     const caps = (P.lezione && P.lezione.capitoli) || [];
     if (!caps.length) return null;
@@ -822,7 +836,8 @@
         h('button', { type: 'button', class: 'tondo salto', 'aria-label': 'Avanti di 30 secondi', disabled: !P.audio ? true : null, onclick: () => salto(adesso() + 30, false) }, '+30')),
       h('div', { class: 'comandi-piccoli' },
         h('button', { type: 'button', 'aria-label': 'Velocità', 'data-azione': 'velocita', onclick: () => cambiaVelocita() }, L.etichettaVelocita(P.audio ? P.audio.playbackRate : velocitaPreferita())),
-        h('button', { type: 'button', 'aria-pressed': P.testo ? 'true' : 'false', onclick: () => { P.testo = !P.testo; disegnaPagina(); } }, 'Testo')),
+        h('button', { type: 'button', 'aria-pressed': P.testo ? 'true' : 'false', onclick: () => { P.testo = !P.testo; disegnaPagina(); } }, 'Testo'),
+        P.domanda ? null : h('button', { type: 'button', class: 'capito', 'data-azione': 'non-ho-capito', disabled: S.senzaRete ? true : null, onclick: apriNonHoCapito }, icona('domanda'), 'Non ho capito')),
       P.finita ? h('div', { class: 'finita' }, icona('spunta'), 'Finita',
         l.evento_id ? h('span', { class: 'piu' }, 'Dopo la verifica raccontami com\'è andata.') : null) : null);
 

@@ -69,6 +69,8 @@
       const sinistra = h('div', { class: 'colonna' }, schedaProssima(d.prossima, riempi));
       const destra = h('div', { class: 'colonna' });
       if (d.riprendi) destra.append(schedaRiprendi(d.riprendi));
+      // §31.1 Tra Riprendi e Dopo la verifica.
+      if (d.lampo) destra.append(A.schedaLampo(d.lampo.da_fare, d.lampo.minuti, () => { if (A.visitaEvento) A.visitaEvento('lampo-apri'); A.apriLampo(); }));
       for (const x of d.da_raccontare || []) destra.append(schedaRacconta(x));
       // Più avanti sotto la prossima se a destra c'è già qualcosa (le due colonne restano in equilibrio).
       if ((d.piu_avanti || []).length) (destra.childElementCount ? sinistra : destra).append(sezionePiuAvanti(d.piu_avanti));
@@ -194,7 +196,7 @@
       icona('freccia'))));
   };
 
-  /** Nuova materia o Modifica materia: anteprima dal vivo, nome, prof, 8 colori; in Modifica anche Elimina. */
+  /** Nuova materia o Modifica materia: anteprima dal vivo, nome, prof, 16 colori; in Modifica anche Elimina. */
   A.apriMateria = function (materia) {
     const nuova = !materia;
     const st = { nome: materia ? materia.nome : '', prof: materia ? materia.prof || '' : '', colore: materia ? materia.colore : L.primoColoreLibero(S.materie), errore: null, invio: false };
@@ -208,16 +210,26 @@
         const prof = h('input', { class: 'campo', id: 'materia-prof', maxlength: '40', placeholder: 'Cognome, se vuoi', value: st.prof });
         const errore = h('span', { class: 'errore-campo', role: 'alert' });
         const cerchi = h('div', { class: 'cerchi-colore', role: 'radiogroup', 'aria-label': 'Colore' });
+        const nomeColore = h('span', { class: 'nome-colore', 'data-colore-nome': 'si' });
+        const usatoDa = h('span', { class: 'colore-usato', 'data-colore-usato': 'si' });
         const crea = h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'salva-materia' }, nuova ? 'Crea materia' : 'Salva');
         function aggiorna() {
           anteprima.className = 'anteprima-materia ' + A.classeMateria(st.colore);
           const n = st.nome.trim();
           svuota(anteprima, h('span', { class: 'piastrella iniziale', 'aria-hidden': 'true' }, n ? n.charAt(0).toUpperCase() : '?'),
             h('span', { class: 'testi' }, h('span', { class: 'nome' }, n || 'Nome della materia'), h('span', { class: 'prof' }, st.prof.trim() ? L.prof(st.prof) : 'Prof. da scrivere')));
-          svuota(cerchi, L.COLORI.map((c) => h('button', {
-            type: 'button', class: 'cerchio-colore ' + A.classeMateria(c), role: 'radio', 'aria-checked': c === st.colore ? 'true' : 'false', 'aria-label': L.NOMI_COLORI[c], 'data-colore': c,
-            onclick: () => { st.colore = c; aggiorna(); },
-          }, icona('spunta'))));
+          svuota(cerchi, L.ORDINE_COLORI.map((c) => {
+            const usata = L.coloreUsatoDa(c, S.materie, materia ? materia.id : null);
+            return h('button', {
+              type: 'button', class: 'cerchio-colore ' + A.classeMateria(c) + (usata ? ' usato' : ''), role: 'radio', 'aria-checked': c === st.colore ? 'true' : 'false',
+              'aria-label': L.NOMI_COLORI[c] + (usata ? ', già usato da ' + usata.nome : ''), 'data-colore': c,
+              onclick: () => { st.colore = c; aggiorna(); },
+            }, icona('spunta'));
+          }));
+          nomeColore.textContent = ' · ' + L.NOMI_COLORI[st.colore];
+          const usata = L.coloreUsatoDa(st.colore, S.materie, materia ? materia.id : null);
+          usatoDa.textContent = usata ? 'già usato da ' + usata.nome : '';
+          usatoDa.style.display = usata ? '' : 'none';
           crea.disabled = !n || st.invio;
           errore.textContent = st.errore || '';
         }
@@ -248,7 +260,7 @@
             anteprima,
             h('label', { class: 'campo-gruppo', for: 'materia-nome' }, h('span', { class: 'etichetta' }, 'Nome'), nome, errore),
             h('label', { class: 'campo-gruppo', for: 'materia-prof' }, h('span', { class: 'etichetta' }, 'Prof'), prof),
-            h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Colore'), cerchi)),
+            h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Colore', nomeColore), cerchi, usatoDa)),
           h('div', { class: 'piede' }, crea,
             nuova ? null : h('button', { type: 'button', class: 'pulsante testo pericolo', 'data-azione': 'elimina-materia', onclick: async () => {
               const ok = await A.conferma({ titolo: 'Eliminare ' + materia.nome + '?', testo: 'Spariscono verifiche, appunti, lezioni e audio di ' + materia.nome + '.', si: 'Elimina materia', pericolo: true });
@@ -268,6 +280,7 @@
   // ================================================================== Materia (§4)
 
   const iconaTipo = (tipo) => (['verifica', 'interrogazione', 'appunti', 'libro'].includes(tipo) ? tipo : 'altro');
+  A.iconaTipo = iconaTipo;
 
   A.pagine.materia = async function (box, rotta, vivo) {
     const id = rotta.id;
@@ -285,8 +298,7 @@
       h('div', { class: 'dentro' },
         h('div', { class: 'nomi' }, h('h1', null, m.nome), sotto),
         h('div', { class: 'comandi' },
-          h('button', { type: 'button', class: 'tondo', 'aria-label': 'Modifica materia', title: 'Modifica materia', onclick: () => A.apriMateria(A.materiaDi(id) || m) }, icona('appunti')),
-          h('button', { type: 'button', class: 'pulsante pieno medio', 'data-azione': 'nuova-lezione', 'data-visita': 'nuova-lezione', onclick: () => { if (A.visitaEvento) A.visitaEvento('nuova-lezione'); A.nuovaLezione(m.id); } }, icona('piu'), 'Nuova lezione'))));
+          h('button', { type: 'button', class: 'tondo', 'aria-label': 'Modifica materia', title: 'Modifica materia', onclick: () => A.apriMateria(A.materiaDi(id) || m) }, icona('appunti')))));
     const scheda = h('section', { class: 'scheda scheda-prof ' + cm, 'data-visita': 'scheda-prof' }, A.segnaposto(3));
     const materiale = h('div', { class: 'elenco ' + cm }, h('div', { class: 'riga' }, h('div', { class: 'segnaposto riga-finta' })));
     const zona = h('div', { class: 'zona-trascina', 'data-zona': 'materia' },
@@ -296,7 +308,31 @@
         h('button', { type: 'button', class: 'pulsante bianco', onclick: () => A.vai('#gemini') }, 'Testo per Gemini')));
     const prossime = h('div', { class: 'elenco' });
     const ripasso = h('div', { class: 'elenco' });
-    const lezioni = h('div', { class: 'elenco' });
+    const lampo = h('div', { 'data-lampo': 'materia' });
+    const lezioni = h('div', { class: 'elenco', 'data-elenco': 'lezioni' });
+    const schemi = h('div', { class: 'elenco nascosto', 'data-elenco': 'schemi' }, h('div', { class: 'riga' }, h('div', { class: 'segnaposto riga-finta' })));
+    const simulate = h('div', { class: 'elenco nascosto', 'data-elenco': 'simulate' }, h('div', { class: 'riga' }, h('div', { class: 'segnaposto riga-finta' })));
+    const binario = h('div', { class: 'segmenti binario', role: 'group', 'aria-label': 'Lezioni, schemi e verifiche simulate' });
+    binario.style.setProperty('--n', '3');
+    const fisso = h('div', { class: 'fondo-fisso' });
+    // Si parte da Lezioni; da un avviso dal segmento giusto; tornando indietro da dov'eri (§31.2).
+    let segmento = rotta.segmento || (S.verso === 'indietro' && S.segmentoAperto && S.segmentoAperto.id === id ? S.segmentoAperto.segmento : 'lezioni');
+    const SEGMENTI = [
+      { nome: 'lezioni', testo: 'Lezioni', azione: 'nuova-lezione', pulsante: 'Nuova lezione', box: lezioni, fai: () => { if (A.visitaEvento) A.visitaEvento('nuova-lezione'); A.nuovaLezione(m.id); } },
+      { nome: 'schemi', testo: 'Schemi', azione: 'nuovo-schema', pulsante: 'Nuovo schema', box: schemi, fai: () => { if (A.visitaEvento) A.visitaEvento('nuovo-schema'); A.nuovoSchema(m.id); } },
+      { nome: 'simulate', testo: 'Simulate', azione: 'nuova-simulata', pulsante: 'Nuova verifica simulata', box: simulate, fai: () => A.nuovaSimulata(m.id) },
+    ];
+    function disegnaSegmento(cambio) {
+      S.segmentoAperto = { id, segmento };
+      svuota(binario, SEGMENTI.map((x) => h('button', {
+        type: 'button', 'aria-pressed': x.nome === segmento ? 'true' : 'false', 'data-segmento': x.nome,
+        onclick: () => { if (A.visitaEvento) A.visitaEvento('segmento-' + x.nome); if (segmento !== x.nome) { segmento = x.nome; disegnaSegmento(true); } },
+      }, x.testo)));
+      const s = SEGMENTI.find((x) => x.nome === segmento);
+      SEGMENTI.forEach((x) => x.box.classList.toggle('nascosto', x !== s));
+      svuota(fisso, h('button', { type: 'button', class: 'pulsante pieno medio' + (cambio ? ' dissolve-corta' : ''), 'data-azione': s.azione, 'data-visita': s.azione, onclick: s.fai }, icona('piu'), s.pulsante));
+      if (A.visitaDopoDisegno) A.visitaDopoDisegno();
+    }
     const pag = h('div', { class: 'pagina' },
       h('div', { class: 'griglia-materia' }, scheda,
         h('div', { class: 'colonna-destra' }, zona,
@@ -305,9 +341,37 @@
       h('div', { class: 'griglia-materia' },
         h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Prossime'),
           h('button', { type: 'button', class: 'pulsante testo', onclick: () => apriAggiungiData(m) }, 'Aggiungi data')), prossime),
-        h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Da ripassare')), ripasso)),
-      h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Lezioni')), lezioni));
+        h('div', { class: 'sezione' }, h('div', { class: 'testa-sezione' }, h('h2', { class: 'titolo-sezione' }, 'Da ripassare')), h('div', { class: 'colonna-ripasso' }, lampo, ripasso))),
+      h('div', { class: 'sezione', 'data-sezione': 'binario' }, binario, lezioni, schemi, simulate),
+      fisso);
     svuota(box, testata, pag);
+    disegnaSegmento(false);
+
+    function disegnaLampo() {
+      const att = A.materiaDi(id) || m;
+      const n = Number((att.conteggi || {}).lampo) || 0;
+      svuota(lampo, A.schedaLampo(n, L.minutiLampo(n), () => { if (A.visitaEvento) A.visitaEvento('lampo-apri'); A.apriLampo({ materiaId: id }); }, 'Niente per oggi'));
+    }
+    let timerSchemi = null;
+    let timerSimulate = null;
+    async function caricaSchemi() {
+      clearTimeout(timerSchemi);
+      const r = await A.api.get('/server/api/schemi?materia_id=' + id);
+      if (!vivo()) return;
+      if (!r.ok) { svuota(schemi, A.erroreConRiprova(r, caricaSchemi)); return; }
+      const lista = r.dati || [];
+      svuota(schemi, lista.length ? lista.map((x) => A.rigaSchema(x, m, caricaSchemi)) : h('div', { class: 'riga' }, h('span', { class: 'secondario', stile: { fontSize: '15px' } }, 'Nessuno schema ancora')));
+      if (lista.some((x) => x.stato === 'in_coda' || x.stato === 'in_preparazione')) timerSchemi = setTimeout(() => { if (vivo()) caricaSchemi(); }, T.stato);
+    }
+    async function caricaSimulate() {
+      clearTimeout(timerSimulate);
+      const r = await A.api.get('/server/api/simulate?materia_id=' + id);
+      if (!vivo()) return;
+      if (!r.ok) { svuota(simulate, A.erroreConRiprova(r, caricaSimulate)); return; }
+      const lista = r.dati || [];
+      svuota(simulate, lista.length ? lista.map((x) => A.rigaSimulata(x, m, caricaSimulate)) : h('div', { class: 'riga' }, h('span', { class: 'secondario', stile: { fontSize: '15px' } }, 'Nessuna verifica simulata ancora')));
+      if (lista.some((x) => ['in_coda', 'in_preparazione', 'in_correzione'].includes(x.stato))) timerSimulate = setTimeout(() => { if (vivo()) caricaSimulate(); }, T.stato);
+    }
 
     async function caricaScheda() {
       const r = await A.api.get('/server/api/materie/' + id + '/scheda');
@@ -345,15 +409,18 @@
       if (!vivo()) return;
       if (!r.ok) { svuota(ripasso, r.stato === 404 ? h('div', { class: 'riga' }, h('span', { class: 'secondario' }, 'Niente da ripassare')) : A.erroreConRiprova(r, caricaRipasso)); return; }
       const lista = r.dati || [];
+      // §31.2 La sezione c'è sempre: senza domande resta la sola scheda del Ripasso lampo.
+      ripasso.classList.toggle('nascosto', !lista.length);
       svuota(ripasso, lista.length ? lista.slice(0, 8).map((x) => {
         const e = L.esitoRisposta(x.esito);
         return h('button', { type: 'button', class: 'riga riga-ripasso', onclick: () => A.apriDomanda(x.lezione_id, x.domanda_id) },
           h('span', { class: 'testi' }, h('span', { class: 'forte', stile: { fontSize: '15px' } }, x.testo), h('span', { class: 'secondario', stile: { fontSize: '13px' } }, (x.lezione || '') + (x.quando ? ' · ' + L.quando(L.giorniFra(L.iso(), x.quando)) : ''))),
           h('span', { class: 'esito ' + e.classe }, e.parola));
-      }) : h('div', { class: 'riga' }, h('span', { class: 'secondario' }, 'Niente da ripassare')));
+      }) : null);
     }
-    S.aggiornaPagina = () => { caricaMateriale(); caricaScheda(); caricaEventi(); caricaRipasso(); };
-    await Promise.all([caricaScheda(), caricaMateriale(), caricaEventi(), caricaRipasso()]);
+    S.aggiornaPagina = () => { caricaMateriale(); caricaScheda(); caricaEventi(); caricaRipasso(); caricaSchemi(); caricaSimulate(); A.caricaMaterie().then(() => { if (vivo()) disegnaLampo(); }); };
+    disegnaLampo();
+    await Promise.all([caricaScheda(), caricaMateriale(), caricaEventi(), caricaRipasso(), caricaSchemi(), caricaSimulate(), A.caricaMaterie().then(() => { if (vivo()) disegnaLampo(); })]);
     if (A.visitaDopoDisegno) A.visitaDopoDisegno();
   };
 
@@ -1054,7 +1121,7 @@
       S.impostazioni ? gruppo('Soldi',
         voce('Tetto del mese', spesa ? 'Questo mese hai speso ' + L.euro(spesa.speso_eur) + '. ' + L.siAzzera(spesa.si_azzera_il) + '.' : null, h('span', { class: 'tetto-campo' }, tetto, h('span', { class: 'forte' }, '€')))) : null,
       gruppo('Aspetto', voce('Tema', null, tema)),
-      gruppo('Aiuto', voce('Come funziona Lectio', null, h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'visita', onclick: () => A.avviaVisita && A.avviaVisita() }, 'Guarda come funziona'))),
+      gruppo('Aiuto', voce('Come funziona Lectio', null, h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'visita', onclick: () => A.avviaVisita && A.avviaVisita(false, 'tutta') }, 'Guarda come funziona'))),
       gruppo('Sul computer', voce('Lezioni scaricate', nScaricate ? L.plurale(nScaricate, 'lezione', 'lezioni') + ' · ' + L.dimensione(mot.byte_scaricate || 0) : 'Nessuna')),
       gruppo('Aggiornamenti', rigaAgg),
       gruppo('Informazioni', voce('Lectio ' + (mot.versione || '1.0.0') + ' per il computer', 'Carattere Figtree, licenza SIL Open Font License.')));

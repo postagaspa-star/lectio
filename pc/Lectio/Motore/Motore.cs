@@ -10,7 +10,12 @@ using Lectio.Sistema;
 namespace Lectio.Motore;
 
 /// <summary>Una risposta per la pagina; <see cref="DaMemoriaDel"/> = dati vecchi perché il server non risponde.</summary>
-public sealed record RispostaPonte(int Stato, string Json, DateTimeOffset? DaMemoriaDel = null);
+public sealed record RispostaPonte(int Stato, string Json, DateTimeOffset? DaMemoriaDel = null)
+{
+    /// <summary>Se c'è, la pagina riceve questi byte (una foto) al posto del JSON.</summary>
+    public byte[]? Byte { get; init; }
+    public string? TipoContenuto { get; init; }
+}
 
 /// <summary>Un avviso di Windows (fumetto dall'icona vicino all'orologio); <see cref="Frammento"/> = cosa apre il clic.</summary>
 public sealed record Notifica(string Titolo, string Testo, string? Frammento = null);
@@ -35,6 +40,15 @@ public sealed class Motore : IDisposable
     /// <summary>La correzione di una risposta scritta passa da un modello: può metterci, si aspetta fino a 200 s.</summary>
     public static readonly TimeSpan TempoCorrezione = TimeSpan.FromSeconds(200);
 
+    /// <summary>"Non ho capito" passa da un modello: una risposta può metterci fino a un minuto.</summary>
+    public static readonly TimeSpan TempoChiarimento = TimeSpan.FromSeconds(65);
+
+    /// <summary>"Cambia foto" cerca un'altra immagine in rete: può metterci un paio di minuti.</summary>
+    public static readonly TimeSpan TempoCambiaFoto = TimeSpan.FromMinutes(2);
+
+    /// <summary>Un riassunto non ha un elenco da controllare: dopo averlo chiesto si guarda per un po', poi basta.</summary>
+    public static readonly TimeSpan AttesaRiassunto = TimeSpan.FromMinutes(10);
+
     /// <summary>Quanto vale la verifica di <c>server_id</c> su un indirizzo di casa in chiaro.</summary>
     public static readonly TimeSpan DurataVerificaCasa = TimeSpan.FromMinutes(5);
 
@@ -51,6 +65,14 @@ public sealed class Motore : IDisposable
     private static readonly Regex PercorsoNuovaLezione = new(@"^api/lezioni/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoRiprovaLezione = new(@"^api/lezioni/\d+/riprova/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoRisposta = new(@"^api/lezioni/\d+/domande/\d+/risposta/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoLavoroStudio = new(@"^api/(schemi|simulate)/?$|^api/(schemi|simulate)/\d+/riprova/?$|^api/simulate/\d+/consegna/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoRiassunto = new(@"^api/schemi/\d+/riassunti/?$|^api/riassunti/\d+/riprova/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoChiarimenti = new(@"^api/chiarimenti/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoFotoSchema = new(@"^api/schemi/(\d{1,12})/immagini/(\d{1,6})(/cambia)?/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoSchema = new(@"^api/schemi/(\d{1,12})/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoPdf = new(@"^api/(schemi|simulate|riassunti)/\d{1,12}/pdf$", RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> StatiInLavorazione = new(StringComparer.Ordinal) { "in_coda", "in_preparazione", "in_correzione" };
+    private static readonly HashSet<string> TipiFoto = new(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png", "image/webp" };
     private static readonly Regex ServerIdValido = new(@"^[0-9a-fA-F]{32}$", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> TipiMateriale = new(StringComparer.Ordinal) { "verifica", "interrogazione", "appunti", "libro", "altro" };
 
@@ -72,6 +94,7 @@ public sealed class Motore : IDisposable
     private bool inPreparazione;
     private bool primoGiroFatto;
     private DateTimeOffset? casaVerificataFino;
+    private readonly List<DateTimeOffset> riassuntiAttesi = new();
 
     public Motore(Percorsi percorsi, ClientLectio? client = null, Func<DateTimeOffset>? orologio = null)
     {
@@ -85,7 +108,7 @@ public sealed class Motore : IDisposable
         if (token == null && config.Server != null)
         {
             // Il token non si decifra (copiato da un altro utente o computer): si ricomincia dall'abbinamento.
-            config = new Configurazione { TutorialVisto = config.TutorialVisto, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
+            config = new Configurazione { TutorialVisto = config.TutorialVisto, TutorialNovitaVisto = config.TutorialNovitaVisto, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
         }
         Audio = new CacheAudio(percorsi.Lezioni, this.client);
         Aggiornatore = new Aggiornatore(this.client, Versione.Codice);
@@ -183,10 +206,15 @@ public sealed class Motore : IDisposable
     }
 
     /// <summary>Il tempo massimo di una richiesta della pagina: le correzioni delle risposte possono metterci di più.</summary>
-    public static TimeSpan TempoPer(string metodo, string percorso) =>
-        metodo.Equals("POST", StringComparison.OrdinalIgnoreCase) && PercorsoRisposta.IsMatch(percorso.TrimStart('/').Split('?')[0])
-            ? TempoCorrezione
-            : ClientLectio.TempoMassimo;
+    public static TimeSpan TempoPer(string metodo, string percorso)
+    {
+        if (!metodo.Equals("POST", StringComparison.OrdinalIgnoreCase)) return ClientLectio.TempoMassimo;
+        var p = percorso.TrimStart('/').Split('?')[0];
+        if (PercorsoRisposta.IsMatch(p)) return TempoCorrezione;
+        if (PercorsoChiarimenti.IsMatch(p)) return TempoChiarimento;
+        var foto = PercorsoFotoSchema.Match(p);
+        return foto.Success && foto.Groups[3].Success ? TempoCambiaFoto : ClientLectio.TempoMassimo;
+    }
 
     private static bool InChiaro(string? server) => server != null && server.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
@@ -352,6 +380,7 @@ public sealed class Motore : IDisposable
                 {
                     if (NotificaPer(v) is Notifica n) NuovaNotifica?.Invoke(n);
                 }
+                foreach (var _ in nuove.Where(v => v.Tipo is "riassunto_pronto" or "riassunto_errore")) RiassuntoArrivato();
                 if (nuove.Count > 0) Novita?.Invoke(Json.Scrivi(nuove));
             }
             if (ComeSenzaRete(r) || r.Stato == 401) return;
@@ -361,13 +390,50 @@ public sealed class Motore : IDisposable
             if (l.Ok && Json.Leggi<List<LezioneBreve>>(l.Corpo) is List<LezioneBreve> lezioni)
             {
                 memoria.Salva("GET api/lezioni", l.Corpo, orologio());
-                ImpostaPreparazione(lezioni.Any(x => x.InLavorazione));
+                ImpostaPreparazione(lezioni.Any(x => x.InLavorazione) || await StudioInLavorazioneAsync(base_, tok, annulla).ConfigureAwait(false));
                 Audio.TogliAssenti(lezioni.Select(x => x.Id));
             }
         }
         finally
         {
             giro.Release();
+        }
+    }
+
+    /// <summary>Uno schema, una verifica o un riassunto in lavorazione tengono acceso il giro ogni 20 secondi, come le lezioni.</summary>
+    private async Task<bool> StudioInLavorazioneAsync(string base_, string tok, CancellationToken annulla)
+    {
+        if (RiassuntiInAttesa()) return true;
+        foreach (var elenco in new[] { "api/schemi", "api/simulate" })
+        {
+            var r = await client.InviaAsync("GET", base_, elenco, tok, null, annulla: annulla).ConfigureAwait(false);
+            if (r.Ok && Json.Nodo(r.Corpo) is JsonArray righe && righe.Any(x => x is JsonObject o && StatiInLavorazione.Contains(Json.Testo(o["stato"]) ?? ""))) return true;
+        }
+        return false;
+    }
+
+    private bool RiassuntiInAttesa()
+    {
+        var adesso = orologio();
+        lock (stato)
+        {
+            riassuntiAttesi.RemoveAll(s => s <= adesso);
+            return riassuntiAttesi.Count > 0;
+        }
+    }
+
+    private void RiassuntoChiesto(string corpo)
+    {
+        if (Json.Nodo(corpo) is not JsonObject o || !StatiInLavorazione.Contains(Json.Testo(o["stato"]) ?? "")) return;
+        var scade = orologio() + AttesaRiassunto;
+        lock (stato) riassuntiAttesi.Add(scade);
+    }
+
+    private void RiassuntoArrivato()
+    {
+        lock (stato)
+        {
+            if (riassuntiAttesi.Count > 0) riassuntiAttesi.RemoveAt(0);
         }
     }
 
@@ -379,8 +445,17 @@ public sealed class Motore : IDisposable
     public static Notifica? NotificaPer(VoceNovita v)
     {
         var frammento = v.LezioneId is long id ? "lezione/" + id.ToString(CultureInfo.InvariantCulture) : null;
+        var schemi = v.MateriaId is long m ? "materia/" + m.ToString(CultureInfo.InvariantCulture) + "/schemi" : null;
+        var simulate = v.MateriaId is long n ? "materia/" + n.ToString(CultureInfo.InvariantCulture) + "/simulate" : null;
         return v.Tipo switch
         {
+            "schema_pronto" => new Notifica(Testo(v.Testo, "Lo schema è pronto"), "Fai clic per aprirlo.", schemi),
+            "schema_errore" => new Notifica(Testo(v.Testo, "Lo schema non è riuscito"), "Fai clic per vedere cosa è successo.", schemi),
+            "riassunto_pronto" => new Notifica(Testo(v.Testo, "Il riassunto è pronto"), "Fai clic per aprire gli schemi.", schemi),
+            "riassunto_errore" => new Notifica(Testo(v.Testo, "Il riassunto non è riuscito"), "Fai clic per aprire gli schemi.", schemi),
+            "simulata_pronta" => new Notifica(Testo(v.Testo, "La verifica di prova è pronta"), "Fai clic per aprirla.", simulate),
+            "simulata_corretta" => new Notifica(Testo(v.Testo, "Ho corretto la verifica di prova"), "Fai clic per vedere com'è andata.", simulate),
+            "simulata_errore" => new Notifica(Testo(v.Testo, "La verifica di prova non è riuscita"), "Fai clic per vedere cosa è successo.", simulate),
             "lezione_pronta" => new Notifica(Testo(v.Testo, "La lezione è pronta"), "Fai clic per ascoltarla.", frammento),
             "lezione_errore" => new Notifica(Testo(v.Testo, "La lezione non è riuscita"), "Fai clic per vedere cosa è successo.", frammento),
             "materiale_errore" => new Notifica(Testo(v.Testo, "Un file non si è letto"), "Fai clic per vedere cosa è successo.", null),
@@ -441,6 +516,7 @@ public sealed class Motore : IDisposable
             ["in_preparazione"] = InPreparazione,
             ["versione"] = Versione.Nome,
             ["tutorial_visto"] = c.TutorialVisto,
+            ["tutorial_novita_visto"] = c.TutorialNovitaVisto,
             ["tema"] = c.Tema ?? "sistema",
             ["diagnosi"] = Diagnosi,
             ["scaricate"] = new JsonArray(scaricate.Select(v => (JsonNode)JsonValue.Create(v.Id)).ToArray()),
@@ -493,6 +569,7 @@ public sealed class Motore : IDisposable
                 AbbinatoIl = orologio(),
                 ServerId = serverId,
                 TutorialVisto = config.TutorialVisto,
+                TutorialNovitaVisto = config.TutorialNovitaVisto,
                 Tema = config.Tema,
                 IndirizzoFuori = config.IndirizzoFuori,
             };
@@ -503,6 +580,7 @@ public sealed class Motore : IDisposable
         }
         AdottaFuoriCasaDelServer(risposta.IndirizzoFuoriCasa);
         memoria.Svuota();
+        SvuotaFoto();
         NonRiconosciuto = false;
         ServerRaggiungibile = true;
         Log.Info("computer collegato al server");
@@ -528,13 +606,15 @@ public sealed class Motore : IDisposable
         }
         lock (stato)
         {
-            config = new Configurazione { TutorialVisto = config.TutorialVisto, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
+            config = new Configurazione { TutorialVisto = config.TutorialVisto, TutorialNovitaVisto = config.TutorialNovitaVisto, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
             token = null;
             inPreparazione = false;
             casaVerificataFino = null;
+            riassuntiAttesi.Clear();
             SalvaConfig();
         }
         memoria.Svuota();
+        SvuotaFoto();
         var rimaste = Audio.Svuota();
         NonRiconosciuto = false;
         Log.Info(revocato ? "computer scollegato" : "computer scollegato solo qui: il server non ha confermato");
@@ -580,6 +660,16 @@ public sealed class Motore : IDisposable
         lock (stato)
         {
             config.TutorialVisto = true;
+            SalvaConfig();
+        }
+        return new JsonObject { ["ok"] = true };
+    }
+
+    public JsonObject SegnaTutorialNovitaVisto()
+    {
+        lock (stato)
+        {
+            config.TutorialNovitaVisto = true;
             SalvaConfig();
         }
         return new JsonObject { ["ok"] = true };
@@ -665,7 +755,10 @@ public sealed class Motore : IDisposable
             {
                 Audio.TogliAssenti(lezioni.Select(x => x.Id));
             }
-            if (metodo == "POST" && (PercorsoNuovaLezione.IsMatch(percorso) || PercorsoRiprovaLezione.IsMatch(percorso)))
+            TogliFotoCambiate(metodo, percorso);
+            var riassunto = metodo == "POST" && PercorsoRiassunto.IsMatch(percorso);
+            if (riassunto) RiassuntoChiesto(testo);
+            if (metodo == "POST" && (PercorsoNuovaLezione.IsMatch(percorso) || PercorsoRiprovaLezione.IsMatch(percorso) || PercorsoLavoroStudio.IsMatch(percorso) || riassunto))
             {
                 ImpostaPreparazione(true);
                 Sveglia();
@@ -673,6 +766,115 @@ public sealed class Motore : IDisposable
             return new RispostaPonte(r.Stato, testo);
         }
         return new RispostaPonte(r.Stato, ErroreLeggibile(r).ToJsonString());
+    }
+
+    // ---------------- Foto degli schemi e PDF ----------------
+
+    /// <summary>
+    /// La foto di uno schema, come byte per la pagina. Si chiede al server e se ne tiene una copia; se il server non
+    /// risponde vale la copia, così uno schema già aperto si rilegge anche senza rete.
+    /// </summary>
+    public async Task<RispostaPonte> ImmagineSchemaAsync(long schema, int n)
+    {
+        if (!Abbinato) return ErrorePonte(401, Frasi.NonCollegato, "non_abbinato");
+        var file = FileFoto(schema, n);
+        var (base_, tok) = await CollegamentoAsync().ConfigureAwait(false);
+        if (base_ != null && tok != null)
+        {
+            var percorso = "api/schemi/" + schema.ToString(CultureInfo.InvariantCulture) + "/immagini/" + n.ToString(CultureInfo.InvariantCulture);
+            var r = await client.LeggiByteAsync(base_, percorso, tok).ConfigureAwait(false);
+            var come = r.ComeRisposta;
+            Annota(come, base_);
+            if (r.Ok && r.Byte.Length > 0)
+            {
+                ConservaFoto(file, r.Byte);
+                return new RispostaPonte(200, "{}") { Byte = r.Byte, TipoContenuto = r.Tipo != null && TipiFoto.Contains(r.Tipo) ? r.Tipo : "image/jpeg" };
+            }
+            if (!ComeSenzaRete(come) && !r.Ok)
+            {
+                if (r.Stato == 404) CancellaFile(file);
+                return new RispostaPonte(r.Stato, ErroreLeggibile(come).ToJsonString());
+            }
+        }
+        try
+        {
+            if (File.Exists(file)) return new RispostaPonte(200, "{}") { Byte = await File.ReadAllBytesAsync(file).ConfigureAwait(false), TipoContenuto = "image/jpeg" };
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Errore("foto dello schema non letta", e);
+        }
+        return ErrorePonte(503, Frasi.ServerIrraggiungibile, "rete");
+    }
+
+    /// <summary>I byte di un PDF del server (schema, verifica, riassunto), oppure l'errore da mostrare. Solo quei percorsi.</summary>
+    public async Task<(byte[]? Dati, JsonObject? Errore)> LeggiPdfAsync(string? percorso)
+    {
+        if (percorso == null || !PercorsoPdf.IsMatch(percorso)) return (null, Errore(Frasi.RichiestaSconosciuta, "non_trovato"));
+        if (!Abbinato) return (null, Errore(Frasi.NonCollegato, "non_abbinato"));
+        var (base_, tok) = await CollegamentoAsync().ConfigureAwait(false);
+        if (base_ == null || tok == null) return (null, Errore(Frasi.ServerIrraggiungibile, "rete"));
+        var r = await client.LeggiByteAsync(base_, percorso, tok, TempoCaricamento).ConfigureAwait(false);
+        var come = r.ComeRisposta;
+        Annota(come, base_);
+        if (ComeSenzaRete(come)) return (null, Errore(Frasi.ServerIrraggiungibile, "rete"));
+        if (!r.Ok) return (null, ErroreLeggibile(come));
+        if (r.Byte.Length == 0) return (null, Errore("Il server ha risposto in modo strano. Riprova tra poco.", "errore"));
+        return (r.Byte, null);
+    }
+
+    private string FileFoto(long schema, int n) =>
+        Path.Combine(percorsi.Immagini, "schema-" + schema.ToString(CultureInfo.InvariantCulture) + "-" + n.ToString(CultureInfo.InvariantCulture) + ".jpg");
+
+    private static void ConservaFoto(string file, byte[] dati)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllBytes(file, dati);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Errore("foto dello schema non conservata", e);
+        }
+    }
+
+    private static void CancellaFile(string file)
+    {
+        try
+        {
+            File.Delete(file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Errore("foto dello schema non tolta", e);
+        }
+    }
+
+    /// <summary>Una foto cambiata o tolta, o uno schema cancellato: la copia sul computer non vale più.</summary>
+    private void TogliFotoCambiate(string metodo, string percorso)
+    {
+        var foto = PercorsoFotoSchema.Match(percorso);
+        if (foto.Success && (metodo == "DELETE" || (metodo == "POST" && foto.Groups[3].Success)))
+        {
+            CancellaFile(FileFoto(long.Parse(foto.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(foto.Groups[2].Value, CultureInfo.InvariantCulture)));
+            return;
+        }
+        var schema = PercorsoSchema.Match(percorso);
+        if (metodo != "DELETE" || !schema.Success || !Directory.Exists(percorsi.Immagini)) return;
+        foreach (var f in Directory.GetFiles(percorsi.Immagini, "schema-" + schema.Groups[1].Value + "-*.jpg")) CancellaFile(f);
+    }
+
+    private void SvuotaFoto()
+    {
+        try
+        {
+            if (Directory.Exists(percorsi.Immagini)) Directory.Delete(percorsi.Immagini, recursive: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Errore("foto degli schemi non tolte", e);
+        }
     }
 
     /// <summary>

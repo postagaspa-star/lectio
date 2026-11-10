@@ -15,7 +15,8 @@ from fastapi import Request
 
 from . import clock
 
-COLORI = ["ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva"]
+COLORI = ["ambra", "rosa", "petrolio", "viola", "blu", "verde", "arancio", "oliva", "giada", "senape", "orchidea",
+          "prugna", "cacao", "lavagna", "salvia", "lavanda"]
 
 IMPOSTAZIONI_INIZIALI = {
     "tetto_eur": 2.00,
@@ -240,11 +241,149 @@ def _semina_3(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE materiali SET titolo_da = 'file' WHERE id = ?", (r["id"],))
 
 
+# 1.2.0 (10/11): la memoria sui documenti, gli schemi, "Non ho capito", il ripasso lampo, la verifica simulata.
+SCHEMA_4 = """
+ALTER TABLE spese ADD COLUMN riferimento TEXT;
+CREATE INDEX spese_riferimento ON spese (riferimento);
+CREATE TABLE pezzi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    materiale_id INTEGER NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
+    n INTEGER NOT NULL,
+    pagina INTEGER,
+    rango INTEGER NOT NULL,
+    testo TEXT NOT NULL,
+    vettore BLOB,
+    modello TEXT
+);
+CREATE INDEX pezzi_materiale ON pezzi (materiale_id, n);
+CREATE INDEX pezzi_materia ON pezzi (materia_id, rango);
+CREATE TABLE schemi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    evento_id INTEGER REFERENCES eventi(id) ON DELETE SET NULL,
+    argomento TEXT NOT NULL,
+    titolo TEXT NOT NULL DEFAULT '',
+    forma TEXT NOT NULL,
+    livello TEXT NOT NULL,
+    indicazioni TEXT NOT NULL DEFAULT '',
+    materiali TEXT NOT NULL DEFAULT '[]',
+    stato TEXT NOT NULL CHECK (stato IN ('in_coda', 'in_preparazione', 'pronto', 'errore', 'annullato')),
+    fase TEXT,
+    fatto INTEGER NOT NULL DEFAULT 0,
+    totale INTEGER NOT NULL DEFAULT 0,
+    frase TEXT,
+    errore TEXT,
+    nota TEXT,
+    stima_eur REAL NOT NULL DEFAULT 0,
+    creato_il TEXT NOT NULL,
+    in_coda_dal TEXT NOT NULL,
+    pronto_il TEXT,
+    contenuto TEXT,
+    carte INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX schemi_coda ON schemi (stato, in_coda_dal, id);
+CREATE TABLE riassunti (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schema_id INTEGER NOT NULL REFERENCES schemi(id) ON DELETE CASCADE,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    forma TEXT NOT NULL CHECK (forma IN ('punti', 'discorsivo', 'misto')),
+    titolo TEXT NOT NULL DEFAULT '',
+    stato TEXT NOT NULL CHECK (stato IN ('in_coda', 'in_preparazione', 'pronto', 'errore')),
+    frase TEXT,
+    errore TEXT,
+    nota TEXT,
+    stima_eur REAL NOT NULL DEFAULT 0,
+    creato_il TEXT NOT NULL,
+    in_coda_dal TEXT NOT NULL,
+    pronto_il TEXT,
+    parole INTEGER NOT NULL DEFAULT 0,
+    contenuto TEXT,
+    UNIQUE (schema_id, forma)
+);
+CREATE INDEX riassunti_coda ON riassunti (stato, in_coda_dal, id);
+CREATE TABLE simulate (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    evento_id INTEGER REFERENCES eventi(id) ON DELETE SET NULL,
+    argomento TEXT NOT NULL,
+    titolo TEXT NOT NULL DEFAULT '',
+    minuti INTEGER NOT NULL,
+    materiali TEXT NOT NULL DEFAULT '[]',
+    indicazioni TEXT NOT NULL DEFAULT '',
+    stato TEXT NOT NULL CHECK (stato IN ('in_coda', 'in_preparazione', 'pronta', 'in_corso', 'in_correzione', 'corretta',
+                                         'errore', 'annullata')),
+    fase TEXT,
+    fatto INTEGER NOT NULL DEFAULT 0,
+    totale INTEGER NOT NULL DEFAULT 0,
+    frase TEXT,
+    errore TEXT,
+    nota TEXT,
+    stima_eur REAL NOT NULL DEFAULT 0,
+    creata_il TEXT NOT NULL,
+    in_coda_dal TEXT NOT NULL,
+    iniziata_il TEXT,
+    consegnata_il TEXT,
+    domande TEXT NOT NULL DEFAULT '[]',
+    risposte TEXT NOT NULL DEFAULT '{}',
+    esito TEXT
+);
+CREATE INDEX simulate_coda ON simulate (stato, in_coda_dal, id);
+CREATE TABLE carte (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    origine TEXT NOT NULL,
+    chiave TEXT NOT NULL UNIQUE,
+    domanda TEXT NOT NULL,
+    risposta TEXT NOT NULL,
+    fonti TEXT NOT NULL DEFAULT '[]',
+    scatola INTEGER NOT NULL DEFAULT 1,
+    prossima TEXT NOT NULL,
+    creata_il TEXT NOT NULL
+);
+CREATE INDEX carte_prossima ON carte (prossima, scatola);
+CREATE INDEX carte_materia ON carte (materia_id, prossima);
+CREATE TABLE chiarimenti (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    lezione_id INTEGER REFERENCES lezioni(id) ON DELETE SET NULL,
+    schema_id INTEGER REFERENCES schemi(id) ON DELETE SET NULL,
+    passaggio TEXT NOT NULL DEFAULT '',
+    domanda TEXT NOT NULL DEFAULT '',
+    risposta TEXT NOT NULL,
+    trovato INTEGER NOT NULL,
+    fonti TEXT NOT NULL DEFAULT '[]',
+    costo_eur REAL NOT NULL DEFAULT 0,
+    quando TEXT NOT NULL
+);
+CREATE INDEX chiarimenti_materia ON chiarimenti (materia_id, id DESC)
+"""
+
+
+def _semina_4(conn: sqlite3.Connection) -> None:
+    # La scheda del prof ora si conta dalle domande vere: quelle scritte prima si rifanno.
+    conn.execute(
+        "UPDATE schede SET da_aggiornare = da_aggiornare + 1, stato = 'in_aggiornamento', errore = NULL WHERE materia_id IN"
+        " (SELECT materia_id FROM materiali WHERE stato = 'pronto' AND tipo IN ('verifica', 'interrogazione'))")
+    # Le risposte sbagliate che c'erano già diventano le prime carte del ripasso lampo.
+    giorno = clock.oggi().isoformat()
+    for r in conn.execute(
+        "SELECT d.id, d.testo, d.risposta, l.materia_id FROM risposte r JOIN domande d ON d.id = r.domanda_id"
+        " JOIN lezioni l ON l.id = r.lezione_id WHERE r.esito IN ('parziale', 'sbagliata')"
+        " AND r.id = (SELECT MAX(r2.id) FROM risposte r2 WHERE r2.domanda_id = r.domanda_id)"
+    ).fetchall():
+        conn.execute(
+            "INSERT OR IGNORE INTO carte (materia_id, origine, chiave, domanda, risposta, prossima, creata_il)"
+            " VALUES (?, 'lezione', ?, ?, ?, ?, ?)",
+            (r["materia_id"], f"lezione:{r['id']}", r["testo"], r["risposta"], giorno, clock.adesso()))
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
     (2, SCHEMA_2, _semina_2),
     (3, SCHEMA_3, _semina_3),
+    (4, SCHEMA_4, _semina_4),
 ]
 
 
@@ -384,5 +523,12 @@ def ripristina_dopo_riavvio(db_path: str) -> None:
                 )
                 aggiungi_novita(conn, "lezione_errore", f"La lezione di {riga['nome']} si è fermata: tocca Riprova",
                                 lezione_id=riga["id"], materia_id=riga["materia_id"])
+            # Schemi e verifiche simulate: stessa regola. Le correzioni restano in coda e ripartono da sole.
+            conn.execute("UPDATE schemi SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
+                         (INTERROTTA_RIAVVIO,))
+            conn.execute("UPDATE simulate SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
+                         (INTERROTTA_RIAVVIO,))
+            conn.execute("UPDATE riassunti SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
+                         (INTERROTTA_RIAVVIO,))
     finally:
         conn.close()

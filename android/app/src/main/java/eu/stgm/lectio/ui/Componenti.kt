@@ -200,12 +200,12 @@ fun PulsantePieno(
     Row(
         modifier
             .fillMaxWidth()
-            .height(altezza)
+            .heightIn(min = altezza)
             .ombraColore(forma, colore, abilitato && coloreTesto == null)
             .clip(forma)
             .background(if (abilitato) colore else c.superficie2)
             .clickable(enabled = abilitato, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = 18.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -214,7 +214,8 @@ fun PulsantePieno(
             Icon(icona, contentDescription = null, tint = inchiostro, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Text(testo, style = L.testi.pulsante, color = inchiostro, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Mai troncato (aspetto.md §38): se non ci sta va a capo tra le parole.
+        Text(testo, style = L.testi.pulsante, color = inchiostro, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -234,12 +235,12 @@ fun PulsanteSecondario(
     val forma = RoundedCornerShape(raggio)
     Row(
         modifier
-            .height(altezza)
+            .heightIn(min = altezza)
             .clip(forma)
             .background(c.accentoTenue)
             .clickable(enabled = abilitato, role = Role.Button, onClick = onClick)
             .alpha(if (abilitato) 1f else 0.45f)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -247,7 +248,7 @@ fun PulsanteSecondario(
             Icon(icona, contentDescription = null, tint = c.accentoTesto, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(testo, style = stile, color = c.accentoTesto, maxLines = 1)
+        Text(testo, style = stile, color = c.accentoTesto, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -370,8 +371,8 @@ fun BarretteInCorso(colore: Color) {
 
 /** Una barra che si riempie (con animazione). */
 @Composable
-fun Barra(frazione: Float, modifier: Modifier = Modifier, altezza: Dp = 6.dp, colore: Color = L.colori.accento, binario: Color = L.colori.superficie2) {
-    val f by animateFloatAsState(frazione.coerceIn(0f, 1f), morbido(350), label = "barra")
+fun Barra(frazione: Float, modifier: Modifier = Modifier, altezza: Dp = 6.dp, colore: Color = L.colori.accento, binario: Color = L.colori.superficie2, durataMs: Int = 350) {
+    val f by animateFloatAsState(frazione.coerceIn(0f, 1f), morbido(durataMs), label = "barra")
     Box(modifier.fillMaxWidth().height(altezza).clip(CircleShape).background(binario)) {
         Box(Modifier.fillMaxWidth(f).fillMaxHeight().clip(CircleShape).background(colore))
     }
@@ -636,7 +637,7 @@ private fun Modifier.androidx_draggable(onDelta: (Float) -> Unit, onFine: () -> 
  * neutri: il rosso è solo per gli errori (aspetto.md §0.10).
  */
 @Composable
-fun Conferma(titolo: String, testo: String, conferma: String, onConferma: () -> Unit, onAnnulla: () -> Unit, pericolosa: Boolean = true) {
+fun Conferma(titolo: String, testo: String, conferma: String, onConferma: () -> Unit, onAnnulla: () -> Unit, pericolosa: Boolean = true, annulla: String = "Annulla") {
     Foglio(onChiudi = onAnnulla, titolo = titolo) {
         Text(testo, style = L.testi.testo, color = L.colori.tenue)
         Spacer(Modifier.height(4.dp))
@@ -646,7 +647,7 @@ fun Conferma(titolo: String, testo: String, conferma: String, onConferma: () -> 
             PulsantePieno(conferma, onConferma)
         }
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            PulsanteTesto("Annulla", onAnnulla, colore = L.colori.tenue)
+            PulsanteTesto(annulla, onAnnulla, colore = L.colori.tenue)
         }
     }
 }
@@ -698,7 +699,7 @@ fun StatoVuoto(frase: String, pulsante: String?, onClick: () -> Unit, modifier: 
     }
 }
 
-enum class TipoPillola { ESEMPIO, PROVA, SENZA_RETE }
+enum class TipoPillola { ESEMPIO, PROVA, SENZA_RETE, SENZA_RETE_BREVE }
 
 /** Le pillole in alto: "Esempio" (visita), "Prova" (server senza chiavi), "Senza rete". */
 @Composable
@@ -708,6 +709,7 @@ fun PillolaStato(tipo: TipoPillola, modifier: Modifier = Modifier) {
         TipoPillola.ESEMPIO -> Triple("Esempio", c.avvisoTenue, c.avvisoTesto)
         TipoPillola.PROVA -> Triple("Prova", c.avvisoTenue, c.avvisoTesto)
         TipoPillola.SENZA_RETE -> Triple(eu.stgm.lectio.rete.Testi.SENZA_RETE, c.superficie2, c.testo)
+        TipoPillola.SENZA_RETE_BREVE -> Triple(eu.stgm.lectio.rete.Testi.SENZA_RETE_BREVE, c.superficie2, c.testo)
     }
     Text(
         testo,
@@ -833,43 +835,58 @@ private fun Modifier.androidx_increspatura(interazione: androidx.compose.foundat
 /**
  * Il binario a segmenti dei prototipi v1.4 (tipo, durata, domande): fondo superficie 2,
  * raggio 14, il segmento scelto bianco con ombra leggera, 14 / 700. Ogni segmento è
- * toccabile per tutta l'altezza del binario (50 dp).
+ * toccabile per tutta l'altezza del binario. [pesi]: colonne di larghezza diversa.
+ * Con i caratteri di sistema ingranditi i segmenti vanno in colonna (aspetto.md §38).
  */
 @Composable
-fun Binario(opzioni: List<String>, scelta: Int, onScegli: (Int) -> Unit, modifier: Modifier = Modifier, abilitato: Boolean = true) {
+fun Binario(
+    opzioni: List<String>,
+    scelta: Int,
+    onScegli: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    abilitato: Boolean = true,
+    pesi: List<Float>? = null,
+    altezza: Dp = 50.dp,
+    modificatoreSegmento: (Int) -> Modifier = { Modifier },
+) {
     val c = L.colori
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.superficie2).padding(horizontal = 2.dp)) {
-        opzioni.forEachIndexed { i, testo ->
-            val attivo = i == scelta
-            val forma = RoundedCornerShape(11.dp)
-            val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val ingrandito = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f
+    val segmento: @Composable (Int, Modifier) -> Unit = { i, m ->
+        val attivo = i == scelta
+        val forma = RoundedCornerShape(11.dp)
+        val interazione = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        Box(
+            m
+                .heightIn(min = altezza)
+                .then(modificatoreSegmento(i))
+                .selectable(attivo, interazione, null, abilitato, Role.RadioButton) { onScegli(i) }
+                .padding(horizontal = 2.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Box(
                 Modifier
-                    .weight(1f)
-                    .height(50.dp)
-                    .selectable(attivo, interazione, null, abilitato, Role.RadioButton) { onScegli(i) }
-                    .padding(horizontal = 2.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .then(if (attivo && !c.scuro) Modifier.shadow(2.dp, forma, clip = false, ambientColor = Color(0x1F141420), spotColor = Color(0x1F141420)) else Modifier)
-                        .clip(forma)
-                        .background(if (attivo) (if (c.scuro) Color(0xFF3A3A43) else c.superficie) else Color.Transparent)
-                        .androidx_increspatura(interazione),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        testo,
-                        style = L.testi.pillola,
-                        color = if (attivo) c.testo else c.tenue,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                    )
-                }
-            }
+                    .matchParentSize()
+                    .then(if (attivo && !c.scuro) Modifier.shadow(2.dp, forma, clip = false, ambientColor = Color(0x1F141420), spotColor = Color(0x1F141420)) else Modifier)
+                    .clip(forma)
+                    .background(if (attivo) (if (c.scuro) Color(0xFF3A3A43) else c.superficie) else Color.Transparent)
+                    .androidx_increspatura(interazione),
+            )
+            Text(
+                opzioni[i],
+                style = L.testi.pillola,
+                color = if (attivo) c.testo else c.tenue,
+                maxLines = 2,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+    }
+    val fondo = modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.superficie2)
+    if (ingrandito) {
+        Column(fondo.padding(vertical = 2.dp)) { opzioni.indices.forEach { i -> segmento(i, Modifier.fillMaxWidth()) } }
+    } else {
+        Row(fondo.padding(horizontal = 2.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
+            opzioni.indices.forEach { i -> segmento(i, Modifier.weight(pesi?.getOrNull(i) ?: 1f)) }
         }
     }
 }
@@ -999,5 +1016,188 @@ fun RigaElenco(
             if (!sotto.isNullOrBlank()) Text(sotto, style = L.testi.secondario, color = L.colori.tenue, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         fine?.invoke(this)
+    }
+}
+
+// --- Schemi, simulate, ripasso (v1.5, aspetto.md §30-41) ------------------------------------------
+
+/** Fondo blocco dentro una scheda bianca (§30.2). */
+val Colori.fondoBlocco: Color get() = if (scuro) Color(0xFF26262C) else Color(0xFFF5F4F0)
+val Colori.ardesiaTenue: Color get() = if (scuro) Color(0xFF2A2D31) else Color(0xFFEEF0F2)
+val Colori.ardesiaTesto: Color get() = if (scuro) Color(0xFFC9CED4) else Color(0xFF343A40)
+val Colori.rispostaFondo: Color get() = if (scuro) Color(0xFF1F3327) else Color(0xFFEAF6EC)
+val Colori.rispostaTesto: Color get() = if (scuro) Color(0xFFC9F0D2) else Color(0xFF1F4D2A)
+
+/** Qualcosa da disegnare sopra a tutta l'app (la foto a tutto schermo). */
+@Composable
+fun SopraTutto(contenuto: @Composable () -> Unit) {
+    val ospite = LocalOspiteFogli.current
+    val chiave = androidx.compose.runtime.remember { Any() }
+    if (ospite == null) {
+        contenuto()
+        return
+    }
+    val attuale by androidx.compose.runtime.rememberUpdatedState(contenuto)
+    val corpo: @Composable () -> Unit = { attuale() }
+    androidx.compose.runtime.SideEffect { ospite.metti(chiave, corpo) }
+    DisposableEffect(chiave) { onDispose { ospite.togli(chiave) } }
+}
+
+/**
+ * Il foglio con la X sempre visibile e il piede fermo in basso (§30.1, §34): maniglia,
+ * titolo 21 / 800, X 48; scorre solo il corpo; sale al massimo all'88% dello schermo.
+ */
+@Composable
+fun FoglioFermo(
+    onChiudi: () -> Unit,
+    titolo: String,
+    scorrimento: androidx.compose.foundation.ScrollState? = null,
+    piede: (@Composable ColumnScope.() -> Unit)? = null,
+    contenuto: @Composable ColumnScope.() -> Unit,
+) {
+    val chiudi by androidx.compose.runtime.rememberUpdatedState(onChiudi)
+    SopraTutto { CorpoFoglioFermo(chiudi, titolo, scorrimento, piede, contenuto) }
+}
+
+@Composable
+private fun CorpoFoglioFermo(
+    onChiudi: () -> Unit,
+    titolo: String,
+    scorrimento: androidx.compose.foundation.ScrollState?,
+    piede: (@Composable ColumnScope.() -> Unit)?,
+    contenuto: @Composable ColumnScope.() -> Unit,
+) {
+    val c = L.colori
+    val muove = LocalMovimenti.current
+    val visibile = androidx.compose.runtime.remember { androidx.compose.animation.core.MutableTransitionState(!muove).apply { targetState = true } }
+    var trascinato by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val densita = androidx.compose.ui.platform.LocalDensity.current
+    val scorre = scorrimento ?: rememberScrollState()
+    androidx.activity.compose.BackHandler(onBack = onChiudi)
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val massimo = maxHeight * 0.88f
+        Box(
+            Modifier.fillMaxSize().background(c.velo)
+                .clickable(interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onChiudi),
+        )
+        AnimatedVisibility(
+            visibleState = visibile,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(tween(if (muove) 300 else 0)) { it } + fadeIn(tween(if (muove) 200 else 0)),
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = massimo)
+                    .graphicsLayer { translationY = trascinato.coerceAtLeast(0f) }
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(c.superficie)
+                    .clickable(interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {}
+                    .animateContentSize(morbido(250))
+                    .imePadding()
+                    .navigationBarsPadding(),
+            ) {
+                Box(
+                    Modifier.fillMaxWidth().height(20.dp).androidx_draggable(
+                        onDelta = { trascinato += it },
+                        onFine = {
+                            if (trascinato > with(densita) { 120.dp.toPx() }) onChiudi()
+                            trascinato = 0f
+                        },
+                    ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.width(40.dp).height(5.dp).clip(CircleShape).background(c.superficie2))
+                }
+                Row(Modifier.fillMaxWidth().padding(start = MARGINE, end = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(titolo, style = L.testi.titoloFoglio, color = c.testo, modifier = Modifier.weight(1f).semantics { heading() })
+                    PulsanteTondo(Icone.Chiudi, "Chiudi", onChiudi, dimensione = 48.dp, dimensioneIcona = 18.dp)
+                }
+                androidx.compose.runtime.CompositionLocalProvider(LocalDentroFoglio provides true) {
+                    Column(
+                        Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scorre)
+                            .padding(start = MARGINE, end = MARGINE, bottom = if (piede == null) 24.dp else 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        content = contenuto,
+                    )
+                    if (piede != null) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(start = MARGINE, end = MARGINE, top = 4.dp, bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            content = piede,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Una voce del menu a puntini. */
+data class VoceMenu(val testo: String, val abilitata: Boolean = true, val azione: () -> Unit)
+
+/** Il tondo coi puntini che apre un menu (Scarica PDF, Elimina...). */
+@Composable
+fun MenuPuntini(
+    voci: List<VoceMenu>,
+    modifier: Modifier = Modifier,
+    descrizione: String = "Altre azioni",
+    fondo: Color = L.colori.superficie2,
+    tinta: Color = L.colori.testo,
+    dimensione: Dp = 48.dp,
+) {
+    if (voci.isEmpty()) return
+    var aperto by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Box(modifier) {
+        PulsanteTondo(Icone.AltreAzioni, descrizione, { aperto = true }, fondo = fondo, tinta = tinta, dimensione = dimensione)
+        androidx.compose.material3.DropdownMenu(expanded = aperto, onDismissRequest = { aperto = false }) {
+            voci.forEach { v ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(v.testo, style = L.testi.testoMedio.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = if (v.abilitata) L.colori.testo else L.colori.moltoTenue) },
+                    enabled = v.abilitata,
+                    onClick = {
+                        aperto = false
+                        v.azione()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Pillola con icona (Ascolta questa parte, Non ho capito...): superficie 2, 14 / 700. */
+@Composable
+fun PillolaIcona(
+    testo: String,
+    icona: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    fondo: Color = L.colori.superficie2,
+    colore: Color = L.colori.testo,
+    altezza: Dp = 48.dp,
+    abilitato: Boolean = true,
+) {
+    Row(
+        modifier
+            .heightIn(min = altezza)
+            .clip(CircleShape)
+            .background(fondo)
+            .clickable(enabled = abilitato, role = Role.Button, onClick = onClick)
+            .alpha(if (abilitato) 1f else 0.45f)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icona, contentDescription = null, tint = colore, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(7.dp))
+        Text(testo, style = L.testi.pillola, color = colore, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** La piastrella con un'icona (righe degli schemi e delle simulate). */
+@Composable
+fun PiastrellaIcona(icona: ImageVector, colore: String?, modifier: Modifier = Modifier, dimensione: Dp = 44.dp) {
+    val m = materia(colore)
+    Box(modifier.size(dimensione).clip(RoundedCornerShape(dimensione * 0.32f)).background(m.tenue), contentAlignment = Alignment.Center) {
+        Icon(icona, contentDescription = null, tint = m.pieno, modifier = Modifier.size(dimensione * 0.5f))
     }
 }

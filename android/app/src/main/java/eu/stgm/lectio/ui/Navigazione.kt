@@ -10,10 +10,21 @@ enum class Scheda(val etichetta: String) {
 
 /** Le pagine che si aprono sopra una scheda. */
 sealed interface Pagina {
-    data class Materia(val id: Long) : Pagina
+    /** [segmento]: Lezioni 0, Schemi 1, Simulate 2, quando si arriva da una notifica. */
+    data class Materia(val id: Long, val segmento: Int? = null) : Pagina
     data class ModificaScheda(val materiaId: Long) : Pagina
     data class TestoMateriale(val id: Long) : Pagina
-    data class NuovaLezione(val materiaId: Long, val eventoId: Long? = null) : Pagina
+    /** [argomento] e [materiali]: "Ascolta questa parte" apre la pagina già compilata. */
+    data class NuovaLezione(val materiaId: Long, val eventoId: Long? = null, val argomento: String? = null, val materiali: List<Long>? = null) : Pagina
+    /** [daSchema]: si riparte da uno schema già fatto, con tutto compilato. */
+    data class NuovoSchema(val materiaId: Long, val eventoId: Long? = null, val daSchema: Long? = null) : Pagina
+    data class Schema(val id: Long) : Pagina
+    /** [forma]: il segmento da cui partire (punti, discorsivo, misto). */
+    data class Riassunto(val schemaId: Long, val forma: String) : Pagina
+    data class NuovaSimulata(val materiaId: Long, val eventoId: Long? = null, val daSimulata: Long? = null) : Pagina
+    data class Simulata(val id: Long) : Pagina
+    /** null = tutte le materie (da Oggi). */
+    data class Lampo(val materiaId: Long? = null) : Pagina
     data class Preparazione(val lezioneId: Long) : Pagina
     /** [domandaId]: aperto da "Da ripassare", fermo su quella domanda. */
     data class Lettore(val lezioneId: Long, val domandaId: Long? = null) : Pagina
@@ -51,10 +62,16 @@ data class Navigazione(val scheda: Scheda = Scheda.OGGI, val pagine: List<Pagina
     /** In testo, per sopravvivere alla rotazione e alla chiusura da parte di Android. */
     fun codifica(): String = (listOf(scheda.name) + pagine.map {
         when (it) {
-            is Pagina.Materia -> "materia:${it.id}"
+            is Pagina.Materia -> "materia:${it.id}:${it.segmento ?: ""}"
             is Pagina.ModificaScheda -> "scheda:${it.materiaId}"
             is Pagina.TestoMateriale -> "materiale:${it.id}"
-            is Pagina.NuovaLezione -> "nuova:${it.materiaId}:${it.eventoId ?: ""}"
+            is Pagina.NuovaLezione -> "nuova:${it.materiaId}:${it.eventoId ?: ""}:${it.argomento?.let(::chiudiTesto) ?: ""}:${it.materiali?.joinToString(",") ?: ""}"
+            is Pagina.NuovoSchema -> "nuovoschema:${it.materiaId}:${it.eventoId ?: ""}:${it.daSchema ?: ""}"
+            is Pagina.Schema -> "schema:${it.id}"
+            is Pagina.Riassunto -> "riassunto:${it.schemaId}:${it.forma}"
+            is Pagina.NuovaSimulata -> "nuovasimulata:${it.materiaId}:${it.eventoId ?: ""}:${it.daSimulata ?: ""}"
+            is Pagina.Simulata -> "simulata:${it.id}"
+            is Pagina.Lampo -> "lampo:${it.materiaId ?: ""}"
             is Pagina.Preparazione -> "preparazione:${it.lezioneId}"
             is Pagina.Lettore -> "lettore:${it.lezioneId}:${it.domandaId ?: ""}"
             is Pagina.ComeAndata -> "esito:${it.eventoId}"
@@ -65,6 +82,10 @@ data class Navigazione(val scheda: Scheda = Scheda.OGGI, val pagine: List<Pagina
     }).joinToString("|")
 
     companion object {
+        /** Un testo libero dentro il codice: niente ":" né "|" che spezzerebbero tutto. */
+        private fun chiudiTesto(t: String): String = java.net.URLEncoder.encode(t, "UTF-8")
+        private fun apriTesto(t: String): String = java.net.URLDecoder.decode(t, "UTF-8")
+
         fun decodifica(testo: String?): Navigazione {
             val parti = testo?.split('|').orEmpty()
             val scheda = Scheda.entries.firstOrNull { it.name == parti.firstOrNull() } ?: Scheda.OGGI
@@ -72,10 +93,22 @@ data class Navigazione(val scheda: Scheda = Scheda.OGGI, val pagine: List<Pagina
                 val pezzi = p.split(':')
                 val n = pezzi.getOrNull(1)?.toLongOrNull()
                 when (pezzi[0]) {
-                    "materia" -> n?.let { Pagina.Materia(it) }
+                    "materia" -> n?.let { Pagina.Materia(it, pezzi.getOrNull(2)?.toIntOrNull()) }
                     "scheda" -> n?.let { Pagina.ModificaScheda(it) }
                     "materiale" -> n?.let { Pagina.TestoMateriale(it) }
-                    "nuova" -> n?.let { Pagina.NuovaLezione(it, pezzi.getOrNull(2)?.toLongOrNull()) }
+                    "nuova" -> n?.let {
+                        Pagina.NuovaLezione(
+                            it, pezzi.getOrNull(2)?.toLongOrNull(),
+                            pezzi.getOrNull(3)?.takeIf { a -> a.isNotEmpty() }?.let(::apriTesto),
+                            pezzi.getOrNull(4)?.takeIf { m -> m.isNotEmpty() }?.split(',')?.mapNotNull { m -> m.toLongOrNull() },
+                        )
+                    }
+                    "nuovoschema" -> n?.let { Pagina.NuovoSchema(it, pezzi.getOrNull(2)?.toLongOrNull(), pezzi.getOrNull(3)?.toLongOrNull()) }
+                    "schema" -> n?.let { Pagina.Schema(it) }
+                    "riassunto" -> n?.let { Pagina.Riassunto(it, pezzi.getOrNull(2) ?: "misto") }
+                    "nuovasimulata" -> n?.let { Pagina.NuovaSimulata(it, pezzi.getOrNull(2)?.toLongOrNull(), pezzi.getOrNull(3)?.toLongOrNull()) }
+                    "simulata" -> n?.let { Pagina.Simulata(it) }
+                    "lampo" -> Pagina.Lampo(n)
                     "preparazione" -> n?.let { Pagina.Preparazione(it) }
                     "lettore" -> n?.let { Pagina.Lettore(it, pezzi.getOrNull(2)?.toLongOrNull()) }
                     "esito" -> n?.let { Pagina.ComeAndata(it) }

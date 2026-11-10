@@ -19,12 +19,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from . import ai, clock, db, misure, prompt, ripasso
+from . import ai, clock, controllo, db, memoria, misure, prompt, ripasso
 from . import scheda as schede
-from .audio import (PAUSA_CAPITOLI, PAUSA_DENTRO_PARAGRAFO, PAUSA_DOPO_DOMANDA, PAUSA_PARAGRAFI, Montatore,
-                    taglia_in_pezzi)
-from .spesa import (APPUNTI_MASSIMI, CARATTERI_APPUNTI_LETTI, CARATTERI_BLOCCO_MASSIMI, CARATTERI_VERIFICHE_MASSIMI,
-                    Cassa)
+from .audio import PAUSA_CAPITOLI, PAUSA_DENTRO_PARAGRAFO, PAUSA_DOPO_DOMANDA, PAUSA_PARAGRAFI, Montatore, taglia_in_pezzi
+from .spesa import APPUNTI_MASSIMI, CARATTERI_APPUNTI_LETTI, CARATTERI_BLOCCO_MASSIMI, Cassa
 
 log = logging.getLogger("uvicorn.error")
 
@@ -45,7 +43,6 @@ EMOZIONE = {
 }
 ORDINALI = ["Prima", "Seconda", "Terza", "Quarta", "Quinta", "Sesta", "Settima", "Ottava", "Nona", "Decima",
             "Undicesima", "Dodicesima"]
-BRANO_CARATTERI = 1200
 CAPITOLO_FINALE = "Ripasso e interrogazione"
 CAPITOLO_FINALE_RIPASSO = "Le domande"
 CAPITOLO_FINALE_INTERROGAZIONE = "Per finire"
@@ -69,72 +66,11 @@ class Contesto:
     ocr: object
     catalogo: object
     montatore: Montatore
+    vettori: object = None
+    foto: object = None
 
 
 # --------------------------------------------------------------------------- utilità di testo
-
-def dividi_in_brani(testo: str, massimo: int = BRANO_CARATTERI) -> list[str]:
-    paragrafi = [p.strip() for p in re.split(r"\n\s*\n", testo) if p.strip()]
-    piccoli: list[str] = []
-    for p in paragrafi:
-        if len(p) <= massimo:
-            piccoli.append(p)
-        else:
-            piccoli.extend(taglia_in_pezzi(p.replace("\n", " "), massimo))
-    brani, attuale = [], ""
-    for p in piccoli:
-        if attuale and len(attuale) + 2 + len(p) > massimo:
-            brani.append(attuale)
-            attuale = p
-        else:
-            attuale = f"{attuale}\n\n{p}".strip()
-    if attuale:
-        brani.append(attuale)
-    return brani
-
-
-def _taglia(testo: str, caratteri: int) -> str:
-    if len(testo) <= caratteri:
-        return testo
-    pezzo = testo[:caratteri]
-    taglio = max(pezzo.rfind("\n"), pezzo.rfind(". "))
-    return pezzo[: taglio + 1] if taglio > caratteri // 2 else pezzo
-
-
-_PAROLA = re.compile(r"[a-zàèéìòù]{4,}", re.IGNORECASE)
-
-
-def scegli_brani(domanda: str, brani: list[dict], massimo: int, gia: list[str] | None = None) -> list[dict]:
-    """I brani indicati (gia) più quelli che somigliano di più alla domanda, fino al massimo
-    di caratteri, nell'ordine del materiale."""
-    parole = {p.lower() for p in _PAROLA.findall(domanda)}
-    per_id = {b["id"]: b for b in brani}
-    scelti = [i for i in (gia or []) if i in per_id]
-    totale = sum(len(per_id[i]["testo"]) for i in scelti)
-    if totale < massimo // 3:
-        punteggi = sorted(
-            ((len(parole & {p.lower() for p in _PAROLA.findall(b["testo"])}), -n, b["id"])
-             for n, b in enumerate(brani) if b["id"] not in scelti),
-            reverse=True,
-        )
-        for punti, _, i in punteggi:
-            if punti == 0 and scelti:
-                break
-            if totale + len(per_id[i]["testo"]) > massimo:
-                continue
-            scelti.append(i)
-            totale += len(per_id[i]["testo"])
-            if totale >= massimo // 2:
-                break
-    uscita, totale = [], 0
-    ordine = {b["id"]: n for n, b in enumerate(brani)}
-    for i in sorted(scelti, key=lambda x: ordine[x]):
-        if totale + len(per_id[i]["testo"]) > massimo and uscita:
-            continue
-        uscita.append(per_id[i])
-        totale += len(per_id[i]["testo"])
-    return uscita
-
 
 def testo_da(v) -> str:
     """Il testo di un valore scritto dal modello: una stringa, una lista di stringhe (unite), un
@@ -202,13 +138,6 @@ def valida_piano(o: dict, n: int, q: int, tipo: str = "spiegazione", gruppi: lis
     elif any(not (_testo_ok(d) or (isinstance(d, dict) and _testo_ok(d.get("testo")))) for d in domande):
         errori.append("ogni domanda dell'interrogazione deve avere il suo testo")
     return errori
-
-
-def valida_selezione(o: dict, validi: set[str]) -> list[str]:
-    scelti = o.get("scelti")
-    if not isinstance(scelti, list) or not any(str(i) in validi for i in scelti):
-        return ['servono gli id dei pezzi scelti in "scelti", per esempio ["B3", "B4"]']
-    return []
 
 
 def _tipo_domanda(v) -> str:
@@ -310,8 +239,8 @@ def valida_gruppo(o: dict, n_domande: int, parole_minime: int) -> list[str]:
 def valida_finale(o: dict, q: int, tipo: str = "spiegazione") -> list[str]:
     errori = []
     if tipo == "interrogazione":
-        if not _paragrafi(o.get("errori")) or not all(_testo_ok(e) for e in _paragrafi(o.get("errori"))):
-            errori.append('mancano gli "errori"')
+        if not all(_testo_ok(e) for e in _paragrafi(o.get("errori"))):
+            errori.append('"errori" deve essere una lista di frasi')
         return errori
     if tipo == "spiegazione" and (not _paragrafi(o.get("riepilogo"))
                                   or not all(_testo_ok(p) for p in _paragrafi(o.get("riepilogo")))):
@@ -321,8 +250,8 @@ def valida_finale(o: dict, q: int, tipo: str = "spiegazione") -> list[str]:
         errori.append(f'servono {q} domande in "domande", ognuna con "testo" e "risposta"')
     elif any(not (isinstance(d, dict) and _testo_ok(d.get("testo")) and _testo_ok(d.get("risposta"))) for d in domande):
         errori.append('ogni domanda deve avere "testo" e "risposta"')
-    if not _paragrafi(o.get("errori")) or not all(_testo_ok(e) for e in _paragrafi(o.get("errori"))):
-        errori.append('mancano gli "errori"')
+    if not all(_testo_ok(e) for e in _paragrafi(o.get("errori"))):
+        errori.append('"errori" deve essere una lista di frasi')
     return errori
 
 
@@ -350,7 +279,8 @@ def _chiusura_errori(f: dict, il_prof: str) -> list[dict]:
     segmenti = []
     errori = [pulisci_parlato(e) for e in _paragrafi(f.get("errori")) if pulisci_parlato(e)]
     if errori:
-        lead = f"Prima di chiudere, tre errori da non fare con {il_prof}."
+        quanti = {1: "un errore", 2: "due errori"}.get(len(errori), "tre errori")
+        lead = f"Prima di chiudere, {quanti} da non fare con {il_prof}."
         segmenti.append(_segmento("paragrafo", "interrogazione", lead, lead))
         for e in errori[:3]:
             segmenti.append(_segmento("paragrafo", "errori", e, e))
@@ -365,7 +295,7 @@ def _componi_interrogazione(lettura: dict, piano: dict, scritti: dict, il_prof: 
     for k, blocco in enumerate(piano["blocchi"], start=1):
         s = scritti[f"blocco_{k:02d}"]
         voluto = len(blocco.get("domande") or [])
-        domande = [(pulisci_parlato(d["testo"]), pulisci_parlato(d["risposta"]))
+        domande = [(pulisci_parlato(d.get("testo")), pulisci_parlato(d.get("risposta")))
                    for d in (s.get("domande") or []) if isinstance(d, dict)][: voluto or None]
         gruppi.append((blocco, s, [d for d in domande if d[0] and d[1]]))
     totale = sum(len(d) for _, _, d in gruppi)
@@ -385,7 +315,8 @@ def _componi_interrogazione(lettura: dict, piano: dict, scritti: dict, il_prof: 
                                       domanda="interrogazione", indice=indice))
             segmenti.append(_segmento("risposta", "risposta", f"Ecco la risposta. {risposta}", f"Risposta: {risposta}",
                                       indice=indice))
-        capitoli.append({"n": k, "titolo": blocco["titolo"], "segmenti": segmenti})
+        if domande or (k == 1 and segmenti):
+            capitoli.append({"n": len(capitoli) + 1, "titolo": blocco["titolo"], "segmenti": segmenti})
     capitoli.append({"n": len(capitoli) + 1, "titolo": CAPITOLO_FINALE_INTERROGAZIONE,
                      "segmenti": _chiusura_errori(scritti["finale"], il_prof)})
     return capitoli
@@ -409,17 +340,20 @@ def componi(lettura: dict, piano: dict, scritti: dict) -> list[dict]:
         for i, p in enumerate(_testi(s.get("paragrafi"))):
             genere = "aggancio" if i == 0 and p["tipo"] == "aggancio" else p["tipo"]
             segmenti.append(_segmento("paragrafo", genere, p["testo"], p["testo"], lento=genere == "definizione"))
-        if tipo == "ripasso" or not blocco.get("domanda"):
-            capitoli.append({"n": k, "titolo": blocco["titolo"], "segmenti": segmenti})
+        domanda, risposta = pulisci_parlato(s.get("domanda")), pulisci_parlato(s.get("risposta"))
+        if tipo == "ripasso" or not blocco.get("domanda") or not domanda or not risposta:
+            if segmenti:  # una parte rimasta senza niente dopo il controllo non si legge
+                capitoli.append({"n": len(capitoli) + 1, "titolo": blocco["titolo"], "segmenti": segmenti})
             continue
-        domanda = pulisci_parlato(s["domanda"])
-        risposta = pulisci_parlato(s["risposta"])
         indice_domanda += 1
         segmenti.append(_segmento("domanda", "domanda_blocco", f"Una domanda per te. {domanda}", f"Domanda: {domanda}",
                                   domanda="blocco", indice=indice_domanda))
         segmenti.append(_segmento("risposta", "risposta", f"Ecco la risposta. {risposta}", f"Risposta: {risposta}",
                                   indice=indice_domanda))
-        capitoli.append({"n": k, "titolo": blocco["titolo"], "segmenti": segmenti})
+        capitoli.append({"n": len(capitoli) + 1, "titolo": blocco["titolo"], "segmenti": segmenti})
+    if not capitoli:
+        raise ErroreLezione("Nei tuoi documenti non ho trovato abbastanza su questo argomento per farci una lezione: "
+                            "aggiungi le pagine del libro o gli appunti, poi prepara una nuova lezione.")
 
     f = scritti["finale"]
     segmenti = []
@@ -432,8 +366,10 @@ def componi(lettura: dict, piano: dict, scritti: dict) -> list[dict]:
     if tipo == "ripasso":
         intro = (f"Adesso le domande, come le farebbe {il_prof}. Dopo ogni domanda rispondi, "
                  f"poi ascolta la risposta.")
-    segmenti.append(_segmento("paragrafo", "interrogazione", intro, intro))
-    domande = [d for d in f.get("domande") or [] if isinstance(d, dict)][: len(piano["interrogazione"])]
+    if f.get("domande"):
+        segmenti.append(_segmento("paragrafo", "interrogazione", intro, intro))
+    domande = [d for d in f.get("domande") or [] if isinstance(d, dict) and pulisci_parlato(d.get("testo"))
+               and pulisci_parlato(d.get("risposta"))][: len(piano["interrogazione"])]
     for i, d in enumerate(domande):
         testo = pulisci_parlato(d["testo"])
         risposta = pulisci_parlato(d["risposta"])
@@ -547,9 +483,8 @@ class Preparazione:
     # --- 1. lettura
 
     def _lettura(self) -> None:
-        """Contratto 15.1: di base tutti gli appunti/libro della materia e tutte le verifiche e
-        interrogazioni (come esempi di domande). Se Andrea ha scelto il materiale con "Cambia",
-        solo quello (appunti e verifiche compresi)."""
+        """Contratto 15.1 e 17: i pezzi di tutto il materiale della materia, in ordine di priorità.
+        Se Andrea ha scelto il materiale con "Cambia", solo quello."""
         if self._leggi("lettura.json"):
             return
         ristretti = set(json.loads(self.riga["materiali"] or "[]"))
@@ -571,6 +506,11 @@ class Preparazione:
             if not appunti and not verifiche:
                 raise ErroreLezione("Questa materia non ha ancora materiale letto: aggiungi appunti o verifiche, "
                                     "poi prepara una nuova lezione.")
+            memoria.assicura(conn, materia_id, self.ctx.settings.dati_dir)
+            brani, tagliato = memoria.brani_di(conn, materia_id, sorted(ristretti) or None, CARATTERI_APPUNTI_LETTI)
+            if not brani:
+                raise ErroreLezione("Nel materiale scelto non ho trovato testo da usare: aggiungi appunti o verifiche, "
+                                    "poi prepara una nuova lezione.")
             s = schede.per_lezione(conn, materia_id)
             evento = None
             if self.riga["evento_id"]:
@@ -581,25 +521,7 @@ class Preparazione:
                               "data_in_parole": f"{giorno.day} {clock.MESI[giorno.month - 1]}"}
             nome = str(db.impostazioni(conn).get("nome") or "")
             ripassare = ripasso.da_ripassare(conn, materia_id, limite=12)
-        brani, letti, tagliato = [], 0, False
-        for r in appunti:
-            testo = _taglia(r["testo"], max(0, CARATTERI_APPUNTI_LETTI - letti))
-            tagliato = tagliato or len(testo) < len(r["testo"])
-            letti += len(testo)
-            for pezzo in dividi_in_brani(testo):
-                brani.append({"id": f"B{len(brani) + 1}", "materiale_id": r["id"], "titolo": r["titolo"],
-                              "tipo": r["tipo"], "data": r["data"], "testo": pezzo})
-        caratteri_appunti = sum(len(b["testo"]) for b in brani)
-        resto, n_verifiche = CARATTERI_VERIFICHE_MASSIMI, 0
-        for r in verifiche:
-            testo = _taglia(r["testo"], resto)
-            if not testo:
-                break
-            resto -= len(testo)
-            for pezzo in dividi_in_brani(testo):
-                n_verifiche += 1
-                brani.append({"id": f"V{n_verifiche}", "materiale_id": r["id"], "titolo": r["titolo"],
-                              "tipo": r["tipo"], "data": r["data"], "testo": pezzo})
+        caratteri_appunti = sum(len(b["testo"]) for b in brani if b["id"].startswith("B"))
         self._scrivi("lettura.json", {
             "argomento": self.riga["argomento"],
             "durata_min": self.riga["durata_min"],
@@ -616,38 +538,25 @@ class Preparazione:
         })
 
     def _brani(self, lettura: dict) -> list[dict]:
-        """I brani che piano e scrittura possono usare: gli appunti scelti (tutti, se non
-        c'è stata una scelta) più le verifiche."""
+        """I pezzi che il piano può leggere: tutti, o quelli sull'argomento se sono troppi."""
         selezione = self._leggi("selezione.json")
         if selezione is None:
             return lettura["brani"]
         scelti = set(selezione["scelti"])
-        return [b for b in lettura["brani"] if b["id"].startswith("V") or b["id"] in scelti]
+        return [b for b in lettura["brani"] if b["id"] in scelti]
+
+    def _cerca(self, domanda: str, brani: list[dict], massimo: int, gia: list[str] | None = None) -> list[dict]:
+        return memoria.scegli(self.ctx, domanda, brani, massimo, gia, materia_id=self.riga["materia_id"],
+                              lezione_id=self.id, prima=self.controlla)
 
     # --- 2. piano
 
     def _seleziona(self, lettura: dict) -> None:
-        """Contratto 15.1: oltre ~60.000 caratteri di appunti, il modello piccolo sceglie prima
-        i pezzi sull'argomento guardando solo titoli e inizi; la scrittura riceve solo quelli."""
-        if lettura["caratteri_appunti"] <= APPUNTI_MASSIMI or self._leggi("selezione.json") is not None:
+        """Con troppo materiale al piano arrivano solo i pezzi sull'argomento."""
+        if sum(len(b["testo"]) for b in lettura["brani"]) <= APPUNTI_MASSIMI or self._leggi("selezione.json") is not None:
             return
-        appunti = [b for b in lettura["brani"] if b["id"].startswith("B")]
-        lungo = 200 if len(appunti) <= 600 else 100
-        indice = [{"id": b["id"], "titolo": b["titolo"], "caratteri": len(b["testo"]),
-                   "inizio": " ".join(b["testo"].split())[:lungo]} for b in appunti]
-        validi = {b["id"] for b in appunti}
-        oggetto = self._chiedi(
-            "selezione", prompt.messaggi_selezione(lettura["argomento"], indice, APPUNTI_MASSIMI),
-            self.ctx.settings.modello_piano, lambda o: valida_selezione(o, validi), 2000, "Scelta degli appunti",
-            {"argomento": lettura["argomento"], "brani": appunti, "massimo": APPUNTI_MASSIMI},
-        )
-        voluti = {str(i) for i in oggetto["scelti"]}
-        scelti, totale = [], 0
-        for b in appunti:  # nell'ordine degli appunti, fino al massimo (con un po' di margine)
-            if b["id"] in voluti and (not scelti or totale + len(b["testo"]) <= APPUNTI_MASSIMI * 1.2):
-                scelti.append(b["id"])
-                totale += len(b["testo"])
-        self._scrivi("selezione.json", {"scelti": scelti})
+        cerca = " ".join(x for x in (lettura["argomento"], lettura.get("indicazioni")) if x)
+        self._scrivi("selezione.json", {"scelti": [b["id"] for b in self._cerca(cerca, lettura["brani"], APPUNTI_MASSIMI)]})
 
     def _piano(self) -> None:
         if self._leggi("piano.json"):
@@ -672,10 +581,10 @@ class Preparazione:
         self._scrivi("piano.json", piano)
         parti = []
         if piano["minuti_di_materiale"] < durata - 1:
-            parti.append(f"Gli appunti bastavano per circa {max(1, round(piano['minuti_di_materiale']))} minuti: "
-                         f"ho aggiunto esempi e domande.")
+            parti.append(f"I tuoi documenti bastavano per circa {max(1, round(piano['minuti_di_materiale']))} minuti: "
+                         f"la lezione è più corta.")
         if self._leggi("selezione.json") is not None:
-            parti.append("Gli appunti erano tanti: ho usato le parti che riguardano l'argomento.")
+            parti.append("I documenti erano tanti: ho usato le parti che riguardano l'argomento.")
         if lettura.get("tagliato"):
             parti.append("Il materiale era molto lungo: di alcuni file ho usato solo la prima parte.")
         if self.ctx.testo.a_pagamento is False:
@@ -689,88 +598,97 @@ class Preparazione:
         lettura, piano = self._leggi("lettura.json"), self._leggi("piano.json")
         n = len(piano["blocchi"])
         sezioni = ["apertura"] + [f"blocco_{k:02d}" for k in range(1, n + 1)] + ["finale"]
-        prova = self.ctx.testo.a_pagamento is False
         modello = self.ctx.settings.modello_scrittura
-        tipo = piano.get("tipo") or "spiegazione"
-        parole_blocco = misure.parole(misure.minuti_per_parte(tipo, lettura["durata_min"]))
         for i, nome in enumerate(sezioni):
             self.avanza("scrittura", i, len(sezioni))
             if self._leggi(f"scrittura/{nome}.json"):
                 continue
-            if nome == "apertura":
-                parole = misure.parole(misure.MINUTI_APERTURA if tipo == "spiegazione" else misure.MINUTI_APERTURA_BREVE)
-                oggetto = self._chiedi("apertura", prompt.messaggi_apertura(lettura, piano, parole), modello,
-                                       valida_apertura, 600, "Testo · apertura",
-                                       {"lettura": lettura, "piano": piano, "parole": parole})
-            elif nome == "finale" and tipo == "interrogazione":
-                parole_e = misure.parole(misure.MINUTI_ERRORI)
-                oggetto = self._chiedi(
-                    "finale", prompt.messaggi_finale(lettura, piano, [], 0, parole_e), modello,
-                    lambda o: valida_finale(o, 0, tipo), 900, "Testo · parte finale",
-                    {"lettura": lettura, "piano": piano, "brani": []},
-                )
-            elif nome == "finale":
-                fonti = [f for d in piano["interrogazione"] for f in d["fonti"]]
-                domande = " ".join(d["testo"] for d in piano["interrogazione"])
-                brani = scegli_brani(domande, self._brani(lettura), CARATTERI_BLOCCO_MASSIMI, fonti)
-                q = len(piano["interrogazione"])
-                parole_r, parole_e = misure.parole(misure.MINUTI_RIEPILOGO), misure.parole(misure.MINUTI_ERRORI)
-                parole_risposta = max(40, misure.parole(misure.MINUTI_PER_DOMANDA_RIPASSO) - 20)
-                oggetto = self._chiedi(
-                    "finale", prompt.messaggi_finale(lettura, piano, brani, parole_r, parole_e, parole_risposta),
-                    modello, lambda o: valida_finale(o, q, tipo),
-                    min(8000, 900 + (420 if tipo == "ripasso" else 280) * q), "Testo · parte finale",
-                    {"lettura": lettura, "piano": piano, "brani": brani},
-                )
-            elif tipo == "interrogazione":
-                k = int(nome.split("_")[1])
-                blocco = piano["blocchi"][k - 1]
-                domande = blocco.get("domande") or []
-                cerca = " ".join([blocco["titolo"], *blocco["punti"], *(d["testo"] for d in domande)])
-                fonti = blocco["fonti"] + [f for d in domande for f in d.get("fonti") or []]
-                brani = scegli_brani(cerca, self._brani(lettura), CARATTERI_BLOCCO_MASSIMI, list(dict.fromkeys(fonti)))
-                parole_risposta = max(40, parole_blocco - 25)
-                minime = 0 if prova else int(parole_risposta * len(domande) * 0.45)
-                oggetto = self._chiedi(
-                    "gruppo", prompt.messaggi_gruppo(lettura, piano, k, brani, parole_risposta), modello,
-                    lambda o, nd=len(domande), m=minime: valida_gruppo(o, nd, m),
-                    min(8000, int(parole_risposta * len(domande) * 2.6) + 800), f"Testo · domande {k} di {n}",
-                    {"lettura": lettura, "piano": piano, "k": k, "brani": brani, "parole": parole_risposta},
-                )
-            elif tipo == "ripasso":
-                k = int(nome.split("_")[1])
-                blocco = piano["blocchi"][k - 1]
-                cerca = " ".join([blocco["titolo"], *blocco["punti"]])
-                brani = scegli_brani(cerca, self._brani(lettura), CARATTERI_BLOCCO_MASSIMI, blocco["fonti"])
-                prima = self._leggi(f"scrittura/blocco_{k - 1:02d}.json") if k > 1 else None
-                testi = _testi(prima.get("paragrafi")) if prima else []
-                minime = 0 if prova else int(parole_blocco * 0.45)
-                oggetto = self._chiedi(
-                    "parte", prompt.messaggi_parte(lettura, piano, k, brani, parole_blocco,
-                                                   testi[-1]["testo"] if testi else None), modello,
-                    lambda o, m=minime: valida_parte(o, m), min(8000, int(parole_blocco * 2.6) + 800),
-                    f"Testo · parte {k} di {n}",
-                    {"lettura": lettura, "piano": piano, "k": k, "brani": brani, "parole": parole_blocco},
-                )
-            else:
-                k = int(nome.split("_")[1])
-                blocco = piano["blocchi"][k - 1]
-                cerca = " ".join([blocco["titolo"], *blocco["punti"], blocco["domanda"]["testo"]])
-                brani = scegli_brani(cerca, self._brani(lettura), CARATTERI_BLOCCO_MASSIMI, blocco["fonti"])
-                prima = self._leggi(f"scrittura/blocco_{k - 1:02d}.json") if k > 1 else None
-                finale_prima = None
-                if prima:
-                    testi = _testi(prima.get("paragrafi"))
-                    finale_prima = testi[-1]["testo"] if testi else None
-                minime = 0 if prova else int(parole_blocco * 0.45)
-                oggetto = self._chiedi(
-                    "blocco", prompt.messaggi_blocco(lettura, piano, k, brani, parole_blocco, finale_prima), modello,
-                    lambda o: valida_blocco(o, minime), min(8000, int(parole_blocco * 2.6) + 800),
-                    f"Testo · blocco {k} di {n}",
-                    {"lettura": lettura, "piano": piano, "k": k, "brani": brani, "parole": parole_blocco},
-                )
-            self._scrivi(f"scrittura/{nome}.json", oggetto)
+            s = self._richiesta(nome, lettura, piano)
+            # Il testo appena scritto si salva subito: un Riprova non lo ripaga.
+            grezzo = self._leggi(f"scrittura/{nome}.grezzo.json")
+            if grezzo is None:
+                grezzo = self._chiedi(s["compito"], s["messaggi"], modello, s["valida"], s["max_token"], s["cosa"], s["dati"])
+                self._scrivi(f"scrittura/{nome}.grezzo.json", grezzo)
+            self._scrivi(f"scrittura/{nome}.json", controllo.rivedi(
+                self.ctx, grezzo, s["brani"], compito=s["compito"], messaggi=s["messaggi"], modello=modello,
+                valida=s["struttura"], max_token=s["max_token"], cosa=s["cosa"], altro=s["altro"],
+                materia_id=self.riga["materia_id"], lezione_id=self.id, prima=self.controlla, dati=s["dati"]))
         self.avanza("scrittura", len(sezioni), len(sezioni))
+
+    def _richiesta(self, nome: str, lettura: dict, piano: dict) -> dict:
+        """Quello che serve per scrivere una parte e per poterla controllare dopo."""
+        n = len(piano["blocchi"])
+        prova = self.ctx.testo.a_pagamento is False
+        tipo = piano.get("tipo") or "spiegazione"
+        # Con pochi documenti la lezione viene più corta: niente da aggiungere per riempire.
+        fattore = max(0.3, min(1.0, float(piano.get("minuti_di_materiale") or lettura["durata_min"]) / lettura["durata_min"]))
+        parole_blocco = max(60, int(misure.parole(misure.minuti_per_parte(tipo, lettura["durata_min"])) * fattore))
+        tutti = lettura["brani"]
+        sul_prof = prompt.scheda_in_parole(lettura.get("scheda"))
+        comune = {"brani": [], "altro": sul_prof}
+        if nome == "apertura":
+            parole = misure.parole(misure.MINUTI_APERTURA if tipo == "spiegazione" else misure.MINUTI_APERTURA_BREVE)
+            titoli = prompt._piano_breve(piano)
+            return {**comune, "altro": f"{piano['titolo']}\n{titoli}\n{lettura['argomento']}\n{sul_prof}",
+                    "compito": "apertura", "messaggi": prompt.messaggi_apertura(lettura, piano, parole),
+                    "valida": valida_apertura, "struttura": valida_apertura, "max_token": 600, "cosa": "Testo · apertura",
+                    "dati": {"lettura": lettura, "piano": piano, "parole": parole}}
+        if nome == "finale" and tipo == "interrogazione":
+            parole_e = misure.parole(misure.MINUTI_ERRORI)
+            errori = "\n".join(piano.get("errori_da_evitare") or [])
+            v = lambda o: valida_finale(o, 0, tipo)  # noqa: E731
+            return {**comune, "altro": f"{sul_prof}\n{errori}", "compito": "finale",
+                    "messaggi": prompt.messaggi_finale(lettura, piano, [], 0, parole_e), "valida": v, "struttura": v,
+                    "max_token": 900, "cosa": "Testo · parte finale",
+                    "dati": {"lettura": lettura, "piano": piano, "brani": []}}
+        if nome == "finale":
+            fonti = [f for d in piano["interrogazione"] for f in d["fonti"]]
+            domande = " ".join(d["testo"] for d in piano["interrogazione"])
+            brani = self._cerca(domande, tutti, CARATTERI_BLOCCO_MASSIMI, fonti)
+            q = len(piano["interrogazione"])
+            parole_r, parole_e = misure.parole(misure.MINUTI_RIEPILOGO), misure.parole(misure.MINUTI_ERRORI)
+            parole_risposta = max(40, misure.parole(misure.MINUTI_PER_DOMANDA_RIPASSO) - 20)
+            return {"brani": brani, "altro": f"{sul_prof}\n" + "\n".join(piano.get("errori_da_evitare") or []),
+                    "compito": "finale", "messaggi": prompt.messaggi_finale(lettura, piano, brani, parole_r, parole_e, parole_risposta),
+                    "valida": lambda o: valida_finale(o, q, tipo), "struttura": lambda o: valida_finale(o, 0, tipo),
+                    "max_token": min(8000, 900 + (420 if tipo == "ripasso" else 280) * q), "cosa": "Testo · parte finale",
+                    "dati": {"lettura": lettura, "piano": piano, "brani": brani}}
+        k = int(nome.split("_")[1])
+        blocco = piano["blocchi"][k - 1]
+        if tipo == "interrogazione":
+            domande = blocco.get("domande") or []
+            cerca = " ".join([blocco["titolo"], *blocco["punti"], *(d["testo"] for d in domande)])
+            fonti = list(dict.fromkeys(blocco["fonti"] + [f for d in domande for f in d.get("fonti") or []]))
+            brani = self._cerca(cerca, tutti, CARATTERI_BLOCCO_MASSIMI, fonti)
+            parole_risposta = max(40, misure.parole(misure.minuti_per_parte(tipo, lettura["durata_min"])) - 25)
+            minime = 0 if prova else int(parole_risposta * len(domande) * 0.45)
+            return {"brani": brani, "altro": sul_prof, "compito": "gruppo",
+                    "messaggi": prompt.messaggi_gruppo(lettura, piano, k, brani, parole_risposta),
+                    "valida": lambda o, nd=len(domande), m=minime: valida_gruppo(o, nd, m),
+                    "struttura": lambda o: [] if isinstance(o.get("domande"), list) else ['servono "domande"'],
+                    "max_token": min(8000, int(parole_risposta * len(domande) * 2.6) + 800),
+                    "cosa": f"Testo · domande {k} di {n}",
+                    "dati": {"lettura": lettura, "piano": piano, "k": k, "brani": brani, "parole": parole_risposta}}
+        prima = self._leggi(f"scrittura/blocco_{k - 1:02d}.json") if k > 1 else None
+        testi = _testi(prima.get("paragrafi")) if prima else []
+        finale_prima = testi[-1]["testo"] if testi else None
+        minime = 0 if prova else int(parole_blocco * 0.45)
+        comuni = {"altro": sul_prof, "max_token": min(8000, int(parole_blocco * 2.6) + 800)}
+        if tipo == "ripasso":
+            cerca = " ".join([blocco["titolo"], *blocco["punti"]])
+            brani = self._cerca(cerca, tutti, CARATTERI_BLOCCO_MASSIMI, blocco["fonti"])
+            return {**comuni, "brani": brani, "compito": "parte",
+                    "messaggi": prompt.messaggi_parte(lettura, piano, k, brani, parole_blocco, finale_prima),
+                    "valida": lambda o, m=minime: valida_parte(o, m), "struttura": lambda o: valida_parte(o, 0),
+                    "cosa": f"Testo · parte {k} di {n}",
+                    "dati": {"lettura": lettura, "piano": piano, "k": k, "brani": brani, "parole": parole_blocco}}
+        cerca = " ".join([blocco["titolo"], *blocco["punti"], blocco["domanda"]["testo"]])
+        brani = self._cerca(cerca, tutti, CARATTERI_BLOCCO_MASSIMI, blocco["fonti"])
+        return {**comuni, "brani": brani, "compito": "blocco",
+                "messaggi": prompt.messaggi_blocco(lettura, piano, k, brani, parole_blocco, finale_prima),
+                "valida": lambda o: valida_blocco(o, minime), "struttura": lambda o: valida_blocco(o, 0),
+                "cosa": f"Testo · blocco {k} di {n}",
+                "dati": {"lettura": lettura, "piano": piano, "k": k, "brani": brani, "parole": parole_blocco}}
 
     # --- 4. voce
 

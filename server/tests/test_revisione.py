@@ -117,7 +117,7 @@ def test_2_risposta_persa_si_conta_la_stima(client, auth, servizi, server):
     s = monta_servizi(client.app, server)
     nuova_lezione(client, auth, m["id"], voce="mistral:voice_482")
     prepara_tutto(s)
-    testo = [x for x in spese(s) if x["unita"] == "token"]
+    testo = [x for x in spese(s) if x["unita"] == "token" and "Ricerca" not in x["cosa"]]
     assert server.conta("/v1/chat/completions") == len(testo)  # ogni chiamata partita è nel conto
     perse = [x for x in testo if x["stato"] == "stimata"]
     assert len(perse) == 2 and all("risposta persa" in x["cosa"] and x["costo_eur"] > 0 for x in perse)
@@ -130,7 +130,7 @@ def test_2_occupato_si_ritenta_senza_contare(client, auth, servizi, server):
     server.guasti["/v1/chat/completions"] = [503, 429]
     nuova_lezione(client, auth, m["id"], voce="mistral:voice_482")
     prepara_tutto(servizi)
-    testo = [x for x in spese(servizi) if x["unita"] == "token"]
+    testo = [x for x in spese(servizi) if x["unita"] == "token" and "Ricerca" not in x["cosa"]]
     assert server.conta("/v1/chat/completions") == len(testo) + 2
     assert all(x["stato"] == "fatta" for x in testo)
 

@@ -48,7 +48,7 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 
 Write-Host "Pubblicazione (self-contained, a cartella)..." -ForegroundColor Cyan
-& $dotnet publish $progetto -c Release -r win-x64 "-p:PubblicazioneLectio=true" -o $staging
+& $dotnet publish $progetto -c Release -r win-x64 "-p:PubblicazioneLectio=true" -m:2 -o $staging
 if ($LASTEXITCODE -ne 0) { throw "publish fallito (codice $LASTEXITCODE)" }
 
 $exe = Join-Path $staging 'Lectio.exe'

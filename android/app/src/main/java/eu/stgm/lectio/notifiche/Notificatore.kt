@@ -33,8 +33,8 @@ object Notificatore {
             },
         )
         manager.createNotificationChannel(
-            NotificationChannel(CANALE_PRONTE, "Lezioni pronte", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Una lezione è pronta da ascoltare, o non è riuscita"
+            NotificationChannel(CANALE_PRONTE, "Lezioni e schemi pronti", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Una lezione, uno schema, un riassunto o una verifica simulata è pronta, o non è riuscita"
             },
         )
         manager.createNotificationChannel(
@@ -104,6 +104,48 @@ object Notificatore {
             .setAutoCancel(true)
             .setContentIntent(apriApp(context, id, null, false))
             .build())
+    }
+
+    private fun apriStudio(context: Context, codice: Int, extra: Intent.() -> Unit): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .apply(extra)
+        return PendingIntent.getActivity(context, codice, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun studio(context: Context, id: Int, titolo: String, sotto: String, extra: Intent.() -> Unit) {
+        mostra(context, id, NotificationCompat.Builder(context, CANALE_PRONTE)
+            .setSmallIcon(R.drawable.ic_notifica)
+            .setContentTitle(titolo)
+            .setContentText(sotto)
+            .setAutoCancel(true)
+            .setContentIntent(apriStudio(context, id, extra))
+            .build())
+    }
+
+    /** Uno schema pronto o non riuscito: un tocco apre lo schema, dalla materia sul segmento Schemi. */
+    fun schema(context: Context, testo: String, schemaId: Long, materiaId: Long, riuscito: Boolean) {
+        studio(context, (schemaId % 9000).toInt() + 40_000, testo, if (riuscito) "Tocca per leggerlo." else "Tocca per vedere cosa fare.") {
+            putExtra(MainActivity.EXTRA_SCHEMA, schemaId)
+            putExtra(MainActivity.EXTRA_MATERIA, materiaId)
+        }
+    }
+
+    /** Una verifica simulata pronta, corretta o non riuscita. */
+    fun simulata(context: Context, testo: String, simulataId: Long, materiaId: Long, sotto: String) {
+        studio(context, (simulataId % 9000).toInt() + 50_000, testo, sotto) {
+            putExtra(MainActivity.EXTRA_SIMULATA, simulataId)
+            putExtra(MainActivity.EXTRA_MATERIA, materiaId)
+        }
+    }
+
+    /** Un riassunto pronto o non riuscito: un tocco lo apre nella sua forma. */
+    fun riassunto(context: Context, testo: String, riassuntoId: Long, schemaId: Long, forma: String, materiaId: Long, riuscito: Boolean) {
+        studio(context, (riassuntoId % 9000).toInt() + 60_000, testo, if (riuscito) "Tocca per leggerlo." else "Tocca per vedere cosa fare.") {
+            putExtra(MainActivity.EXTRA_RIASSUNTO_SCHEMA, schemaId)
+            putExtra(MainActivity.EXTRA_RIASSUNTO_FORMA, forma)
+            putExtra(MainActivity.EXTRA_MATERIA, materiaId)
+        }
     }
 
     fun togliPreparazione(context: Context) = NotificationManagerCompat.from(context).cancel(ID_PREPARAZIONE)

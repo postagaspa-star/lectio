@@ -17,6 +17,8 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
+from .firma import FIRMA
+
 log = logging.getLogger("uvicorn.error")
 
 FREQUENZA = 24_000
@@ -107,7 +109,8 @@ class Montatore:
     def codifica(self, wav: Path, mp3: Path) -> None:
         self._esegui([self.ffmpeg, "-nostdin", "-y", "-v", "error", "-i", str(wav),
                       "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ar", str(FREQUENZA), "-ac", "1",
-                      "-c:a", "libmp3lame", "-b:a", "64k", "-f", "mp3", str(mp3)], "codifica")
+                      "-c:a", "libmp3lame", "-b:a", "64k", "-metadata", f"artist={FIRMA}", "-metadata",
+                      f"comment={FIRMA}", "-f", "mp3", str(mp3)], "codifica")
 
     def monta(self, pezzi: list[tuple[Path, float]], uscita: Path, lavoro: Path) -> Montaggio:
         """`pezzi` = (file, silenzio prima). Scrive `uscita` (MP3) e restituisce i tempi."""

@@ -58,6 +58,14 @@ public class PonteTest
     [InlineData("oggi", true)]
     [InlineData("impostazioni", true)]
     [InlineData("lezione/12", true)]
+    [InlineData("materia/3", true)]
+    [InlineData("materia/3/schemi", true)]
+    [InlineData("materia/3/simulate", true)]
+    [InlineData("materia/3/altro", false)]
+    [InlineData("schema/4", true)]
+    [InlineData("simulata/5", true)]
+    [InlineData("riassunto/6", true)]
+    [InlineData("schema/4/x", false)]
     [InlineData("lezione/12');alert(1);//", false)]
     [InlineData("javascript:alert(1)", false)]
     [InlineData("", false)]
@@ -136,6 +144,201 @@ public class PonteTest
         Assert.Equal("/api/eventi?da=2026-10-27", r[0].Percorso);
         Assert.Equal("PUT", r[1].Metodo);
         Assert.Equal("{\"posizione_s\":462,\"finita\":false}", r[1].Corpo);
+    }
+
+    [Fact]
+    public async Task La_foto_dello_schema_arriva_in_byte_e_resta_per_quando_manca_la_rete()
+    {
+        var rete = true;
+        using var b = new Banco(_ => rete ? (200, "{}") : (0, ""));
+        var foto = new byte[] { 0xFF, 0xD8, 0xFF, 1, 2, 3 };
+        b.Finto.RispondeByte = q => rete && q.Percorso == "/api/schemi/3/immagini/1" ? foto : null;
+        var ponte = new Ponte(b.Motore);
+
+        var r = await ponte.GestisciAsync("GET", new Uri(Base, "server/api/schemi/3/immagini/1?v=2"), null);
+        Assert.Equal(200, r.Stato);
+        Assert.Equal(foto, r.Byte);
+        Assert.Equal("image/jpeg", r.TipoContenuto);
+
+        rete = false;
+        var senzaRete = await ponte.GestisciAsync("GET", new Uri(Base, "server/api/schemi/3/immagini/1?v=2"), null);
+        Assert.Equal(foto, senzaRete.Byte);
+        Assert.Equal(503, (await ponte.GestisciAsync("GET", new Uri(Base, "server/api/schemi/3/immagini/2"), null)).Stato);
+
+        // Foto tolta: la copia non vale più.
+        rete = true;
+        b.Finto.RispondeByte = null;
+        await ponte.GestisciAsync("DELETE", new Uri(Base, "server/api/schemi/3/immagini/1"), null);
+        rete = false;
+        var dopo = await ponte.GestisciAsync("GET", new Uri(Base, "server/api/schemi/3/immagini/1"), null);
+        Assert.Null(dopo.Byte);
+        Assert.Equal(503, dopo.Stato);
+    }
+
+    [Fact]
+    public async Task Il_pdf_si_scarica_prima_e_si_salva_dove_dice_Windows()
+    {
+        using var cartella = new CartellaTemporanea();
+        using var b = new Banco(_ => (200, "{}"));
+        var pdf = Encoding.ASCII.GetBytes("%PDF-1.7 prova");
+        b.Finto.RispondeByte = q => q.Percorso.EndsWith("/pdf", StringComparison.Ordinal) ? pdf : null;
+        string? propostoNome = null;
+        string? aperto = null;
+        var dove = cartella.File("uscita.pdf");
+        var ponte = new Ponte(b.Motore) { ChiediDoveSalvare = n => { propostoNome = n; return Task.FromResult<string?>(dove); }, ApriFile = f => aperto = f };
+
+        var r = await ponte.GestisciAsync("POST", new Uri(Base, "locale/salva-pdf"), Encoding.UTF8.GetBytes("{\"percorso\":\"api/riassunti/4/pdf\",\"nome\":\"La guerra: fredda?\"}"));
+        Assert.Equal(200, r.Stato);
+        Assert.Equal("La guerra- fredda-.pdf", propostoNome);
+        Assert.Equal(pdf, File.ReadAllBytes(dove));
+        Assert.Equal("/api/riassunti/4/pdf", Assert.Single(b.Finto.Ricevute).Percorso);
+
+        var id = Json.Testo(Json.Nodo(r.Json)!["id"]);
+        var apri = await ponte.GestisciAsync("POST", new Uri(Base, "locale/apri-pdf"), Encoding.UTF8.GetBytes("{\"id\":\"" + id + "\"}"));
+        Assert.Equal(200, apri.Stato);
+        Assert.Equal(dove, aperto);
+
+        // Solo i file salvati adesso: mai un percorso qualsiasi.
+        var altro = await ponte.GestisciAsync("POST", new Uri(Base, "locale/apri-pdf"), Encoding.UTF8.GetBytes("{\"id\":\"C:\\\\Windows\\\\notepad.exe\"}"));
+        Assert.Equal(422, altro.Stato);
+    }
+
+    [Theory]
+    [InlineData("api/lezioni/4/pdf")]
+    [InlineData("api/schemi/4/immagini/1")]
+    [InlineData("../api/schemi/4/pdf")]
+    [InlineData("https://altro.it/api/schemi/4/pdf")]
+    public async Task Il_pdf_si_chiede_solo_dai_percorsi_noti(string percorso)
+    {
+        using var b = new Banco(_ => (200, "{}"));
+        var chiesto = false;
+        var ponte = new Ponte(b.Motore) { ChiediDoveSalvare = _ => { chiesto = true; return Task.FromResult<string?>(null); } };
+        var r = await ponte.GestisciAsync("POST", new Uri(Base, "locale/salva-pdf"), Encoding.UTF8.GetBytes(new System.Text.Json.Nodes.JsonObject { ["percorso"] = percorso }.ToJsonString()));
+        Assert.Equal(422, r.Stato);
+        Assert.False(chiesto);
+        Assert.Empty(b.Finto.Ricevute);
+    }
+
+    [Fact]
+    public async Task Pdf_annullato_o_errore_del_server_non_scrivono_niente()
+    {
+        using var b = new Banco(_ => (409, "{\"errore\":\"Non è ancora pronto.\",\"codice\":\"conflitto\"}"));
+        var chiesto = false;
+        var ponte = new Ponte(b.Motore) { ChiediDoveSalvare = _ => { chiesto = true; return Task.FromResult<string?>(null); } };
+        var corpo = Encoding.UTF8.GetBytes("{\"percorso\":\"api/simulate/3/pdf\",\"nome\":\"x\"}");
+        var errore = await ponte.GestisciAsync("POST", new Uri(Base, "locale/salva-pdf"), corpo);
+        Assert.Equal(422, errore.Stato);
+        Assert.False(chiesto);
+
+        b.Finto.RispondeByte = _ => new byte[] { 1 };
+        var annullato = await ponte.GestisciAsync("POST", new Uri(Base, "locale/salva-pdf"), corpo);
+        Assert.Equal(200, annullato.Stato);
+        Assert.True(chiesto);
+        Assert.Equal(true, Json.Booleano(Json.Nodo(annullato.Json)!["annullato"]));
+    }
+
+    [Theory]
+    [InlineData(null, "Lectio.pdf")]
+    [InlineData("  ", "Lectio.pdf")]
+    [InlineData("Storia.PDF", "Storia.pdf")]
+    [InlineData("a/b\\c", "a-b-c.pdf")]
+    public void Nome_del_pdf_pulito(string? nome, string atteso)
+    {
+        Assert.Equal(atteso, Ponte.NomePdf(nome));
+    }
+
+    [Fact]
+    public async Task La_visita_delle_novita_si_ricorda_a_parte()
+    {
+        using var b = new Banco(_ => (200, "{}"));
+        var ponte = new Ponte(b.Motore);
+        var prima = await ponte.GestisciAsync("GET", new Uri(Base, "locale/stato"), null);
+        Assert.Equal(false, Json.Booleano(Json.Nodo(prima.Json)!["tutorial_novita_visto"]));
+        Assert.Equal(200, (await ponte.GestisciAsync("POST", new Uri(Base, "locale/tutorial-novita-visto"), Encoding.UTF8.GetBytes("{}"))).Stato);
+        var dopo = await ponte.GestisciAsync("GET", new Uri(Base, "locale/stato"), null);
+        Assert.Equal(true, Json.Booleano(Json.Nodo(dopo.Json)!["tutorial_novita_visto"]));
+        Assert.Equal(false, Json.Booleano(Json.Nodo(dopo.Json)!["tutorial_visto"]));
+    }
+
+    [Theory]
+    [InlineData("POST", "api/chiarimenti", 65)]
+    [InlineData("POST", "api/schemi/3/immagini/1/cambia", 120)]
+    [InlineData("POST", "api/lezioni/3/domande/1/risposta", 200)]
+    [InlineData("GET", "api/schemi/3/immagini/1", 30)]
+    [InlineData("POST", "api/schemi", 30)]
+    public void Tempo_massimo_delle_richieste(string metodo, string percorso, int secondi)
+    {
+        Assert.Equal(TimeSpan.FromSeconds(secondi), Motore.Motore.TempoPer(metodo, percorso));
+    }
+
+    [Theory]
+    [InlineData("schema_pronto", "materia/2/schemi")]
+    [InlineData("schema_errore", "materia/2/schemi")]
+    [InlineData("riassunto_pronto", "materia/2/schemi")]
+    [InlineData("riassunto_errore", "materia/2/schemi")]
+    [InlineData("simulata_pronta", "materia/2/simulate")]
+    [InlineData("simulata_corretta", "materia/2/simulate")]
+    [InlineData("simulata_errore", "materia/2/simulate")]
+    public void Gli_avvisi_dello_studio_aprono_la_materia(string tipo, string frammento)
+    {
+        var n = Motore.Motore.NotificaPer(new VoceNovita { Id = 1, Tipo = tipo, Testo = "Fatto", MateriaId = 2 });
+        Assert.NotNull(n);
+        Assert.Equal(frammento, n!.Frammento);
+        Assert.True(FinestraLectio.FrammentoValido(n.Frammento));
+    }
+
+    [Fact]
+    public async Task Il_giro_resta_acceso_finche_uno_schema_o_una_verifica_sono_in_lavorazione()
+    {
+        var statoSchema = "in_preparazione";
+        var statoSimulata = "pronta";
+        using var b = new Banco(q => q.Percorso switch
+        {
+            "/api/schemi" => (200, "[{\"id\":3,\"stato\":\"" + statoSchema + "\"}]"),
+            "/api/simulate" => (200, "[{\"id\":4,\"stato\":\"" + statoSimulata + "\"}]"),
+            "/api/lezioni" => (200, "[]"),
+            _ => (200, "[]"),
+        }, cursore: 0);
+        await b.Motore.GiroAsync();
+        Assert.True(b.Motore.InPreparazione);
+
+        statoSchema = "pronto";
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+
+        statoSimulata = "in_correzione";
+        await b.Motore.GiroAsync();
+        Assert.True(b.Motore.InPreparazione);
+
+        statoSimulata = "corretta";
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+    }
+
+    [Fact]
+    public async Task Un_riassunto_chiesto_tiene_acceso_il_giro_fino_alla_novita_o_alla_scadenza()
+    {
+        var novita = "[]";
+        using var b = new Banco(q => q.Percorso.StartsWith("/api/novita", StringComparison.Ordinal) ? (200, novita)
+            : q.Metodo == "POST" ? (201, "{\"id\":9,\"stato\":\"in_coda\"}") : (200, "[]"), cursore: 0);
+        var ponte = new Ponte(b.Motore);
+        await b.Motore.GiroAsync(); // Il primo giro mette solo il cursore.
+
+        await ponte.GestisciAsync("POST", new Uri(Base, "server/api/schemi/3/riassunti"), Encoding.UTF8.GetBytes("{\"forma\":\"misto\"}"));
+        Assert.True(b.Motore.InPreparazione);
+        await b.Motore.GiroAsync();
+        Assert.True(b.Motore.InPreparazione);
+
+        novita = "[{\"id\":5,\"tipo\":\"riassunto_pronto\",\"testo\":\"Pronto\",\"materia_id\":2}]";
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+
+        // Se la novità non arriva mai, dopo un po' si smette di guardare.
+        novita = "[]";
+        await ponte.GestisciAsync("POST", new Uri(Base, "server/api/schemi/3/riassunti"), Encoding.UTF8.GetBytes("{\"forma\":\"punti\"}"));
+        b.Adesso += Motore.Motore.AttesaRiassunto + TimeSpan.FromSeconds(1);
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
     }
 
     [Theory]

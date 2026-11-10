@@ -2,4 +2,6 @@
 <!-- Le foto scattate da "Aggiungi → Foto" passano dalla cache privata dell'app. -->
 <paths>
     <cache-path name="foto" path="foto/" />
+    <!-- I PDF su Android 8 e 9, dove la cartella Download comune vorrebbe un permesso in più. -->
+    <external-files-path name="pdf" path="Download/" />
 </paths>

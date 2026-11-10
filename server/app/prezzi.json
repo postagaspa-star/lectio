@@ -3,7 +3,8 @@
   "cambio_usd_eur": 0.86,
   "testo": {
     "mistral-small-latest": {"entrata_per_milione": 0.20, "uscita_per_milione": 0.60},
-    "mistral-medium-latest": {"entrata_per_milione": 0.40, "uscita_per_milione": 2.00}
+    "mistral-medium-latest": {"entrata_per_milione": 0.40, "uscita_per_milione": 2.00},
+    "mistral-embed": {"entrata_per_milione": 0.10, "uscita_per_milione": 0.0}
   },
   "ocr": {
     "mistral-ocr-latest": {"per_mille_pagine": 4.0}

@@ -12,7 +12,7 @@ const path = require('path');
 
 // LECTIO_UI: un'altra cartella dell'interfaccia (per esempio quella di una versione vecchia, per vedere che i test la bocciano).
 const UI = process.env.LECTIO_UI || path.join(__dirname, '..', '..', 'ui');
-const SCRIPT = ['logica.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'visita.js', 'avvio.js'];
+const SCRIPT = ['logica.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'visita.js', 'avvio.js'];
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 
@@ -59,6 +59,9 @@ function server(opzioni) {
     }
     if (p === '/locale/scollega') { s.stato.abbinato = false; return [200, { ok: true, revocato_sul_server: true }]; }
     if (p === '/locale/tutorial-visto') { s.stato.tutorial_visto = true; return [200, { ok: true }]; }
+    if (p === '/locale/tutorial-novita-visto') { s.stato.tutorial_novita_visto = true; return [200, { ok: true }]; }
+    if (p === '/locale/salva-pdf') return s.salvaPdf ? s.salvaPdf(corpo) : [200, { ok: true, id: 7, nome: corpo.nome }];
+    if (p === '/locale/apri-pdf') return [200, { ok: true }];
     if (p === '/locale/tema') { s.stato.tema = corpo.tema; return [200, { ok: true, tema: corpo.tema }]; }
     if (p === '/locale/copia') return s.copia ? [200, { ok: true }] : [422, { errore: 'Non sono riuscito a copiarlo: seleziona il testo qui sotto e copialo con Ctrl+C.', codice: 'appunti' }];
     if (p === '/locale/apri-gemini' || p === '/locale/tasti' || p === '/locale/aggiorna-adesso') return [200, { ok: true }];
@@ -104,7 +107,7 @@ async function pagina(s, opzioni) {
     static now() { return D0.now() + sposta; }
   };
   const vita = { chiusa: false };
-  w.LectioTempi = Object.assign({ preparazione: 120, sincronia: 400, torna: 300, copiato: 150, lettura: 120, rete: 100000, riparte: 100, avviso: 200 }, o.tempi || {});
+  w.LectioTempi = Object.assign({ preparazione: 120, sincronia: 400, torna: 300, copiato: 150, lettura: 120, rete: 100000, riparte: 100, avviso: 200, stato: 120, salvaRisposta: 40, tempoSalvato: 200, attesaLunga: 500, fermoEsito: 5 }, o.tempi || {});
   w.LectioCreaAudio = (url, durata) => { const a = new w.LectioApp.AudioFinto(durata); a.url = url; a.aMano = o.audioVero !== true; p.audio = a; return a; };
   w.document.hasFocus = () => s.focus;
   // Il riquadro multimediale di Windows (Media Session): si tengono le azioni per provarle.

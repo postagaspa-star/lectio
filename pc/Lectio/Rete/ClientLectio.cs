@@ -20,6 +20,15 @@ public readonly record struct Risposta(int Stato, string Corpo, bool Scaduta = f
 /// <summary>Com'è andato uno scaricamento: <see cref="Stato"/> è lo stato HTTP (0 = rete).</summary>
 public readonly record struct EsitoDownload(bool Ok, int Stato, long Byte);
 
+/// <summary>Un file chiesto al server e tenuto in memoria (una foto, un PDF). <see cref="Corpo"/> c'è solo se è un errore.</summary>
+public readonly record struct RispostaByte(int Stato, byte[] Byte, string Corpo, string? Tipo, bool Scaduta = false)
+{
+    public bool Ok => Stato is >= 200 and < 300;
+    public Risposta ComeRisposta => new(Stato, Corpo, Scaduta);
+    public static RispostaByte SenzaRete => new(0, Array.Empty<byte>(), "", null);
+    public static RispostaByte TempoScaduto => new(0, Array.Empty<byte>(), "", null, true);
+}
+
 /// <summary>
 /// Il client HTTP verso il server di Lectio. Le letture riusano le connessioni; le modifiche
 /// (POST, PUT, PATCH, DELETE) partono su una connessione nuova chiusa subito, così .NET non le
@@ -74,6 +83,34 @@ public sealed class ClientLectio : IDisposable
         TimeSpan? tempoMassimo = null, CancellationToken annulla = default) =>
         InviaContenutoAsync(metodo, server, percorso, token,
             corpoJson == null ? null : new StringContent(corpoJson, Encoding.UTF8, "application/json"), tempoMassimo, annulla);
+
+    /// <summary>Una lettura che porta a casa dei byte (la foto di uno schema, un PDF). Mai eccezioni, come le altre.</summary>
+    public async Task<RispostaByte> LeggiByteAsync(string server, string percorso, string? token, TimeSpan? tempoMassimo = null, CancellationToken annulla = default)
+    {
+        var uri = Indirizzo(server, percorso);
+        if (uri == null) return RispostaByte.SenzaRete;
+        using var richiesta = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (token != null) richiesta.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var scadenza = CancellationTokenSource.CreateLinkedTokenSource(annulla);
+        scadenza.CancelAfter(tempoMassimo ?? TempoMassimo);
+        try
+        {
+            using var risposta = await letture.SendAsync(richiesta, HttpCompletionOption.ResponseContentRead, scadenza.Token).ConfigureAwait(false);
+            var dati = await risposta.Content.ReadAsByteArrayAsync(scadenza.Token).ConfigureAwait(false);
+            var tipo = risposta.Content.Headers.ContentType?.MediaType;
+            return risposta.IsSuccessStatusCode
+                ? new RispostaByte((int)risposta.StatusCode, dati, "", tipo)
+                : new RispostaByte((int)risposta.StatusCode, Array.Empty<byte>(), Encoding.UTF8.GetString(dati), tipo);
+        }
+        catch (OperationCanceledException) when (!annulla.IsCancellationRequested)
+        {
+            return RispostaByte.TempoScaduto;
+        }
+        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            return RispostaByte.SenzaRete;
+        }
+    }
 
     /// <summary>Come <see cref="InviaAsync"/>, con un corpo qualsiasi (per esempio un file in multipart).</summary>
     public async Task<Risposta> InviaContenutoAsync(string metodo, string server, string percorso, string? token, HttpContent? contenuto,

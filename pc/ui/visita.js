@@ -99,16 +99,166 @@
         await aspetta(() => document.querySelector('[data-visita="risposta"]'), 3000);
       },
     },
-    { fine: true },
   ];
-  const DA_CONTARE = PASSI.length - 1;
+
+  /** Il pezzo da mostrare al centro: scivolando, o di colpo con meno animazioni. */
+  function portaInVista(el, dove) {
+    if (el) el.scrollIntoView({ block: dove, behavior: A.conMovimenti() && !document.documentElement.classList.contains('foto') ? 'smooth' : 'instant' });
+  }
+
+  async function apriMateriaIn(segmento) {
+    A.chiudiTuttiIVeli();
+    A.chiudiLettore(false);
+    await vaiA('#materia/' + STORIA, '[data-segmento="schemi"]');
+    const b = document.querySelector('[data-segmento="' + segmento + '"]');
+    if (b && b.getAttribute('aria-pressed') !== 'true') b.click();
+    portaInVista(document.querySelector('[data-sezione="binario"] .binario'), 'center');
+    await new Promise((r) => setTimeout(r, A.conMovimenti() ? 320 : 0));
+  }
+
+  async function apriNuovoSchema() {
+    if (S.velo.some((v) => v.tipo === 'nuovo-schema')) return;
+    await apriMateriaIn('schemi');
+    A.nuovoSchema(STORIA);
+  }
+
+  async function apriSchema() {
+    A.chiudiTuttiIVeli();
+    A.chiudiLettore(false);
+    await vaiA('#schema/3', '.sch-parte');
+  }
+
+  async function apriCapito() {
+    if (S.velo.some((v) => v.foglio && v.foglio.classList.contains('foglio-capito'))) return;
+    await apriSchema();
+    const b = await aspetta(() => document.querySelector('[data-visita="mano"]'), 2000);
+    if (b) b.click();
+    await aspetta(() => document.querySelector('[data-visita="spiegamelo"]'), 2000);
+  }
+
+  async function apriLampoVisita() {
+    if (S.velo.some((v) => v.el.querySelector('.finestra-lampo'))) return;
+    A.chiudiTuttiIVeli();
+    A.chiudiLettore(false);
+    await vaiA('#oggi', '[data-visita="lampo-inizia"]');
+    A.apriLampo();
+  }
+
+  // §39: le cose nuove, sugli stessi dati d'esempio (materia Storia).
+  const PASSI_NUOVI = [
+    {
+      titolo: 'Schemi', frase: 'Qui trovi gli schemi da leggere.', evento: 'segmento-schemi', tasto: 'clic',
+      bersaglio: ['[data-segmento="schemi"]'],
+      prepara: () => apriMateriaIn('lezioni'),
+    },
+    {
+      titolo: 'Nuovo schema', frase: 'Si crea come una lezione.', evento: 'nuovo-schema', tasto: 'clic',
+      bersaglio: ['[data-visita="nuovo-schema"]'],
+      prepara: () => apriMateriaIn('schemi'),
+    },
+    {
+      titolo: 'Come lo vuoi', frase: 'Scegli forma e livello: qui vedi cosa esce e quanto costa.', leggi: true,
+      bersaglio: ['[data-visita="riepilogo-nuovo"]'],
+      prepara: async () => {
+        await apriNuovoSchema();
+        const r = await aspetta(() => { const b = document.querySelector('[data-azione="prepara-studio"]'); return b && /€/.test(b.textContent) ? document.querySelector('[data-visita="riepilogo-nuovo"]') : null; }, 3000);
+        portaInVista(r, 'nearest');
+      },
+    },
+    {
+      titolo: 'Un\'immagine utile', frase: 'Vuoi più foto? Basta questo.', leggi: true,
+      bersaglio: ['[data-visita="spunto-immagini"]'],
+      prepara: async () => {
+        await apriNuovoSchema();
+        portaInVista(await aspetta(() => document.querySelector('[data-visita="spunto-immagini"]'), 3000), 'center');
+        await new Promise((r) => setTimeout(r, A.conMovimenti() ? 320 : 0));
+      },
+    },
+    {
+      titolo: 'Indice', frase: 'Da qui salti a ogni parte.', evento: 'indice', tasto: 'clic',
+      bersaglio: ['[data-visita="indice"]', '[data-visita="indice-stretto"]'],
+      prepara: apriSchema,
+    },
+    {
+      titolo: 'Un paragrafo', frase: 'Fai clic qui per vedere cosa puoi fare.', evento: 'apri-capito', tasto: 'clic',
+      bersaglio: ['[data-visita="paragrafo"]', '[data-visita="mano"]'],
+      prepara: async () => {
+        await apriSchema();
+        const b = await aspetta(() => document.querySelector('[data-visita="mano"]'), 2000);
+        if (!b) return;
+        b.classList.add('visibile');
+        portaInVista(document.querySelector('[data-visita="paragrafo"]'), 'center');
+        await new Promise((r) => setTimeout(r, A.conMovimenti() ? 320 : 0));
+      },
+    },
+    {
+      titolo: 'Non ho capito', frase: 'Te lo rispiego solo con i tuoi documenti.', evento: 'capito-invio', tasto: 'clic',
+      bersaglio: ['[data-visita="spiegamelo"]'],
+      prepara: apriCapito,
+    },
+    {
+      titolo: 'Da dove viene', frase: 'Qui controlli da dove l\'ho preso.', leggi: true,
+      bersaglio: ['[data-visita="fonti-capito"]'],
+      prepara: async () => {
+        await apriCapito();
+        if (!document.querySelector('[data-visita="fonti-capito"]')) {
+          const b = document.querySelector('[data-visita="spiegamelo"]');
+          if (b) b.click();
+        }
+        portaInVista(await aspetta(() => document.querySelector('[data-visita="fonti-capito"]'), 3000), 'center');
+      },
+    },
+    {
+      titolo: 'Ripasso lampo', frase: 'Poche schede al giorno, tre minuti.', evento: 'lampo-apri', tasto: 'clic',
+      bersaglio: ['[data-visita="lampo-inizia"]'],
+      prepara: async () => { A.chiudiTuttiIVeli(); A.chiudiLettore(false); await vaiA('#oggi', '[data-visita="lampo-inizia"]'); },
+    },
+    {
+      titolo: 'Mostra la risposta', frase: 'Prima prova a ricordare.', evento: 'lampo-mostra', tasto: 'spazio',
+      bersaglio: ['[data-visita="lampo-mostra"]'],
+      prepara: async () => { await apriLampoVisita(); await aspetta(() => document.querySelector('[data-visita="lampo-mostra"], [data-visita="lampo-esiti"]'), 3000); },
+    },
+    {
+      titolo: 'Tre parole', frase: 'Quasi: te ne ricordavi solo una parte.', evento: 'lampo-esito', tasto: 'due',
+      bersaglio: ['[data-visita="lampo-esiti"]'],
+      prepara: async () => {
+        await apriLampoVisita();
+        const b = await aspetta(() => document.querySelector('[data-visita="lampo-mostra"], [data-visita="lampo-esiti"]'), 3000);
+        if (b && b.getAttribute('data-visita') === 'lampo-mostra') b.click();
+        await aspetta(() => document.querySelector('[data-visita="lampo-esiti"]'), 2000);
+      },
+    },
+    {
+      titolo: 'Verifica simulata', frase: 'Una verifica come quelle del tuo prof, per allenarti.', evento: 'segmento-simulate', tasto: 'clic',
+      bersaglio: ['[data-segmento="simulate"]'],
+      prepara: () => apriMateriaIn('lezioni'),
+    },
+    {
+      titolo: 'Il tempo', frase: 'Se ti agita, fai clic e sparisce.', evento: 'tempo', tasto: 'clic',
+      bersaglio: ['.sim-sx [data-visita="tempo"]', '.sim-barra-stretta [data-visita="tempo"]'],
+      prepara: async () => { A.chiudiTuttiIVeli(); await vaiA('#simulata/3', '.sim-domanda'); },
+    },
+    {
+      titolo: 'La stima', frase: 'È una stima. Il voto vero lo dà il prof.', leggi: true,
+      bersaglio: ['[data-visita="stima"]'],
+      prepara: async () => { A.chiudiTuttiIVeli(); await vaiA('#simulata/4', '[data-visita="stima"]'); },
+    },
+  ];
+  const FINE = { fine: true };
+
+  /** Le visite: quella di sempre, le cose nuove (una volta sola dopo l'aggiornamento), tutte e due da Impostazioni. */
+  function passiDi(modo) {
+    if (modo === 'novita') return PASSI_NUOVI.concat([FINE]);
+    if (modo === 'tutta') return PASSI.concat(PASSI_NUOVI, [FINE]);
+    return PASSI.concat([FINE]);
+  }
 
   // --- Entrare e uscire dalla modalità esempio -----------------------------------------------------
 
   let salvato = null;
 
   /** Parte da sola al primo avvio dopo l'abbinamento; si riapre da Impostazioni (e dalla pagina Oggi vuota). */
-  A.avviaVisita = async function (primoAvvio) {
+  A.avviaVisita = async function (primoAvvio, modo) {
     if (S.visita) return;
     // La lezione vera nel lettore: si salva il punto e si chiude (nella visita c'è quella d'esempio).
     if (A.lettore && A.lettore.id && !S.esempio) {
@@ -123,7 +273,7 @@
     S.voci = null;
     S.salute = { modalita_prova: false };
     await Promise.all([A.caricaMaterie(), A.caricaImpostazioni(), A.caricaSpesa()]);
-    S.visita = { passo: 0, primoAvvio: !!primoAvvio };
+    S.visita = { passo: 0, primoAvvio: !!primoAvvio, modo: modo || 'base', passi: passiDi(modo) };
     A.disegnaStato();
     costruisci();
     await vai(0);
@@ -145,7 +295,10 @@
     S.materie = null;
     salvato = null;
     A.disegnaStato();
-    if (segna !== false && !S.prova) ApiBase.post('/locale/tutorial-visto', {}).then((r) => { if (r.ok && S.motore) S.motore.tutorial_visto = true; });
+    if (segna !== false && !S.prova) {
+      if (v.modo !== 'novita') ApiBase.post('/locale/tutorial-visto', {}).then((r) => { if (r.ok && S.motore) S.motore.tutorial_visto = true; });
+      if (v.modo !== 'base') ApiBase.post('/locale/tutorial-novita-visto', {}).then((r) => { if (r.ok && S.motore) S.motore.tutorial_novita_visto = true; });
+    }
     await A.caricaMaterie();
     if (location.hash === '#oggi') A.disegna();
     else A.vai('#oggi');
@@ -178,9 +331,9 @@
     const v = S.visita;
     if (!v) return;
     clearTimeout(v.timer);
-    v.passo = Math.max(0, Math.min(PASSI.length - 1, n));
+    v.passo = Math.max(0, Math.min(v.passi.length - 1, n));
     v.fatto = false;
-    const p = PASSI[v.passo];
+    const p = v.passi[v.passo];
     S.dom.visita.classList.toggle('fine', !!p.fine);
     disegnaFumetto();
     if (p.fine) {
@@ -199,7 +352,7 @@
 
   function disegnaFumetto() {
     const v = S.visita;
-    const p = PASSI[v.passo];
+    const p = v.passi[v.passo];
     const f = v.fumetto;
     f.classList.toggle('centrato', !!p.fine);
     if (p.fine) {
@@ -211,7 +364,7 @@
       return;
     }
     svuota(f,
-      h('span', { class: 'passo-n' }, (v.passo + 1) + ' di ' + DA_CONTARE),
+      h('span', { class: 'passo-n' }, (v.passo + 1) + ' di ' + (v.passi.length - 1)),
       h('span', { class: 'titolo' }, p.titolo),
       h('p', { class: 'frase' }, p.frase),
       h('div', { class: 'azioni' },
@@ -223,6 +376,9 @@
     // Il tasto disegnato (sul PC al posto della mano): il clic del mouse, o Ctrl+Invio per mandare la risposta.
     if (p.tasto === 'clic') {
       svuota(v.tasto, h('span', { class: 'tasto' }, icona('mouse')), 'Clic');
+      v.tasto.style.display = '';
+    } else if (p.tasto === 'spazio' || p.tasto === 'due') {
+      svuota(v.tasto, h('span', { class: 'tasto' }, p.tasto === 'spazio' ? 'Spazio' : '2'));
       v.tasto.style.display = '';
     } else if (p.tasto === 'invia') {
       svuota(v.tasto, h('span', { class: 'tasto' }, 'Ctrl'), '+', h('span', { class: 'tasto' }, 'Invio'));
@@ -285,7 +441,7 @@
   function posiziona() {
     const v = S.visita;
     if (!v || !S.dom.visita) return;
-    const p = PASSI[v.passo];
+    const p = v.passi[v.passo];
     const W = window.innerWidth;
     const H = window.innerHeight;
     const r = p.fine || v.preparando ? null : rettangolo(p);
@@ -339,10 +495,10 @@
   A.visitaEvento = function (nome) {
     const v = S.visita;
     if (!v || v.fatto) return;
-    const p = PASSI[v.passo];
+    const p = v.passi[v.passo];
     if (p.evento !== nome) return;
     v.fatto = true;
-    const attesa = nome === 'invia-risposta' ? 1600 : 350;
+    const attesa = nome === 'invia-risposta' ? 1600 : nome === 'capito-invio' ? 700 : 350;
     v.timer = setTimeout(() => { if (S.visita === v) vai(v.passo + 1); }, attesa);
   };
 
