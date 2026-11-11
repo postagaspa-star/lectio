@@ -40,6 +40,23 @@ def test_chat_mistral_richiesta_e_numeri_veri():
     assert corpo["response_format"] == {"type": "json_object"} and corpo["max_tokens"] == 500
 
 
+def test_chat_mistral_con_ragionamento():
+    """Large 4 ragiona sempre (11/11/2026): si chiede il livello basso e il pezzo "thinking" si scarta."""
+    registro = []
+    pezzi = [{"type": "thinking", "thinking": [{"type": "text", "text": "Ci penso un attimo..."}]},
+             {"type": "text", "text": '{"ok": true}'}]
+    risposta = httpx.Response(200, json={"model": "mistral-large-4", "choices": [{"message": {"content": pezzi},
+                                                                                 "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 65, "completion_tokens": 299}})
+    t = ChatMistral("chiave", transport=trasporto([risposta, chat_ok()], registro))
+    r = t.genera(compito="piano", messaggi=[{"role": "user", "content": "ciao"}], modello="mistral-large-4",
+                 max_token=500, ragionamento="low")
+    assert r.testo == '{"ok": true}' and r.token_uscita == 299 and not r.troncata
+    assert json.loads(registro[0].content)["reasoning_effort"] == "low"
+    t.genera(compito="piano", messaggi=[{"role": "user", "content": "ciao"}], modello="mistral-small-latest", max_token=500)
+    assert "reasoning_effort" not in json.loads(registro[1].content)
+
+
 def test_un_tentativo_e_errori_classificati():
     """Revisione, punto 2: i fornitori fanno UN tentativo e dicono se hanno forse lavorato."""
     casi = [(httpx.Response(429), NonElaborata), (httpx.Response(503), NonElaborata),
@@ -152,12 +169,27 @@ class SequenzaDiTesti:
     def __init__(self, testi):
         self.testi = list(testi)
         self.messaggi = []
+        self.chiamate = []
 
     def genera(self, *, messaggi, **kw):
         from app.testo_ai import RispostaTesto
 
         self.messaggi.append(messaggi)
+        self.chiamate.append(kw)
         return RispostaTesto(self.testi.pop(0), 100, 20, "m")
+
+
+def test_json_con_modello_che_ragiona(app):
+    """Il ragionamento occupa i token di uscita: più spazio chiesto e livello basso, solo per chi ragiona."""
+    cassa = app.state.servizi.cassa
+    f = SequenzaDiTesti(['{"a": 1}', '{"a": 2}'])
+    ai.chiedi_json(cassa=cassa, fornitore=f, compito="x", messaggi=[{"role": "user", "content": "x"}],
+                   modello="mistral-large-4", valida=lambda o: [], max_token=1800, cosa="prova")
+    assert f.chiamate[0]["max_token"] == 1800 + 3000 and f.chiamate[0]["ragionamento"] == "low"
+    ai.chiedi_json(cassa=cassa, fornitore=f, compito="x", messaggi=[{"role": "user", "content": "x"}],
+                   modello="mistral-small-latest", valida=lambda o: [], max_token=1800, cosa="prova")
+    assert f.chiamate[1]["max_token"] == 1800 and f.chiamate[1]["ragionamento"] is None
+    assert ai.spazio_ragionamento("mistral-large-4", 8000) == 8000
 
 
 def test_json_validato_con_una_correzione(app):

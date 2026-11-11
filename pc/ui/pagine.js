@@ -1224,6 +1224,7 @@
       gruppo('Sul computer', voce('Lezioni scaricate', nScaricate ? L.plurale(nScaricate, 'lezione', 'lezioni') + ' · ' + L.dimensione(mot.byte_scaricate || 0) : 'Nessuna')),
       gruppo('Aggiornamenti', rigaAgg),
       gruppo('Informazioni', voce('Lectio ' + (mot.versione || '1.0.0') + ' per il computer', 'Carattere Figtree, licenza SIL Open Font License.')));
+    A.mostraTetto(); // arrivati dalla riga della spesa: il campo del tetto in vista e selezionato
   };
 
   // ================================================================== Com'è andata (§8)

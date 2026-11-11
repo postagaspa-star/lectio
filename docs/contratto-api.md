@@ -208,7 +208,10 @@ stima dei token di entrata/uscita × prezzi. Prezzi e cambio in `server/app/prez
    domanda, normalizza il volume, MP3 mono 64 kbps 24 kHz; calcola tempi di capitoli e domande dalle durate vere.
 
 Modelli predefiniti (cambiabili in `.env`): piano e scheda `mistral-small-latest`, scrittura
-`mistral-medium-latest`, OCR `mistral-ocr-latest`, voce `voxtral-mini-tts-3-0` con `voice_id` `voice_482`
+`mistral-medium-latest` (ora Medium 3.5: 1,50/7,50 $ per milione, contati giusti dalla 1.3.2; `mistral-large-4` costa
+meno a token ma ragiona sempre prima di rispondere, provato l'11/11/2026: il ragionamento si paga e taglia le risposte,
+il server gli chiede il livello basso e gli lascia spazio, ma non conviene), OCR `mistral-ocr-3`
+(metà prezzo di `mistral-ocr-latest`, che ora è OCR 4.1), voce `voxtral-mini-tts-3-0` con `voice_id` `voice_482`
 (Lorenzo, unica voce italiana preimpostata). Chiamata voce Mistral: `POST https://api.mistral.ai/v1/audio/speech`
 `{"model","input","voice_id","response_format":"mp3"}` → JSON con `audio_data` in base64. Azure:
 `POST https://<regione>.tts.speech.microsoft.com/cognitiveservices/v1` con SSML,

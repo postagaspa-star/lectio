@@ -12,12 +12,20 @@ import logging
 import re
 
 from . import misure, prompt
+from .config import RAGIONAMENTO
 
 log = logging.getLogger("uvicorn.error")
 
 # Una foto piccola pesa come un testo di circa 1.500 token.
 CARATTERI_PER_IMMAGINE = 5_000
 TOKEN_USCITA_MASSIMI = 16_000
+# Spazio in più per chi ragiona prima di rispondere: almeno quanto la risposta (l'11/11/2026 Large 4
+# ha ragionato più di 2.000 token su una parte di schema da 1.800).
+RAGIONAMENTO_MINIMO = 3_000
+
+
+def spazio_ragionamento(modello: str, max_token: int) -> int:
+    return max(RAGIONAMENTO_MINIMO, max_token) if RAGIONAMENTO.get(modello) else 0
 FRASE_NON_USABILE = "L'AI ha risposto in un modo che non riesco a usare, anche dopo averle chiesto di correggersi. Tocca Riprova."
 
 
@@ -51,11 +59,13 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
     Se si passa `costi`, ci finisce il costo vero di ogni chiamata fatta."""
     for tentativo in (1, 2):
         stima, token_stimati = 0.0, 0
+        # Il ragionamento conta nei token di uscita: entra nel massimo chiesto e nella stima per il tetto.
+        uscita = max_token + spazio_ragionamento(modello, max_token)
         if fornitore.a_pagamento:
             caratteri = sum(len(m["content"]) if isinstance(m["content"], str) else CARATTERI_PER_IMMAGINE
                             for m in messaggi)
-            token_stimati = int(caratteri / misure.CARATTERI_PER_TOKEN) + 50 + max_token
-            stima = cassa.prezzi.costo_testo(modello, token_stimati - max_token, max_token)
+            token_stimati = int(caratteri / misure.CARATTERI_PER_TOKEN) + 50 + uscita
+            stima = cassa.prezzi.costo_testo(modello, token_stimati - uscita, uscita)
         etichetta = cosa if tentativo == 1 else f"{cosa} (correzione)"
 
         def registra(ricevuta, risposta):
@@ -70,7 +80,8 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
             lezione_id=lezione_id, materia_id=materia_id, materiale_id=materiale_id, prima=prima_di_ogni_chiamata,
             riferimento=riferimento,
             fare=lambda: fornitore.genera(compito=compito, messaggi=messaggi, modello=modello, json_atteso=True,
-                                          max_token=max_token, dati={**(dati or {}), "tentativo": tentativo}),
+                                          max_token=uscita, dati={**(dati or {}), "tentativo": tentativo},
+                                          ragionamento=RAGIONAMENTO.get(modello)),
             registra=registra,
         )
         oggetto = estrai_json(risposta.testo)

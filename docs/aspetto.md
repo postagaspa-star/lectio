@@ -137,7 +137,8 @@ Come `docs/prototipo/Main.dc.html`, dai dati di `GET /api/oggi`:
 - **Più avanti**: le altre verifiche/interrogazioni (pallino, materia, cosa, quando), al massimo 4, poi
   "Vedi tutte".
 - In fondo, piccolo: **Questo mese 0,80 € di 2 €** con barra sottile; sotto "si azzera il 1° novembre".
-  All'80% la riga diventa avviso tenue.
+  All'80% la riga diventa avviso tenue. Dalla 1.3.2 la riga si tocca: apre le Impostazioni già scese sul
+  tetto del mese (sul PC il campo è anche selezionato), così il tetto si cambia da dove si vedono i soldi.
 - Vuota (primo uso): "Aggiungi la prima materia" con pulsante pieno, e "Prima volta? Guarda come funziona"
   (avvia la visita guidata).
 

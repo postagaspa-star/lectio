@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.3.1"
+VERSIONE = "1.3.2"
 
 CARTELLA_APP = Path(__file__).resolve().parent
 VERSIONI_PATH_DEFAULT = str(CARTELLA_APP / "versioni.json")
@@ -18,9 +18,14 @@ MISTRAL_URL = "https://api.mistral.ai/v1"
 
 MODELLO_PIANO_DEFAULT = "mistral-small-latest"
 MODELLO_SCRITTURA_DEFAULT = "mistral-medium-latest"
-MODELLO_OCR_DEFAULT = "mistral-ocr-latest"
+MODELLO_OCR_DEFAULT = "mistral-ocr-3"
 MODELLO_VOCE_DEFAULT = "voxtral-mini-tts-3-0"
 VOCE_MISTRAL_DEFAULT = "voice_482"  # Lorenzo, l'unica voce italiana preimpostata
+
+# Modelli che ragionano prima di rispondere (provato l'11/11/2026: Large 4 sì e non si spegne, solo
+# low/medium/high; Medium 3.5 e Small 4 no). Il ragionamento si paga come uscita e occupa max_tokens:
+# si chiede il livello basso e si lascia spazio in più (ai.py), se no la risposta arriva tagliata.
+RAGIONAMENTO = {"mistral-large-4": "low"}
 
 # Abbinamento (contratto, sezione 2), come Sol: dietro Tailscale tutte le richieste
 # arrivano dallo stesso indirizzo, quindi il limite dei tentativi è uno per tutto il server.

@@ -40,10 +40,13 @@ class TestoMistral:
         self._url = url
 
     def genera(self, *, compito: str, messaggi: list[dict], modello: str, json_atteso: bool = True,
-               max_token: int = 4000, temperatura: float = 0.4, dati: dict | None = None) -> RispostaTesto:
+               max_token: int = 4000, temperatura: float = 0.4, dati: dict | None = None,
+               ragionamento: str | None = None) -> RispostaTesto:
         corpo = {"model": modello, "messages": messaggi, "temperature": temperatura, "max_tokens": max_token}
         if json_atteso:
             corpo["response_format"] = {"type": "json_object"}
+        if ragionamento:
+            corpo["reasoning_effort"] = ragionamento  # i pezzi "thinking" della risposta si scartano qui sotto
 
         def manda() -> httpx.Response:
             with httpx.Client(transport=self._transport, timeout=self._timeout) as c:
@@ -53,8 +56,9 @@ class TestoMistral:
         r = controlla(invia("Mistral", manda), "Mistral")
         d = r.json()
         contenuto = d["choices"][0]["message"]["content"]
-        if isinstance(contenuto, list):  # alcuni modelli rispondono a pezzi
-            contenuto = "".join(p.get("text", "") for p in contenuto if isinstance(p, dict))
+        if isinstance(contenuto, list):  # alcuni modelli rispondono a pezzi; il ragionamento ("thinking") non serve
+            contenuto = "".join(str(p.get("text") or "") for p in contenuto
+                                if isinstance(p, dict) and p.get("type") != "thinking")
         uso = d.get("usage") or {}
         return RispostaTesto(
             testo=contenuto or "",

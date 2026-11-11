@@ -57,8 +57,8 @@ la voce di prova non parte. Nel container ci sono entrambi.
 | `LECTIO_INDIRIZZO_FUORI_CASA` | facoltativa: l'indirizzo https per usare Lectio fuori casa (per esempio `https://lectio.<rete>.ts.net`); il server lo passa alle app in `/api/salute` (con token) e all'abbinamento come `indirizzo_fuori_casa` |
 | `LECTIO_TAILSCALE_HOST` | nome del container di Tailscale (base `lectio-tailscale`): le richieste che arrivano da lui sono "da internet" |
 | `LECTIO_MODELLO_PIANO` | piano, scheda, scelta degli appunti, correttore (base `mistral-small-latest`) |
-| `LECTIO_MODELLO_SCRITTURA` | scrittura della lezione (base `mistral-medium-latest`) |
-| `LECTIO_MODELLO_OCR` | lettura di foto e PDF scansionati (base `mistral-ocr-latest`) |
+| `LECTIO_MODELLO_SCRITTURA` | scrittura di lezioni, schemi e riassunti (base `mistral-medium-latest`, Medium 3.5) |
+| `LECTIO_MODELLO_OCR` | lettura di foto e PDF scansionati (base `mistral-ocr-3`) |
 | `LECTIO_MODELLO_VOCE`, `LECTIO_VOCE_MISTRAL` | voce espressiva (base `voxtral-mini-tts-3-0`, `voice_482` = Lorenzo) |
 | `LECTIO_DATI`, `LECTIO_DB`, `LECTIO_APK_DIR` | cartelle (nel container `/data`, `/data/lectio.db`, `/apk`) |
 | `LECTIO_SOTTOFONDO` | `0` spegne il lavoro in sottofondo (solo per prove) |

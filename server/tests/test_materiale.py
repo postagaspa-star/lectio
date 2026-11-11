@@ -167,16 +167,16 @@ def test_pdf_scansionato_ocr_a_pagamento(client, auth, materia, servizi, server)
     sfondo_tutto(servizi)
     dopo = leggi(client, auth, m["id"])
     assert dopo["stato"] == "pronto" and "Augusto fu il primo imperatore" in dopo["testo"]
-    # 3 pagine × 4 $ / 1000 × 0,86 = 0,01032 €
+    # 3 pagine × 2 $ / 1000 × 0,86 = 0,00516 € (OCR 3, dalla 1.3.2)
     assert dopo["costo_eur"] == 0.01
     corpo = [d for p, d in server.chiamate if p == "/v1/ocr"][0]
-    assert corpo["model"] == "mistral-ocr-latest"
+    assert corpo["model"] == "mistral-ocr-3"
     assert corpo["document"]["type"] == "document_url"
     assert corpo["document"]["document_url"].startswith("data:application/pdf;base64,")
     with db.aperta(servizi.settings.db_path) as conn:
         spesa = conn.execute("SELECT * FROM spese WHERE materiale_id = ?", (m["id"],)).fetchone()
     assert spesa["quantita"] == 3 and spesa["unita"] == "pagine"
-    assert spesa["costo_eur"] == pytest.approx(3 * 0.004 * 0.86)
+    assert spesa["costo_eur"] == pytest.approx(3 * 0.002 * 0.86)
     # Una verifica letta fa partire l'aggiornamento della scheda.
     scheda = client.get(f"/api/materie/{materia['id']}/scheda", headers=auth).json()
     assert scheda["stato"] == "pronta"

@@ -125,6 +125,8 @@ class OggiViewModel(private val sorgente: Sorgente) : ViewModel() {
 /** Cosa si può fare da Oggi (le pagine le apre l'attività). */
 data class AzioniOggi(
     val impostazioni: () -> Unit = {},
+    /** Impostazioni aperte già sul tetto del mese (dalla riga della spesa). */
+    val cambiaTetto: () -> Unit = {},
     val apriMateria: (Long) -> Unit = {},
     val ascolta: (Long) -> Unit = {},
     val preparazione: (Long) -> Unit = {},
@@ -285,7 +287,7 @@ fun OggiScreen(vm: OggiViewModel, azioni: AzioniOggi, esempio: Boolean, senzaRet
             }
         }
 
-        SpesaDelMese(o.spesa.spesoEur, o.spesa.tettoEur, o.spesa.siAzzeraIl, o.spesa.avviso, s.voceGratis)
+        SpesaDelMese(o.spesa.spesoEur, o.spesa.tettoEur, o.spesa.siAzzeraIl, o.spesa.avviso, s.voceGratis, azioni.cambiaTetto)
     }
 }
 
@@ -347,14 +349,17 @@ fun riassuntoLezione(l: Lezione, dettaglio: Lezione?): String {
     return parti.joinToString(" · ")
 }
 
-/** "Questo mese 0,80 € di 2 €", barra sottile, "Si azzera il 1° novembre"; all'80% avviso tenue. */
+/** "Questo mese 0,80 € di 2 €", barra sottile, "Si azzera il 1° novembre"; all'80% avviso tenue.
+ *  Toccandola si apre il tetto nelle impostazioni (1.3.2: dove si vedono i soldi, lì si cambia il tetto). */
 @Composable
-fun SpesaDelMese(speso: Double, tetto: Double, siAzzera: String?, avviso: Boolean, voceGratis: Boolean = false) {
+fun SpesaDelMese(speso: Double, tetto: Double, siAzzera: String?, avviso: Boolean, voceGratis: Boolean = false,
+                 cambiaTetto: (() -> Unit)? = null) {
     val c = L.colori
     Column(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
+            .then(if (cambiaTetto != null) Modifier.clickable(role = Role.Button, onClickLabel = "Cambia il tetto") { cambiaTetto() } else Modifier)
             .background(if (avviso) c.avvisoTenue else c.fondo)
             .padding(horizontal = if (avviso) 14.dp else 4.dp, vertical = if (avviso) 12.dp else 0.dp)
             .semantics(mergeDescendants = true) { contentDescription = "Questo mese ${Formati.euro(speso)} di ${Formati.euro(tetto)}" },

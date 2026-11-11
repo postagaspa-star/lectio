@@ -86,7 +86,8 @@ class TestoFinto:
     a_pagamento = False
 
     def genera(self, *, compito: str, messaggi: list[dict], modello: str, json_atteso: bool = True,
-               max_token: int = 4000, temperatura: float = 0.4, dati: dict | None = None) -> RispostaTesto:
+               max_token: int = 4000, temperatura: float = 0.4, dati: dict | None = None,
+               ragionamento: str | None = None) -> RispostaTesto:
         dati = dati or {}
         fare = getattr(self, f"_{compito}", None)
         oggetto = fare(dati) if fare else {}

@@ -18,11 +18,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -163,6 +167,8 @@ fun ImpostazioniScreen(
     menoAnimazioni: Boolean,
     versione: String,
     senzaRete: Boolean,
+    alTetto: Boolean = false,
+    tettoMostrato: () -> Unit = {},
 ) {
     val s by vm.stato.collectAsStateWithLifecycle()
     LaunchedEffect(vm) { vm.carica() }
@@ -172,8 +178,18 @@ fun ImpostazioniScreen(
     var licenza by remember { mutableStateOf(false) }
     val imp = s.impostazioni
     val attivo = imp != null && !senzaRete
+    val scorre = rememberScrollState()
+    var tettoY by remember { mutableIntStateOf(-1) }
+    val margineSopra = with(LocalDensity.current) { 24.dp.roundToPx() }
+    LaunchedEffect(alTetto, tettoY) {
+        if (alTetto && tettoY >= 0) {
+            val dove = (tettoY - margineSopra).coerceAtLeast(0)
+            if (menoAnimazioni) scorre.scrollTo(dove) else scorre.animateScrollTo(dove)
+            tettoMostrato()
+        }
+    }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(start = MARGINE, end = MARGINE, top = 12.dp, bottom = 32.dp),
+        Modifier.fillMaxSize().verticalScroll(scorre).statusBarsPadding().padding(start = MARGINE, end = MARGINE, top = 12.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Testata(azioni.indietro)
@@ -222,7 +238,7 @@ fun ImpostazioniScreen(
             )
         }
 
-        Sezione("Tetto del mese") {
+        Sezione("Tetto del mese", Modifier.onGloballyPositioned { tettoY = it.positionInParent().y.toInt() }) {
             val tetto = imp?.tettoEur ?: 2.0
             Row(Modifier.fillMaxWidth().heightIn(min = 60.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -298,8 +314,8 @@ private fun cambiaTetto(vm: ImpostazioniViewModel, valore: Double) {
 }
 
 @Composable
-private fun Sezione(titolo: String, contenuto: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun Sezione(titolo: String, modifier: Modifier = Modifier, contenuto: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Etichetta(titolo)
         Scheda(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), spazio = 0.dp) { contenuto() }
     }

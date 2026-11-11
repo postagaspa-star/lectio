@@ -291,6 +291,8 @@ private fun App(
     var codice by rememberSaveable { mutableStateOf(Navigazione().codifica()) }
     val nav = remember(codice) { Navigazione.decodifica(codice) }
     var direzioneAvanti by remember { mutableStateOf(true) }
+    // 1.3.2: dalla riga della spesa le impostazioni si aprono già scese fino al tetto.
+    var alTetto by remember { mutableStateOf(false) }
     val vai: (Navigazione) -> Unit = { nuova ->
         direzioneAvanti = nuova.profondita >= nav.profondita
         codice = nuova.codifica()
@@ -468,6 +470,7 @@ private fun App(
                             chiediNuovaMateria = { nuovaMateria = true; vai(Navigazione(Scheda.MATERIE)) },
                             visita = visita, ricomincia = ricomincia, giroAggiunte = giroAggiunte,
                             riassuntiDa = riassuntiDa, segnaRiassunti = { riassuntiDa = it },
+                            alTetto = alTetto, segnaTetto = { alTetto = it },
                         )
                     }
                 }
@@ -568,6 +571,8 @@ private fun Pagine(
     giroAggiunte: Int = 0,
     riassuntiDa: Long? = null,
     segnaRiassunti: (Long?) -> Unit = {},
+    alTetto: Boolean = false,
+    segnaTetto: (Boolean) -> Unit = {},
 ) {
     val contesto = LocalContext.current
     val ambito = rememberCoroutineScope()
@@ -803,6 +808,7 @@ private fun Pagine(
                     },
                 ),
                 server = configurazione.server, fuoriCasa = configurazione.fuoriCasa, tema = tema, menoAnimazioni = meno, versione = BuildConfig.VERSION_NAME, senzaRete = offline,
+                alTetto = alTetto, tettoMostrato = { segnaTetto(false) },
             )
         }
         Pagina.Abbinamento -> {
@@ -816,6 +822,7 @@ private fun Pagine(
                     vm,
                     AzioniOggi(
                         impostazioni = { vai(nav.apri(Pagina.Impostazioni)) },
+                        cambiaTetto = { segnaTetto(true); vai(nav.apri(Pagina.Impostazioni)) },
                         apriMateria = { vai(nav.apri(Pagina.Materia(it))) },
                         ascolta = apriLettore,
                         preparazione = { vai(nav.apri(Pagina.Preparazione(it))) },

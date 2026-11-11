@@ -74,7 +74,7 @@ def test_1_database_che_non_scrive_niente_ocr_e_ci_si_ferma(client, auth, serviz
     assert server.conta("/v1/ocr") == 1
     righe = spese(servizi, f"materiale_id = {materiale_id}")
     assert len(righe) == 1 and righe[0]["stato"] == "fatta" and "(in corso)" not in righe[0]["cosa"]
-    assert righe[0]["costo_eur"] == pytest.approx(Prezzi.carica(servizi.settings.prezzi_path).costo_ocr("mistral-ocr-latest", 1))
+    assert righe[0]["costo_eur"] == pytest.approx(Prezzi.carica(servizi.settings.prezzi_path).costo_ocr("mistral-ocr-3", 1))
 
 
 @pagamento
@@ -92,7 +92,7 @@ def test_1_la_riga_di_prenotazione_esiste_durante_la_chiamata(client, auth, serv
     monta_servizi(client.app, server)
     carica_file(client, auth, m["id"], "foto.png", png())
     sfondo_tutto(client.app.state.servizi)
-    stima = Prezzi.carica(servizi.settings.prezzi_path).costo_ocr("mistral-ocr-latest", 1)
+    stima = Prezzi.carica(servizi.settings.prezzi_path).costo_ocr("mistral-ocr-3", 1)
     assert viste == [[("prenotata", pytest.approx(stima))]]
 
 
@@ -176,14 +176,14 @@ def test_2_tetto_ricontrollato_prima_di_ogni_tentativo(app):
 def test_3_due_lezioni_in_coda_non_passano_entrambe(client, auth, servizi):
     m = crea_materia(client, auth)
     aggiungi_testo(client, auth, m["id"])
-    spendi(servizi, 1.70)
+    spendi(servizi, 1.55)  # una lezione da 20 minuti ~0,31 €: ne passa una, la seconda no
     corpo = {"materia_id": m["id"], "argomento": "Augusto", "durata_min": 20, "voce": "mistral:voice_482"}
     assert client.post("/api/lezioni", json=corpo, headers=auth).status_code == 201
     r = client.post("/api/lezioni", json=corpo, headers=auth)
     assert r.status_code == 402
     assert "conto anche le lezioni già in preparazione" in r.json()["errore"]
     st = client.post("/api/lezioni/stima", json=corpo, headers=auth).json()
-    assert st["impegnato_eur"] > 0 and st["spesa_mese_eur"] > 1.70
+    assert st["impegnato_eur"] > 0 and st["spesa_mese_eur"] > 1.55
 
 
 @pagamento

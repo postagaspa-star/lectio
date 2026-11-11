@@ -344,7 +344,8 @@
       voce('lezioni', 'Lezioni', 'lezioni'),
       voce('gemini', 'Per Gemini', 'gemini'),
       h('div', { class: 'spazio' }),
-      spesa ? h('button', { type: 'button', class: 'spesa-menu' + (inAvviso ? ' avviso' : ''), onclick: () => A.vai('#impostazioni'), 'aria-label': 'Spesa del mese' },
+      // Dove si vedono i soldi si cambia il tetto: le Impostazioni si aprono già sul campo del tetto (1.3.2).
+      spesa ? h('button', { type: 'button', class: 'spesa-menu' + (inAvviso ? ' avviso' : ''), onclick: () => A.vaiAlTetto(), 'aria-label': 'Spesa del mese: cambia il tetto' },
         h('span', { class: 'riga-spesa' }, 'Questo mese ' + L.euro(spesa.speso_eur) + ' di ' + L.euroTondo(spesa.tetto_eur)),
         barra(L.percentuale(spesa.speso_eur, spesa.tetto_eur), 'media'),
         inAvviso ? h('span', { class: 'riga-spesa' }, L.siAzzera(spesa.si_azzera_il)) : null) : null,
@@ -352,6 +353,24 @@
         type: 'button', class: 'voce-menu basso' + (v === 'impostazioni' ? ' attiva' : ''), 'data-vista': 'impostazioni',
         onclick: () => A.vai('#impostazioni'),
       }, icona('impostazioni'), 'Impostazioni'));
+  };
+
+  /** Le Impostazioni aperte sul campo del tetto (anche se ci sei già). */
+  A.vaiAlTetto = function () {
+    S.vaiAlTetto = true;
+    if (S.rotta && S.rotta.vista === 'impostazioni') A.mostraTetto();
+    else A.vai('#impostazioni');
+  };
+
+  A.mostraTetto = function () {
+    const campo = document.querySelector('input[aria-label="Tetto del mese in euro"]');
+    if (!S.vaiAlTetto || !campo) return;
+    S.vaiAlTetto = false;
+    requestAnimationFrame(() => {
+      campo.scrollIntoView({ block: 'center', behavior: conMovimenti() ? 'smooth' : 'auto' });
+      campo.focus({ preventScroll: true });
+      campo.select();
+    });
   };
 
   /** Le pillole in alto: senza rete, esempio, prova, computer non riconosciuto. */
