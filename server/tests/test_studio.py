@@ -303,7 +303,8 @@ def test_schema_vero_con_foto_controllate(client, auth, servizi, server):
     dopo = client.delete(f"/api/schemi/{d['id']}/immagini/1", headers=auth).json()
     assert "immagine" not in [b["tipo"] for s in dopo["contenuto"]["sezioni"] for b in s["blocchi"]]
     usate = [x["model"] for p, x in server.chiamate if p == "/v1/chat/completions"]
-    assert "mistral-medium-latest" in usate and "mistral-small-latest" in usate
+    # 1.3.3: Medium fa solo il piano e la sua rilettura; parti, aggiunte e quadro li scrive Small 4.
+    assert usate.count("mistral-medium-latest") == 2 and "mistral-small-latest" in usate
 
 
 def test_ricerca_foto_troppo_lunga_si_accorcia():

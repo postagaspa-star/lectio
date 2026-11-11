@@ -55,7 +55,8 @@ def _decidi(conn, s: Servizi, costo: float, quale: str) -> dict:
 def _stima_schema(conn, s: Servizi, caratteri: int, livello: str, indicazioni: str | None) -> dict:
     st = s.settings
     immagini = schema_ripasso.quante_immagini(livello, indicazioni)
-    decisione = _decidi(conn, s, s.cassa.stima_schema(caratteri, livello, immagini, st.modello_piano, st.modello_scrittura), "Questo schema")
+    decisione = _decidi(conn, s, s.cassa.stima_schema(caratteri, livello, immagini, st.modello_piano, st.modello_scrittura,
+                                                      st.modello_parti), "Questo schema")
     _, massimo = schema_ripasso.numero_sezioni(caratteri, livello)
     decisione["minuti_preparazione"] = int(round(2 + massimo * 0.4 + immagini * 0.3))
     decisione["immagini"] = immagini

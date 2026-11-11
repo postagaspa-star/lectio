@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.3.2"
+VERSIONE = "1.3.3"
 
 CARTELLA_APP = Path(__file__).resolve().parent
 VERSIONI_PATH_DEFAULT = str(CARTELLA_APP / "versioni.json")
@@ -18,6 +18,10 @@ MISTRAL_URL = "https://api.mistral.ai/v1"
 
 MODELLO_PIANO_DEFAULT = "mistral-small-latest"
 MODELLO_SCRITTURA_DEFAULT = "mistral-medium-latest"
+# Schemi (1.3.3): il piano lo fa il modello di scrittura, le parti le scrive questo. Provato l'11/11/2026
+# sugli stessi 4 documenti: tutto Medium ~0,09 €, tutto Small 4 0,02 € ma parti ripetute e una da 88 parole,
+# piano Medium + parti Small 4 0,025 € con parti ordinate e fedeli alle fonti.
+MODELLO_PARTI_DEFAULT = "mistral-small-latest"
 MODELLO_OCR_DEFAULT = "mistral-ocr-3"
 MODELLO_VOCE_DEFAULT = "voxtral-mini-tts-3-0"
 VOCE_MISTRAL_DEFAULT = "voice_482"  # Lorenzo, l'unica voce italiana preimpostata
@@ -64,6 +68,8 @@ class Settings:
     indirizzo_fuori_casa: str | None = None
     # Il servizio delle voci gratis sul NAS (contratto 16.5), per esempio http://lectio-voci:8000.
     voci_url: str | None = None
+    # Chi scrive le parti degli schemi (il piano resta a modello_scrittura).
+    modello_parti: str = MODELLO_PARTI_DEFAULT
 
     @property
     def modalita_prova(self) -> bool:
@@ -104,6 +110,7 @@ def carica_settings() -> Settings:
         tailscale_host=_vuoto_a_none(e("LECTIO_TAILSCALE_HOST")) or "lectio-tailscale",
         indirizzo_fuori_casa=(_vuoto_a_none(e("LECTIO_INDIRIZZO_FUORI_CASA")) or "").rstrip("/") or None,
         voci_url=(_vuoto_a_none(e("LECTIO_VOCI_URL")) or "").rstrip("/") or None,
+        modello_parti=_vuoto_a_none(e("LECTIO_MODELLO_PARTI")) or MODELLO_PARTI_DEFAULT,
     )
 
 
@@ -116,7 +123,8 @@ def riassunto_config(s: Settings) -> str:
     return (
         f"db={s.db_path} dati={s.dati_dir} mistral={stato(s.mistral_key)} azure={stato(s.azure_key)}"
         f" regione={s.azure_regione or 'assente'} prova={'si' if s.modalita_prova else 'no'}"
-        f" piano={s.modello_piano} scrittura={s.modello_scrittura} ocr={s.modello_ocr} voce={s.modello_voce}"
+        f" piano={s.modello_piano} scrittura={s.modello_scrittura} parti={s.modello_parti} ocr={s.modello_ocr}"
+        f" voce={s.modello_voce}"
         f" sottofondo={'acceso' if s.sottofondo else 'spento'} voci_nas={s.voci_url or 'assenti'}"
     )
 

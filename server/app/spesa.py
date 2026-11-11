@@ -453,8 +453,10 @@ class Cassa:
         }
 
     def stima_schema(self, caratteri: int, livello: str, immagini: int, modello_piano: str,
-                     modello_scrittura: str) -> float:
-        """Piano, sezioni con il loro controllo, copertura, tabella finale, foto guardate una per una."""
+                     modello_scrittura: str, modello_parti: str | None = None) -> float:
+        """Piano, sezioni con il loro controllo, copertura, tabella finale, foto guardate una per una.
+        Il piano lo fa `modello_scrittura`, parti e tabella `modello_parti` (1.3.3)."""
+        modello_parti = modello_parti or modello_scrittura
         t = misure.CARATTERI_PER_TOKEN
         divisore = {"essenziale": 9000, "completo": 5000, "approfondito": 3500}[livello]
         sezioni = min(30, max(3, round(min(caratteri, 150_000) / divisore)))
@@ -464,11 +466,11 @@ class Cassa:
         mappa = gruppi * self.prezzi.costo_testo(modello_piano, int((min(caratteri, CARATTERI_MAPPA_SCHEMA) + 3000) / t), 3500)
         # Il piano e la sua rilettura, che vede di nuovo tutti i punti.
         piano = 2 * self.prezzi.costo_testo(modello_scrittura, int((punti * 130 + 6000) / t), 800 + 120 * sezioni)
-        per_sezione = self.prezzi.costo_testo(modello_scrittura, int((CARATTERI_SEZIONE + 7000) / t), int(parole * 2.4) + 500)
+        per_sezione = self.prezzi.costo_testo(modello_parti, int((CARATTERI_SEZIONE + 7000) / t), int(parole * 2.4) + 500)
         rilettura = self.prezzi.costo_testo(modello_piano, int((CARATTERI_SEZIONE + 5000) / t), 400)
         copertura = self.prezzi.costo_testo(modello_piano, int(parole * sezioni * 8 / t) + 4000, 800)
         aggiunte = max(1, sezioni // 4) * (per_sezione + rilettura)  # le parti a cui il controllo aggiunge qualcosa
-        tabella = self.prezzi.costo_testo(modello_scrittura, int(parole * sezioni * 8 / t) + 1500, 1200)
+        tabella = self.prezzi.costo_testo(modello_parti, int(parole * sezioni * 8 / t) + 1500, 1200)
         foto = (immagini * 2 + 3) * self.prezzi.costo_testo(modello_piano, 1800, 80)
         return mappa + piano + sezioni * (per_sezione + rilettura) * 1.5 + copertura + aggiunte + tabella + foto
 

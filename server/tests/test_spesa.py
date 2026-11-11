@@ -323,3 +323,13 @@ def test_prezzi_dal_file(app):
     assert p.euro_al_minuto_voce("voxtral-mini-tts-3-0") == 0.0102
     assert math.isclose(p.azure_gratis, 500_000)
 
+
+
+def test_stima_schema_con_le_parti_a_small(servizi):
+    """1.3.3: piano a Medium, parti a Small 4. Su ~320.000 caratteri (lo schema di storia) la stima
+    scende sotto la metà di quella tutta a Medium."""
+    c = servizi.cassa
+    tutto_medium = c.stima_schema(320_000, "completo", 15, "mistral-small-latest", "mistral-medium-latest")
+    misto = c.stima_schema(320_000, "completo", 15, "mistral-small-latest", "mistral-medium-latest", "mistral-small-latest")
+    assert misto < tutto_medium / 2
+    assert c.stima_schema(320_000, "completo", 15, "mistral-small-latest", "mistral-medium-latest", None) == tutto_medium

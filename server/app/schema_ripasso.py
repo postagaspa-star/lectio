@@ -600,7 +600,7 @@ class PreparazioneSchema:
         brani = self._cerca(cerca, lettura["brani"], CARATTERI_SEZIONE, sezione["fonti"])
         parole = parole_sezione(self.riga["livello"], len(sezione["concetti"]))
         messaggi = prompt_studio.messaggi_schema_sezione(lettura, piano, k, sezione, brani, parole, piano["forma"])
-        modello = self.ctx.settings.modello_scrittura
+        modello = self.ctx.settings.modello_parti
         max_token = token_per(parole)
         cosa = f"Schema · parte {k}"
         dati = {"lettura": lettura, "sezione": sezione, "brani": brani, "forma": piano["forma"]}
@@ -693,7 +693,7 @@ class PreparazioneSchema:
         parole = parole_sezione(self.riga["livello"], len(concetti))
         messaggi = prompt_studio.messaggi_schema_aggiunta(lettura, piano, k, sezione, concetti,
                                                           testo_di([{"titolo": sezione["titolo"], **scritta}]), brani, parole)
-        modello = self.ctx.settings.modello_scrittura
+        modello = self.ctx.settings.modello_parti
         max_token = token_per(parole)
         cosa = f"Schema · aggiunta alla parte {k}"
         dati = {"lettura": lettura, "sezione": {**sezione, "concetti": concetti}, "brani": brani, "forma": piano["forma"]}
@@ -720,7 +720,7 @@ class PreparazioneSchema:
 
     def _tabella(self, lettura: dict, sezioni: list[dict]) -> dict | None:
         testo = testo_di(sezioni)[:40_000]
-        modello = self.ctx.settings.modello_scrittura
+        modello = self.ctx.settings.modello_parti
         def valida(o: dict) -> list[str]:
             return [] if isinstance(o.get("righe"), list) and o["righe"] else ['servono le "righe"']
         messaggi = prompt_studio.messaggi_schema_tabella(lettura, testo)
