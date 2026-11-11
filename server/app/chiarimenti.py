@@ -57,7 +57,9 @@ def chiedi(ctx, conn: sqlite3.Connection, materia: sqlite3.Row, *, passaggio: st
         brani = memoria.scegli(ctx, f"{passaggio} {domanda}".strip(), tutti, CARATTERI_BLOCCO_MASSIMI, materia_id=materia["id"])
         nome = {"nome": materia["nome"], "prof": materia["prof"]}
         messaggi = prompt_studio.messaggi_chiarimento(nome, passaggio, domanda, brani)
-        modello = ctx.settings.modello_scrittura
+        # 1.3.4: il modello piccolo. Provato l'11/11/2026 su 3 domande vere: risposte uguali a quelle di Medium
+        # (anche il "nei documenti non c'è" onesto), 0,0007 € a domanda invece di 0,0074 €.
+        modello = ctx.settings.modello_piano
         dati = {"brani": brani}
         o = ai.chiedi_json(cassa=ctx.cassa, fornitore=ctx.testo, compito="chiarimento", messaggi=messaggi, modello=modello, valida=_valida,
                            max_token=700, cosa="Non ho capito", dati=dati, materia_id=materia["id"], costi=costi)

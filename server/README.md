@@ -56,7 +56,7 @@ la voce di prova non parte. Nel container ci sono entrambi.
 | `TS_AUTHKEY` | Tailscale Funnel (indirizzo https pubblico): sta in `tailscale/.env`, non qui |
 | `LECTIO_INDIRIZZO_FUORI_CASA` | facoltativa: l'indirizzo https per usare Lectio fuori casa (per esempio `https://lectio.<rete>.ts.net`); il server lo passa alle app in `/api/salute` (con token) e all'abbinamento come `indirizzo_fuori_casa` |
 | `LECTIO_TAILSCALE_HOST` | nome del container di Tailscale (base `lectio-tailscale`): le richieste che arrivano da lui sono "da internet" |
-| `LECTIO_MODELLO_PIANO` | piano, scheda, scelta degli appunti, correttore (base `mistral-small-latest`) |
+| `LECTIO_MODELLO_PIANO` | piano, scheda, scelta degli appunti, correttore, "Non ho capito" dalla 1.3.4 (base `mistral-small-latest`) |
 | `LECTIO_MODELLO_SCRITTURA` | scrittura di lezioni, riassunti e verifiche simulate, piano degli schemi (base `mistral-medium-latest`, Medium 3.5) |
 | `LECTIO_MODELLO_PARTI` | parti, aggiunte e quadro finale degli schemi (base `mistral-small-latest`, Small 4; dalla 1.3.3) |
 | `LECTIO_MODELLO_OCR` | lettura di foto e PDF scansionati (base `mistral-ocr-3`) |

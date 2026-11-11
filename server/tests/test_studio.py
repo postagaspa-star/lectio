@@ -607,7 +607,10 @@ def test_non_ho_capito(client, auth, servizi, server):
     assert r.status_code == 200, r.text
     o = r.json()
     assert o["trovato"] is True and o["risposta"].startswith("Vuol dire") and o["fonti"] and o["costo_eur"] > 0
-    server.chiarimento = {"trovato": False, "risposta": None, "fonti": [], "cosa_manca": "la data della morte"}
+    # 1.3.4: "Non ho capito" lo fa il modello piccolo (provato: risposte uguali a Medium, un decimo del prezzo).
+    usate = {x["model"] for p, x in server.chiamate if p == "/v1/chat/completions"}
+    assert usate == {"mistral-small-latest"}
+    server.chiarimento ={"trovato": False, "risposta": None, "fonti": [], "cosa_manca": "la data della morte"}
     o = client.post("/api/chiarimenti", json={"materia_id": m["id"], "domanda": "quando morì?"}, headers=auth).json()
     assert o["trovato"] is False and "Nei tuoi documenti questo non c'è. Manca: la data della morte." in o["risposta"]
     assert len(client.get("/api/chiarimenti", params={"materia_id": m["id"]}, headers=auth).json()) == 2
