@@ -42,6 +42,27 @@ def valida(o: dict) -> list[str]:
     return []
 
 
+def sezioni_usate(contenuto: dict) -> int:
+    """Quante sezioni dello schema arrivano al modello (il testo si ferma a CARATTERI_SCHEMA)."""
+    n, totale = 0, 0
+    for s in contenuto.get("sezioni") or []:
+        lunghezza = len(schema_ripasso.testo_di([s]))
+        if not lunghezza:
+            continue
+        if totale >= CARATTERI_SCHEMA:
+            break
+        n, totale = n + 1, totale + lunghezza + 2
+    return n
+
+
+def parti_che_mancano(o: dict, sezioni: int) -> str | None:
+    """1.3.5: una parte per sezione (una in meno va bene: due sezioni vicine si possono unire)."""
+    if sezioni > 2 and len(o.get("parti") or []) < sezioni - max(1, sezioni // 10):
+        return (f"hai scritto {len(o['parti'])} parti ma lo schema ha {sezioni} sezioni: serve una parte per ogni "
+                f"sezione, nello stesso ordine, senza saltarne")
+    return None
+
+
 def normalizza(o: dict, forma: str) -> list[dict]:
     """Ogni parte nella forma chiesta, anche se il modello ha mischiato paragrafi e punti."""
     uscita = []
@@ -94,7 +115,8 @@ class PreparazioneRiassunto:
         parole = parole_volute(testo, forma)
         materia = {"nome": self.riga["materia_nome"], "prof": self.riga["materia_prof"]}
         titolo_schema = self.riga["schema_titolo"] or self.riga["argomento"]
-        messaggi = prompt_studio.messaggi_riassunto(materia, titolo_schema, testo, forma, parole)
+        sezioni = sezioni_usate(contenuto)
+        messaggi = prompt_studio.messaggi_riassunto(materia, titolo_schema, testo, forma, parole, sezioni)
         modello = self.ctx.settings.modello_scrittura
         # Largo: una risposta tagliata a metà non si può usare (la 1.3.0 si fermava qui con gli schemi lunghi), e il
         # modello scrive spesso più parole di quelle chieste. Lo spazio in più non costa: si pagano i token scritti.
@@ -105,6 +127,19 @@ class PreparazioneRiassunto:
         grezzo = ai.chiedi_json(cassa=self.ctx.cassa, fornitore=self.ctx.testo, compito="riassunto", messaggi=messaggi, modello=modello, valida=valida,
                                 max_token=max_token, cosa=cosa, dati=dati, materia_id=self.riga["materia_id"], prima_di_ogni_chiamata=self.controlla,
                                 riferimento=riferimento)
+        mancano = parti_che_mancano(grezzo, sezioni)
+        if mancano:
+            # Una richiesta in più, ma il riassunto che c'è non si butta: se la seconda non è meglio, resta il primo.
+            try:
+                nuovo = ai.chiedi_json(cassa=self.ctx.cassa, fornitore=self.ctx.testo, compito="riassunto", modello=modello, valida=valida,
+                                       messaggi=messaggi + [{"role": "assistant", "content": json.dumps(grezzo, ensure_ascii=False)},
+                                                            {"role": "user", "content": prompt_studio.correzione_riassunto(mancano)}],
+                                       max_token=max_token, cosa=f"{cosa} (parti mancanti)", dati=dati, materia_id=self.riga["materia_id"],
+                                       prima_di_ogni_chiamata=self.controlla, riferimento=riferimento)
+            except ai.RispostaNonUsabile:
+                nuovo = None
+            if nuovo and len(nuovo["parti"]) > len(grezzo["parti"]):
+                grezzo = nuovo
         riveduto = controllo.rivedi(self.ctx, grezzo, [], compito="riassunto", messaggi=messaggi, modello=modello, valida=valida, max_token=max_token,
                                     cosa=cosa, altro=testo, materia_id=self.riga["materia_id"], prima=self.controlla, dati=dati, parlato=False,
                                     riferimento=riferimento)

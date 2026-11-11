@@ -141,6 +141,7 @@ class ServerFinto:
         self.piano_senza_foto = False
         self.chiarimento = None
         self.simulata = None
+        self.riassunti_corti = 0  # quanti riassunti dare con una parte sola, anche se lo schema ha più sezioni
         self.vettori_rotti = False
 
     def conta(self, pezzo: str) -> int:
@@ -279,7 +280,13 @@ class ServerFinto:
             else:
                 parte["paragrafi"] = ["Augusto tenne il potere vero."]
                 parte["punti"] = ["Il senato restò di facciata."]
-            oggetto = {"titolo": "Augusto in breve", "parti": [parte]}
+            # Una parte per sezione, come chiede il prompt (1.3.5); un riassunto "corto" ne salta.
+            sezioni = re.search(r"Lo schema ha (\d+) sezioni", primo)
+            quante = int(sezioni.group(1)) if sezioni else 1
+            if self.riassunti_corti:
+                self.riassunti_corti -= 1
+                quante = 1
+            oggetto = {"titolo": "Augusto in breve", "parti": [dict(parte, titolo=f"{parte['titolo']} {i}") for i in range(1, quante + 1)]}
         elif "Lo studente non ha capito il passaggio" in primo:
             oggetto = self.chiarimento or {"trovato": True, "risposta": "Vuol dire che comandava Augusto.", "fonti": ids[:1], "cosa_manca": None}
         elif "Prepara una verifica di prova da" in primo:

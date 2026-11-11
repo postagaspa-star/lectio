@@ -7,6 +7,7 @@ dai documenti si toglie."""
 
 import json
 import logging
+import re
 
 from . import ai, prompt_studio, stile
 
@@ -69,14 +70,30 @@ def togli_vuoti(o) -> None:
         o[:] = tenuti
 
 
+# Frasi che si appoggiano a quella prima ("La sua regola…", "Era diretta contro Tunisi"): senza quella, restano monche.
+_APPOGGIATA = re.compile(r"^(?:la sua|il suo|le sue|i suoi|questo|questa|questi|queste|quest[’']|lui|lei|essi|esse|egli|"
+                         r"era|erano|fu|furono|entramb[ie]|anche lui|anche lei|per questo|da qui|in questo modo)\b", re.I)
+
+
+def _paragrafo(contenitore, chiave) -> bool:
+    """Un paragrafo o una voce di elenco, che si può togliere intero (non una risposta o una domanda obbligatoria)."""
+    return isinstance(contenitore, list) or (isinstance(contenitore, dict) and chiave == "testo" and "tipo" in contenitore)
+
+
 def togli_frasi(fuori: list[tuple]) -> None:
-    """Toglie le frasi indicate, una voce alla volta."""
+    """Toglie le frasi indicate, una voce alla volta. Un paragrafo che perde la frase da cui partiva, metà
+    delle frasi o quella a cui si appoggia la frase dopo si toglie intero: meglio un paragrafo in meno che
+    uno monco (1.3.5: Small 4 lasciava "La sua regola si basa su due principi" senza dire di chi)."""
     per_voce: dict[tuple[int, object], tuple] = {}
     for contenitore, chiave, i, _ in fuori:
         per_voce.setdefault((id(contenitore), chiave), (contenitore, chiave, set()))[2].add(i)
     for contenitore, chiave, indici in per_voce.values():
         frasi = stile.dividi_frasi(contenitore[chiave])
-        contenitore[chiave] = " ".join(f for i, f in enumerate(frasi) if i not in indici)
+        resta = [f for i, f in enumerate(frasi) if i not in indici]
+        appoggiate = any(i + 1 < len(frasi) and i + 1 not in indici and _APPOGGIATA.match(frasi[i + 1]) for i in indici)
+        if _paragrafo(contenitore, chiave) and (0 in indici or len(resta) * 2 < len(frasi) or appoggiate):
+            resta = []
+        contenitore[chiave] = " ".join(resta)
 
 
 def _fonti_in_testo(brani: list[dict], altro: str) -> str:

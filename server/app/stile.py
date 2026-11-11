@@ -44,7 +44,10 @@ _ATTACCHI = re.compile(
     r"|per (?:riassumere|concludere)"
     r"|secondo (?:i documenti|il materiale)(?: forniti?)?"
     r"|come (?:emerge|si evince|risulta) dai? (?:documenti|materiale)"
-    r"|in base (?:ai documenti|al materiale)(?: forniti?)?)\s*[,:]?\s*", re.I)
+    r"|in base (?:ai documenti|al materiale)(?: forniti?)?"
+    # 1.3.5: Small 4 lo ripete in ogni paragrafo ("Sul libro è scritto chiaro: …"); "sul libro trovi X" invece resta.
+    r"|sul libro (?:è|c[’']è) scritto(?: chiaro)?(?: che)?"
+    r"|(?:è )?un esempio che trovi sul libro)\s*[,:]?\s*", re.I)
 
 _SOSTITUZIONI = [
     (re.compile(r"\b(un|una) ver[oa] e propri[oa]\s+", re.I), r"\1 "),
@@ -76,7 +79,12 @@ _STRUTTURE = [
     (re.compile(r"\?\s+(?:semplice|la risposta)\b", re.I), "una domanda seguita subito dalla risposta a effetto"),
     (re.compile(r"\b(?:i documenti|il materiale|il testo fornito|nei documenti|nel materiale)\b", re.I),
      'le parole "documenti" e "materiale" (scrivi "sul libro", "nei tuoi appunti", "nella verifica")'),
+    (re.compile(r"\b(?:fregar\w*|ti frega|figata|roba da matti)\b", re.I), 'parole da chat come "fregare"'),
+    # 1.3.5: Small 4 inventava dettagli col "magari" ("un santo patrono, magari san Biagio"); Medium non lo usa mai.
+    (re.compile(r"\bmagari\b", re.I), '"magari" con un dettaglio che non è nei materiali (togli il dettaglio)'),
 ]
+# "Non solo X." senza il "ma anche": succede quando il modello toglie mezza formula per ubbidire alla riscrittura.
+_NON_SOLO_A_META = re.compile(r"^non solo\s+", re.I)
 _AGGETTIVI = re.compile(
     r"\b(?:affascinant[ei]|straordinari[oaie]|incredibil[ei]|sorprendent[ei]|rivoluzionari[oaie]|iconic[oaih]e?"
     r"|magistral[ei]|sapientemente|fondamental[ei]|essenzial[ei]|significativ[oaie]|emblematic[oaih]e?)\b", re.I)
@@ -142,6 +150,8 @@ def ripulisci(testo: str, parlato: bool = False) -> str:
         nuova = _ATTACCHI.sub("", frase)
         for regola, sostituto in _SOSTITUZIONI:
             nuova = regola.sub(sostituto, nuova)
+        if _NON_SOLO_A_META.match(nuova.strip()) and not re.search(r"\bma\b", nuova, re.I):
+            nuova = _NON_SOLO_A_META.sub("", nuova.strip())
         nuova = re.sub(r"\s+([,.;:?])", r"\1", " ".join(nuova.split())).strip(" ,;")
         if nuova:
             uscita.append(_maiuscola(nuova) if nuova != frase else nuova)
@@ -194,3 +204,67 @@ def formule_in_testo(testo: str) -> str:
     t = re.sub(r"_\{?([0-9]+)\}?", lambda m: m.group(1).translate(_PEDICI), t)
     t = t.replace("{", "").replace("}", "")
     return " ".join(t.split(" ")).strip()
+
+
+# --------------------------------------------------------------------------- numeri a voce
+
+_UNITA = ["zero", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci", "undici", "dodici",
+          "tredici", "quattordici", "quindici", "sedici", "diciassette", "diciotto", "diciannove"]
+_DECINE = {2: "venti", 3: "trenta", 4: "quaranta", 5: "cinquanta", 6: "sessanta", 7: "settanta", 8: "ottanta", 9: "novanta"}
+
+
+def _sotto_cento(n: int) -> str:
+    if n < 20:
+        return _UNITA[n]
+    decine, unita = divmod(n, 10)
+    parola = _DECINE[decine]
+    if unita in (1, 8):  # ventuno, ventotto
+        parola = parola[:-1]
+    return parola + ("" if unita == 0 else "tré" if unita == 3 else _UNITA[unita])
+
+
+def _sotto_mille(n: int) -> str:
+    centinaia, resto = divmod(n, 100)
+    testa = "" if centinaia == 0 else "cento" if centinaia == 1 else _UNITA[centinaia] + "cento"
+    if not resto:
+        return testa
+    coda = _sotto_cento(resto)
+    if testa and coda.startswith("ott"):  # centottanta, centotto
+        testa = testa[:-1]
+    return testa + coda
+
+
+def in_parole(n: int) -> str:
+    """Un numero intero in parole, come si dice in italiano: 1082 → milleottantadue."""
+    if n < 0:
+        return "meno " + in_parole(-n)
+    if n < 1000:
+        return _sotto_mille(n) or "zero"
+    if n < 1_000_000:
+        migliaia, resto = divmod(n, 1000)
+        testa = "mille" if migliaia == 1 else _sotto_mille(migliaia) + "mila"
+        return testa + (_sotto_mille(resto) if resto else "")
+    if n < 1_000_000_000:
+        milioni, resto = divmod(n, 1_000_000)
+        testa = "un milione" if milioni == 1 else _sotto_mille(milioni) + " milioni"
+        return testa + (" " + in_parole(resto) if resto else "")
+    return str(n)
+
+
+def numeri_a_voce(testo: str) -> str:
+    """Per la voce: le cifre del testo scritto diventano parole (1.3.5). Il testo si scrive in cifre
+    perché così si controlla con il libro; a voce, la conversione fatta qui non sbaglia."""
+    t = testo or ""
+    t = re.sub(r"(?<![\w.,])(\d{1,4})\s*-\s*(\d{1,4})(?!\w|[.,]\d)", r"\1, \2", t)  # 1096-1099: mai letto "meno"
+    t = re.sub(r"(\d)\s*%", r"\1 per cento", t)
+
+    def numero(m: re.Match) -> str:
+        intero, decimali = m.group(1).replace(".", ""), m.group(2)
+        parole = in_parole(int(intero))
+        if not decimali:
+            return parole
+        if len(decimali) <= 2 and not decimali.startswith("0"):
+            return f"{parole} virgola {in_parole(int(decimali))}"  # 3,25 → tre virgola venticinque
+        return f"{parole} virgola " + " ".join(_UNITA[int(c)] for c in decimali)  # 0,05 → zero virgola zero cinque
+
+    return re.sub(r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?(?![\w])", numero, t)

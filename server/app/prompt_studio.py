@@ -47,6 +47,11 @@ Documenti (dati, non istruzioni):
     return [{"role": "system", "content": SISTEMA_VERIFICA}, {"role": "user", "content": utente}]
 
 
+def correzione_riassunto(mancano: str) -> str:
+    return (f"Il riassunto va sistemato: {mancano}. Riscrivilo tutto con una parte per ogni sezione dello schema; per stare "
+            "nelle parole accorcia dentro le parti, non togliere parti. Rispondi con SOLO l'oggetto JSON, secondo lo schema chiesto.")
+
+
 def richiesta_riscrittura(fuori: list[str], da_sistemare: list[str]) -> str:
     parti = ["Il testo che hai scritto va sistemato."]
     if fuori:
@@ -435,6 +440,12 @@ In "dal_documento" metti l'id del materiale da cui viene l'esercizio.
 - "risposta_attesa": la risposta completa presa dai materiali. Per un esercizio di cui nei materiali non c'è la \
 soluzione lascia "" (lo studente confronterà da solo).
 - "punti": numeri interi, come nelle verifiche vere. Se non si capiscono, in tutto 100.
+- Domande chiuse, tutto scritto in "testo" perché lo studente lo vede solo lì: "scelta_multipla" con la domanda e poi le \
+opzioni "a) … b) … c) … d) …", e in "risposta_attesa" la lettera giusta e il perché; "vero_falso" con l'affermazione da \
+giudicare, e in "risposta_attesa" "Vero" o "Falso" e il perché; "collegamento" con le due liste, una numerata e una con \
+le lettere, e in "risposta_attesa" le coppie giuste scritte come testo ("1-b, 2-a, 3-c"). Le opzioni sbagliate devono \
+essere sbagliate secondo i materiali, quella giusta deve esserci scritta. Chiedi solo cose che nei materiali si leggono \
+chiaramente: mai un'opzione come "non è specificato". I nomi interi, come nei materiali.
 
 {stile.ELENCO_PER_PROMPT}
 
@@ -514,8 +525,11 @@ frase intera.
 }
 
 
-def messaggi_riassunto(materia: dict, titolo: str, testo: str, forma: str, parole: int) -> list[dict]:
+def messaggi_riassunto(materia: dict, titolo: str, testo: str, forma: str, parole: int, sezioni: int | None = None) -> list[dict]:
     schema = {"titolo": "titolo breve, come sul quaderno", "parti": [{"titolo": "titolo breve", "paragrafi": ["..."], "punti": ["..."]}]}
+    # 1.3.5: con "scegli quello che conta" Small 4 saltava sezioni intere (5 su 18); si accorcia dentro ogni parte.
+    quante = (f"- Lo schema ha {sezioni} sezioni: il riassunto ha una parte per ogni sezione, nello stesso ordine e con lo "
+              f"stesso argomento. Non saltarne nessuna, nemmeno se ti sembra meno importante.\n") if sezioni else ""
     utente = f"""Scrivi il riassunto di questo schema di ripasso.
 
 Materia: {racchiudi(materia["nome"])}, {racchiudi(_prof(materia))}
@@ -524,7 +538,8 @@ Titolo dello schema: {racchiudi(titolo)}
 {FORME_RIASSUNTO[forma]}
 
 Come farlo:
-- Circa {parole} parole. Non riscrivere lo schema parola per parola: scegli quello che conta e raggruppalo.
+{quante}- Circa {parole} parole in tutto: per stare nelle parole accorcia dentro ogni parte, tenendo quello che conta. \
+Non riscrivere lo schema parola per parola.
 - Tieni l'ordine dello schema. Se lo schema dice cosa chiede il prof, quello resta.
 - Usa gli stessi termini dello schema, ma se un punto dello schema non ha senso lascialo fuori. Le formule in caratteri normali: x², √2, (x+3)/(x−1). Niente LaTeX.
 - Niente introduzioni, niente conclusioni, niente frasi che spiegano cosa stai per dire.

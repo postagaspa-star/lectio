@@ -51,6 +51,35 @@ def valida(o: dict) -> list[str]:
     return []
 
 
+def domande_rotte(o: dict) -> list[str]:
+    """Le domande chiuse da sistemare. Non stanno in `valida`: due risposte con una crocetta rotta
+    farebbero fallire tutta la verifica; così si chiede una correzione e quello che resta rotto si toglie."""
+    return [f"la domanda {i} {problema}" for i, d in enumerate(o.get("domande") or [], start=1)
+            if isinstance(d, dict) and (problema := domanda_chiusa_rotta(d))][:6]
+
+
+def domanda_chiusa_rotta(d: dict) -> str | None:
+    """1.3.5: Small 4 scriveva crocette senza le opzioni, vero/falso senza dire se è vero, collegamenti senza
+    le due liste e crocette con la risposta "non è specificato" (quando il materiale si leggeva male)."""
+    tipo = str(d.get("tipo") or "").strip().lower().replace(" ", "_")
+    testo = str(d.get("testo") or "")
+    attesa = d.get("risposta_attesa")
+    if attesa not in (None, "") and not isinstance(attesa, str):
+        return 'ha "risposta_attesa" che non è un testo'
+    if tipo == "scelta_multipla" and not (re.search(r"(?:^|\s)a\)", testo) and re.search(r"(?:^|\s)b\)", testo)):
+        return 'è a scelta multipla ma nel "testo" mancano le opzioni "a) … b) … c) …"'
+    if tipo == "vero_falso" and not re.match(r"\s*(?:vero|falso)\b", str(attesa or ""), re.I):
+        return 'è vero o falso ma "risposta_attesa" non comincia con "Vero" o "Falso"'
+    if tipo == "collegamento" and not (re.search(r"(?:^|\s)1[.)]", testo) and re.search(r"(?:^|\s)a\)", testo)):
+        return 'è un collegamento ma nel "testo" mancano le due liste "1. … 2. …" e "a) … b) …"'
+    if tipo in ("scelta_multipla", "vero_falso") and _NON_SPECIFICATO.search(f"{testo} {attesa or ''}"):
+        return 'ha un\'opzione "non è specificato": chiedi una cosa scritta chiaramente nei materiali'
+    return None
+
+
+_NON_SPECIFICATO = re.compile(r"\bnon (?:è |viene )?(?:specificat|indicat)[oa]\b|\bnon è detto nel\b", re.I)
+
+
 def normalizza(o: dict, brani: list[dict]) -> list[dict]:
     """Le domande utilizzabili: un esercizio che non è scritto nei documenti non passa."""
     per_id = {b["id"]: b for b in brani}
@@ -62,6 +91,9 @@ def normalizza(o: dict, brani: list[dict]) -> list[dict]:
         tipo = str(d.get("tipo") or "").strip().lower().replace(" ", "_")
         tipo = tipo if tipo in prompt.TIPI_DOMANDA else "aperta"
         if not testo:
+            continue
+        if domanda_chiusa_rotta(d):
+            log.info("simulata: domanda chiusa scartata perché senza opzioni o senza soluzione")
             continue
         if e_esercizio(tipo, testo) and not schede._trovata(testo, tutto, parole):
             log.info("simulata: esercizio scartato perché non è nei documenti")
@@ -119,6 +151,17 @@ class PreparazioneSimulata:
         if grezzo is None:
             grezzo = ai.chiedi_json(compito="simulata", messaggi=messaggi, modello=modello, valida=valida, max_token=max_token,
                                     cosa="Verifica simulata", dati=dati, **comuni)
+            rotte = domande_rotte(grezzo)
+            if rotte:
+                try:
+                    nuovo = ai.chiedi_json(compito="simulata", modello=modello, valida=valida, max_token=max_token, dati=dati,
+                                           messaggi=messaggi + [{"role": "assistant", "content": json.dumps(grezzo, ensure_ascii=False)},
+                                                                {"role": "user", "content": prompt.correzione(rotte)}],
+                                           cosa="Verifica simulata (domande da sistemare)", **comuni)
+                except ai.RispostaNonUsabile:
+                    nuovo = None
+                if nuovo and len(domande_rotte(nuovo)) < len(rotte):
+                    grezzo = nuovo
             self.c.scrivi("grezzo.json", grezzo)
         self._avanza("controllo", "Controllo le domande")
         riveduto = controllo.rivedi(self.ctx, grezzo, lettura["brani"], compito="simulata", messaggi=messaggi, modello=modello, valida=valida,

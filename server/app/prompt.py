@@ -79,7 +79,9 @@ presentatore. Chi ascolta non deve poter capire che il testo l'ha scritto un pro
 ("prima…", "per questo…", "e allora…").
 - Non dire mai "come detto prima", "come abbiamo visto", "nel blocco precedente", "in questo podcast".
 - Niente titoli, niente simboli, niente markdown, niente parentesi, niente abbreviazioni (scrivi "per esempio", \
-"secolo", "avanti Cristo"). I numeri e le date scrivili come si leggono bene a voce.
+"secolo", "avanti Cristo").
+- Date e numeri in cifre, copiati come sono nei documenti (1082, 20.000): a voce li legge Lectio. Un periodo si scrive \
+"dal 1147 al 1149", mai con il trattino. I secoli in parole ("undicesimo secolo").
 - Niente punti esclamativi, niente entusiasmo, niente saluti.
 
 """ + stile.ELENCO_PER_PROMPT

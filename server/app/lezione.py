@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from . import ai, clock, controllo, db, memoria, misure, prompt, ripasso
+from . import ai, clock, controllo, db, memoria, misure, prompt, ripasso, stile
 from . import scheda as schede
 from .audio import PAUSA_CAPITOLI, PAUSA_DENTRO_PARAGRAFO, PAUSA_DOPO_DOMANDA, PAUSA_PARAGRAFI, Montatore, taglia_in_pezzi
 from .spesa import APPUNTI_MASSIMI, CARATTERI_APPUNTI_LETTI, CARATTERI_BLOCCO_MASSIMI, Cassa
@@ -197,6 +197,11 @@ def valida_apertura(o: dict) -> list[str]:
     return []
 
 
+# 1.3.5: con solo "è troppo corto" Small 4 allungava con esempi inventati ("Pensa a un gruppo di soldati…").
+ALLUNGA = ("Allunga spiegando meglio quello che c'è nel materiale (cause, conseguenze, nomi, date, collegamenti), "
+           "senza esempi o fatti che lì non ci sono")
+
+
 def valida_blocco(o: dict, parole_minime: int) -> list[str]:
     errori = valida_apertura(o)
     if not _testo_ok(o.get("domanda")):
@@ -206,7 +211,7 @@ def valida_blocco(o: dict, parole_minime: int) -> list[str]:
     if not errori and parole_minime:
         totale = sum(_parole(p if isinstance(p, str) else p["testo"]) for p in _paragrafi(o["paragrafi"]))
         if totale < parole_minime:
-            errori.append(f"il blocco è troppo corto: servono circa {int(parole_minime / 0.45)} parole")
+            errori.append(f"il blocco è troppo corto: servono circa {int(parole_minime / 0.45)} parole. {ALLUNGA}")
     return errori
 
 
@@ -216,7 +221,7 @@ def valida_parte(o: dict, parole_minime: int) -> list[str]:
     if not errori and parole_minime:
         totale = sum(_parole(p if isinstance(p, str) else p["testo"]) for p in _paragrafi(o["paragrafi"]))
         if totale < parole_minime:
-            errori.append(f"la parte è troppo corta: servono circa {int(parole_minime / 0.45)} parole")
+            errori.append(f"la parte è troppo corta: servono circa {int(parole_minime / 0.45)} parole. {ALLUNGA}")
     return errori
 
 
@@ -391,7 +396,8 @@ def copione(capitoli: list[dict]) -> list[dict]:
     pezzi = []
     for c in capitoli:
         for s_i, s in enumerate(c["segmenti"]):
-            parti = taglia_in_pezzi(s["voce"])
+            # 1.3.5: il testo è in cifre (si controlla con il libro); a voce le cifre diventano parole qui.
+            parti = taglia_in_pezzi(stile.numeri_a_voce(s["voce"]))
             for j, parte in enumerate(parti):
                 if not pezzi:
                     pausa = 0.0

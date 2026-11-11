@@ -217,7 +217,15 @@ anche il resto con Small 4, sugli stessi documenti e sullo stesso piano: "Non ho
 prezzo, quindi dalla 1.3.4 lo fa il modello piccolo (`LECTIO_MODELLO_PIANO`); restano su Medium le lezioni (Small 4 sbaglia
 più date, inventa dettagli e lascia frasi monche dopo il controllo: 0,04 € invece di 0,36 € per 45 minuti, ma peggio), i
 riassunti (Small 4 salta 5 argomenti su 18) e le verifiche simulate (Small 4 fa crocette senza le risposte da scegliere;
-con Medium costano già 2 centesimi). OCR `mistral-ocr-3`
+con Medium costano già 2 centesimi). Riprovato la sera stessa con le correzioni della 1.3.5, che valgono per tutti i
+modelli: date in cifre come nei documenti (a voce le trasforma in parole il server, `stile.numeri_a_voce`), una frase
+tolta dal controllo non lascia più il paragrafo monco (si toglie tutto il paragrafo se era la prima frase, più di metà
+o la frase che regge la seguente), crocette, vero/falso e collegamenti controllati e fatti correggere una volta (quelli
+ancora rotti si tolgono), riassunto con una parte per ogni sezione dello schema, "magari" e "sul libro è scritto"
+segnalati allo stile. Con Small 4 date, crocette e argomenti saltati si sistemano (22 sezioni → 26 parti); restano i
+dettagli inventati (un santo patrono, i solidi di Platone, Russell al posto di Galileo e Cartesio) e il controllo non
+li vede nemmeno fatto da Medium, che in più segnalava come fuori 10 frasi giuste su 11: per questo lezioni, riassunti e
+simulate restano su Medium. OCR `mistral-ocr-3`
 (metà prezzo di `mistral-ocr-latest`, che ora è OCR 4.1), voce `voxtral-mini-tts-3-0` con `voice_id` `voice_482`
 (Lorenzo, unica voce italiana preimpostata). Chiamata voce Mistral: `POST https://api.mistral.ai/v1/audio/speech`
 `{"model","input","voice_id","response_format":"mp3"}` → JSON con `audio_data` in base64. Azure:

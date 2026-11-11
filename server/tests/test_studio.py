@@ -7,7 +7,7 @@ import pytest
 from pypdf import PdfReader
 
 from aiuti import APPUNTI_STORIA, VERIFICA_GEMINI, aggiungi_testo, carica_file, crea_materia, nuova_lezione, prepara_tutto, sfondo_tutto
-from app import db, finto, memoria, schema_ripasso, stile
+from app import db, finto, memoria, riassunti, schema_ripasso, simulata, stile
 from app.firma import FIRMA
 
 pagamento = pytest.mark.pagamento
@@ -94,6 +94,46 @@ def test_lingua_che_non_sembra_automatica():
     assert stile.formule_in_testo(r"\frac{x+3}{x-1}") == "(x+3)/(x-1)"
     assert "—" not in stile.ripulisci("Augusto — il primo imperatore — governò.")
     assert stile.formule_in_testo("$x^2-2x+1$") == "x²-2x+1" and stile.formule_in_testo("x^{-1}") == "x⁻¹"
+
+
+def test_difetti_di_small_4_sistemati_da_noi():
+    """1.3.5: i difetti trovati provando Small 4 che dipendevano dalle nostre regole, non dal modello."""
+    # Mezza formula "non solo… ma anche" lasciata dopo la riscrittura.
+    assert stile.ripulisci("Non solo il cinque è il matrimonio, perché unisce pari e dispari.") == \
+        "Il cinque è il matrimonio, perché unisce pari e dispari."
+    assert stile.ripulisci("Non solo regola il lavoro, ma anche i prezzi.") == "Regola il lavoro e anche i prezzi."
+    # "Sul libro è scritto…" ripetuto in ogni paragrafo; "sul libro trovi" resta.
+    assert stile.ripulisci("Sul libro è scritto chiaro: la nascita conta.") == "La nascita conta."
+    assert stile.ripulisci("Sul libro trovi l'aratro pesante.") == "Sul libro trovi l'aratro pesante."
+    assert stile.problemi("La decadenza è un modo in cui il tempo ti può fregare.")
+    # Il dettaglio inventato col "magari" va riscritto.
+    assert any("magari" in p for p in stile.problemi("Scelgono un santo patrono, magari san Biagio."))
+    # Le date si scrivono in cifre (si controllano con il libro) e a voce diventano parole qui.
+    assert stile.numeri_a_voce("Nel 1082 Venezia, dal 1147 al 1149, circa 100.000 abitanti, B1") == \
+        "Nel milleottantadue Venezia, dal millecentoquarantasette al millecentoquarantanove, circa centomila abitanti, B1"
+    assert stile.numeri_a_voce("1096-1099, 3,5% e 183") == "millenovantasei, millenovantanove, tre virgola cinque per cento e centottantatré"
+    assert [stile.in_parole(n) for n in (21, 28, 108, 1288, 2000, 1_000_000)] == \
+        ["ventuno", "ventotto", "centotto", "milleduecentottantotto", "duemila", "un milione"]
+    from app import lezione
+    pezzi = lezione.copione([{"n": 1, "segmenti": [{"ruolo": "spiegazione", "emozione": "neutra", "lento": False, "voce": "Nel 1082."}]}])
+    assert pezzi[0]["testo"] == "Nel milleottantadue."
+
+
+def test_frase_tolta_non_lascia_il_paragrafo_monco():
+    from app import controllo
+    paragrafo = {"tipo": "spiegazione", "testo": "I monasteri nascono in campagna. Li fonda san Benedetto. La sua regola è preghiera e lavoro."}
+    tenuto = {"tipo": "spiegazione", "testo": "Cluny nasce nel 910. Ha molte case. Segue la regola benedettina."}
+    blocco = {"paragrafi": [paragrafo, tenuto], "risposta": "Preghiera e lavoro. Lo dice san Benedetto."}
+    # La frase dopo quella tolta si appoggia a lei ("La sua…"): via tutto il paragrafo.
+    controllo.togli_frasi([(paragrafo, "testo", 1, "Li fonda san Benedetto."), (tenuto, "testo", 1, "Ha molte case."),
+                           (blocco, "risposta", 1, "Lo dice san Benedetto.")])
+    assert paragrafo["testo"] == ""
+    assert tenuto["testo"] == "Cluny nasce nel 910. Segue la regola benedettina."
+    assert blocco["risposta"] == "Preghiera e lavoro."  # una risposta non si toglie mai intera
+    # La prima frase del paragrafo era sbagliata: il resto parlava di lei.
+    definizione = {"tipo": "definizione", "testo": "La protoindustria supera la bottega. Un esempio è la lana."}
+    controllo.togli_frasi([(definizione, "testo", 0, "La protoindustria supera la bottega.")])
+    assert definizione["testo"] == ""
 
 
 # --------------------------------------------------------------------------- scheda del prof
@@ -398,6 +438,24 @@ def test_riassunto_tagliato_si_richiede_con_piu_spazio(client, auth, servizi, se
 
 
 @pagamento
+def test_riassunto_che_salta_sezioni_si_fa_completare(client, auth, servizi, server):
+    """1.3.5: Small 4 saltava 5 sezioni su 18. Il prompt dice quante sono; se ne mancano si chiede una volta."""
+    _, d = schema_pronto(client, auth, servizi)
+    sezioni = riassunti.sezioni_usate(d["contenuto"])
+    assert sezioni >= 3
+    n = server.conta("/v1/chat/completions")
+    r = client.post(f"/api/schemi/{d['id']}/riassunti", json={"forma": "misto"}, headers=auth).json()
+    server.riassunti_corti = 1
+    studio_tutto(servizi)
+    x = client.get(f"/api/riassunti/{r['id']}", headers=auth).json()
+    assert x["stato"] == "pronto" and len(x["contenuto"]["parti"]) == sezioni
+    scritti = [c for p, c in server.chiamate[n:] if p == "/v1/chat/completions"
+               and "Scrivi il riassunto di questo schema" in c["messages"][1]["content"]]
+    assert f"Lo schema ha {sezioni} sezioni" in scritti[0]["messages"][1]["content"]
+    assert len(scritti) == 2 and "parti ma lo schema ha" in scritti[1]["messages"][-1]["content"]
+
+
+@pagamento
 def test_schema_fermato_riprende_senza_ripagare(client, auth, servizi, server):
     m = materia_pronta(client, auth, servizi)
     s = crea_schema(client, auth, m["id"])
@@ -580,6 +638,38 @@ def test_esercizio_senza_soluzione_si_confronta_da_soli(client, auth, servizi, s
     studio_tutto(servizi)
     e = client.get(f"/api/simulate/{s['id']}", headers=auth).json()["esito"]
     assert e["domande"][0]["esito"] == "non_corretta" and e["punti_totali"] == 0 and e["voto_stimato"] is None
+
+
+@pagamento
+def test_crocette_senza_opzioni_non_arrivano(client, auth, servizi, server):
+    """1.3.5: Small 4 scriveva "Quale di queste città…" senza le città. Si chiede di correggere; se resta, la domanda si toglie."""
+    m = materia_pronta(client, auth, servizi)
+    rotta = {"tipo": "scelta_multipla", "testo": "Quale di queste città non fu conquistata?", "punti": 5, "risposta_attesa": "Roma", "fonti": []}
+    buona = {"tipo": "scelta_multipla", "testo": "Chi ebbe il potere vero? a) Augusto b) il senato", "punti": 5,
+             "risposta_attesa": "a) Augusto", "fonti": []}
+    vf = {"tipo": "vero_falso", "testo": "Il senato ebbe il potere vero.", "punti": 5, "risposta_attesa": "Falso: lo ebbe Augusto.", "fonti": []}
+    assert simulata.domande_rotte({"domande": [rotta, buona, vf]}) == \
+        ['la domanda 1 è a scelta multipla ma nel "testo" mancano le opzioni "a) … b) … c) …"']
+    assert simulata.domande_rotte({"domande": [dict(vf, risposta_attesa="Il senato restò di facciata.")]})
+    # Collegamento senza le due liste, soluzione scritta come elenco, opzione "non è specificato" (prova dell'11/11).
+    coll = {"tipo": "collegamento", "testo": "Collega ciascun sovrano al suo ruolo.", "punti": 10,
+            "risposta_attesa": [{"1": "Ottone I"}, {"2": "Enrico III"}], "fonti": []}
+    assert "non è un testo" in simulata.domanda_chiusa_rotta(coll)
+    assert "due liste" in simulata.domanda_chiusa_rotta(dict(coll, risposta_attesa="1-a"))
+    assert simulata.domanda_chiusa_rotta(dict(coll, testo="Collega: 1. Ottone I 2. Enrico III a) privilegio b) riforma",
+                                              risposta_attesa="1-a, 2-b")) is None
+    assert "non è specificato" in simulata.domanda_chiusa_rotta(
+        dict(buona, testo="Quale papa scrisse il Dictatus papae? a) Gregorio VII b) Urbano II c) Non è specificato nel libro",
+             risposta_attesa="c) Non è specificato nel libro"))
+    server.simulata = {"titolo": "Prova", "domande": [rotta, buona]}
+    n = server.conta("/v1/chat/completions")
+    s = _simulata(client, auth, m["id"])
+    studio_tutto(servizi)
+    d = client.get(f"/api/simulate/{s['id']}", headers=auth).json()
+    # Il modello finto non la sistema: la verifica resta, senza la crocetta rotta.
+    assert d["stato"] == "pronta" and [x["testo"] for x in d["domande"]] == [buona["testo"]]
+    chieste = [c["messages"][-1]["content"] for p, c in server.chiamate[n:] if p == "/v1/chat/completions"]
+    assert any("mancano le opzioni" in x for x in chieste)
 
 
 @pagamento
