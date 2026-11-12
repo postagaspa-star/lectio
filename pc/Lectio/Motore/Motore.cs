@@ -58,8 +58,8 @@ public sealed class Motore : IDisposable
     /// <summary>§6: al massimo 20 MB a file.</summary>
     public const long MassimoByteFile = 20L * 1024 * 1024;
 
-    /// <summary>§6: i formati che il server legge (HEIC lo convertono le app del telefono, qui non arriva).</summary>
-    public static readonly string[] Estensioni = { ".txt", ".md", ".pdf", ".docx", ".odt", ".rtf", ".jpg", ".jpeg", ".png", ".webp" };
+    /// <summary>§6: i formati che il server legge (le foto HEIC le fa diventare JPEG lui, dalla 1.3.6).</summary>
+    public static readonly string[] Estensioni = { ".txt", ".md", ".pdf", ".docx", ".odt", ".rtf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif" };
 
     private static readonly Regex PercorsoAmmesso = new(@"^api/[A-Za-z0-9_\-/]*$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoNuovaLezione = new(@"^api/lezioni/?$", RegexOptions.CultureInvariant);
@@ -897,7 +897,7 @@ public sealed class Motore : IDisposable
         var estensione = Path.GetExtension(nome).ToLowerInvariant();
         if (nome.Length == 0 || !Estensioni.Contains(estensione))
         {
-            return ErrorePonte(422, "Questo tipo di file non lo leggo. Usa PDF, Word, ODT, RTF, testo o una foto JPG, PNG o WEBP.", "non_valido");
+            return ErrorePonte(422, "Questo tipo di file non lo leggo. Usa PDF, Word, ODT, RTF, testo o una foto JPG, PNG, WEBP o HEIC.", "non_valido");
         }
         if (tipo != null && !TipiMateriale.Contains(tipo)) return ErrorePonte(422, "Scegli che cos'è: verifica, interrogazione, appunti o libro.", "non_valido");
         var (base_, tok) = await CollegamentoAsync().ConfigureAwait(false);
@@ -932,6 +932,8 @@ public sealed class Motore : IDisposable
         ".jpg" or ".jpeg" => "image/jpeg",
         ".png" => "image/png",
         ".webp" => "image/webp",
+        ".heic" => "image/heic",
+        ".heif" => "image/heif",
         _ => "application/octet-stream",
     };
 

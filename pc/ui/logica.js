@@ -26,8 +26,9 @@
     giada: 'Giada', senape: 'Senape', orchidea: 'Orchidea', prugna: 'Prugna', cacao: 'Cacao', lavagna: 'Lavagna', salvia: 'Salvia', lavanda: 'Lavanda',
   };
   /** §6: i formati che il server legge. */
-  const ESTENSIONI = ['.txt', '.md', '.pdf', '.docx', '.odt', '.rtf', '.jpg', '.jpeg', '.png', '.webp'];
-  const IMMAGINI = ['.jpg', '.jpeg', '.png', '.webp'];
+  const ESTENSIONI = ['.txt', '.md', '.pdf', '.docx', '.odt', '.rtf', '.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'];
+  // HEIC (iPhone): le fa diventare JPEG il server (dalla 1.3.6).
+  const IMMAGINI = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'];
   const MASSIMO_BYTE = 20 * 1024 * 1024;
   /**
    * §16.4 "Che cos'è" in due famiglie: Da studiare (Lectio lo spiega e ci fa le domande) e Già corretta dal prof
@@ -906,8 +907,7 @@
   /** null se il file va bene, altrimenti la frase del perché no. */
   function controllaFile(nome, byte) {
     const e = estensione(nome);
-    if (e === '.heic' || e === '.heif') return 'Le foto HEIC non le leggo: salvala come JPG e riprova.';
-    if (!ESTENSIONI.includes(e)) return 'Questo tipo di file non lo leggo. Usa PDF, Word, ODT, RTF, testo o una foto JPG, PNG o WEBP.';
+    if (!ESTENSIONI.includes(e)) return 'Questo tipo di file non lo leggo. Usa PDF, Word, ODT, RTF, testo o una foto JPG, PNG, WEBP o HEIC.';
     if (Number(byte) > MASSIMO_BYTE) return 'Il file è troppo grande: il massimo è 20 MB.';
     if (Number(byte) === 0) return 'Il file è vuoto.';
     return null;

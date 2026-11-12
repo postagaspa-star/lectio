@@ -183,6 +183,13 @@ async def _da_file(materia_id: int, request: Request, conn: sqlite3.Connection, 
     if est not in lettura.FORMATI:
         raise non_valido(f"Questo tipo di file non lo so leggere. Vanno bene: {lettura.FORMATI_IN_PAROLE}.",
                          campo="file")
+    if est in lettura.HEIC:
+        # Da qui in poi è un JPEG come gli altri: si salva .jpg e l'OCR lo legge.
+        try:
+            contenuto = await asyncio.to_thread(lettura.da_heic, contenuto)
+        except lettura.FileIlleggibile as e:
+            raise non_valido(e.frase, campo="file") from None
+        est, nome_file = "jpg", lettura.nome_jpg(nome_file)
     try:
         letto = await asyncio.to_thread(lettura.leggi, contenuto, est)
     except lettura.FileIlleggibile as e:

@@ -37,6 +37,8 @@ is clearly about one folder, the server puts it there by itself after reading it
 no model, so it costs nothing; when it is not clear, the file stays outside and the student decides. A whole
 folder or a zip archive can be added at once: both apps open it on the device (subfolders and zips inside zips
 too), skip what the server cannot read and say which files were left out, then upload the rest one by one.
+HEIC photos from iPhones are accepted everywhere: the server turns them into JPEG with a decode-only library
+(pi-heif), so the Windows app does not need the paid HEVC codec.
 
 Everything is written only from the student's documents. They are split into pieces on the server and searched
 with embeddings and keywords, with a fixed priority: book pages, then tests, then oral exams, then notes. The

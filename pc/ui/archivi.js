@@ -28,7 +28,6 @@
   /** Perché un file resta fuori: [una cosa, più cose]. */
   const MOTIVI = {
     formato: ['che Lectio non sa leggere', 'che Lectio non sa leggere'],
-    heic: ['in HEIC (salvalo come JPG)', 'in HEIC (salvali come JPG)'],
     grande: ['più grande di 20 MB', 'più grandi di 20 MB'],
     vuoto: ['vuoto', 'vuoti'],
     password: ['protetto da password', 'protetti da password'],
@@ -63,7 +62,6 @@
   /** null se Lectio lo legge, altrimenti il motivo (chiave di MOTIVI). */
   function motivo(nome, byte) {
     const e = L.estensione(nome);
-    if (e === '.heic' || e === '.heif') return 'heic';
     if (!L.ESTENSIONI.includes(e)) return 'formato';
     if (Number(byte) > L.MASSIMO_BYTE) return 'grande';
     if (Number(byte) === 0) return 'vuoto';
@@ -400,7 +398,7 @@
     }
     if (st.saltati.length && st.saltati.every((s) => s.motivo === 'rotto')) return 'Non riesco ad aprire lo zip: forse è rovinato o non è finito di scaricare.';
     const dove = st.radici.length === 1 && st.radici[0].tipo === 'zip' ? 'Nello zip' : st.radici.length === 1 && st.radici[0].tipo === 'cartella' ? 'Nella cartella' : 'Qui';
-    return dove + ' non c\'è niente che Lectio sa leggere: PDF, Word, ODT, RTF, testo o foto JPG, PNG, WEBP.';
+    return dove + ' non c\'è niente che Lectio sa leggere: PDF, Word, ODT, RTF, testo o foto JPG, PNG, WEBP, HEIC.';
   }
 
   return {

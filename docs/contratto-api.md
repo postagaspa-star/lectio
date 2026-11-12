@@ -97,7 +97,9 @@ montata `/apk`).
 
 - `POST /api/materie/{id}/materiale` multipart: `file` (uno) + `tipo`, `titolo`, `data` facoltativi; oppure
   JSON `{"tipo","titolo","data","testo"}` per appunti/interrogazioni scritti. Formati: `.txt .md .pdf .docx
-  .odt .rtf` e immagini `.jpg .jpeg .png .webp` (le app convertono HEIC in JPEG). Massimo 20 MB a file e
+  .odt .rtf` e immagini `.jpg .jpeg .png .webp .heic .heif`. Le foto HEIC/HEIF (server 1.3.6) diventano JPEG sul
+  server (qualità 90, lato lungo al massimo 3000 px, girate come vanno viste; `nome_file` e `formato` diventano
+  `.jpg`); l'app del telefono le converte già lei prima di mandarle. Massimo 20 MB a file e
   200.000 caratteri letti. PDF con testo: letto gratis; PDF scansionato o immagine: OCR Mistral a pagamento
   (stima prima: se sfora il tetto → 402). Titolo predefinito: dal file (per i testi di Gemini, la riga
   `MATERIA/PROF/DATA/TIPO` se c'è).

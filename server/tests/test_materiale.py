@@ -71,8 +71,8 @@ def test_file_rovinati_e_tipi_sconosciuti(client, auth, materia):
     assert "Word" in r.json()["errore"]
     r = carica_file(client, auth, materia["id"], "rotto.pdf", b"%PDF-1.4 niente")
     assert r.status_code == 422 and "PDF" in r.json()["errore"]
-    r = carica_file(client, auth, materia["id"], "foto.heic", b"xxx")
-    assert r.status_code == 422 and ".jpg" in r.json()["errore"]
+    r = carica_file(client, auth, materia["id"], "video.mp4", b"xxx")
+    assert r.status_code == 422 and ".jpg" in r.json()["errore"] and ".heic" in r.json()["errore"]
     r = carica_file(client, auth, materia["id"], "vuoto.txt", b"")
     assert r.status_code == 422
     r = carica_file(client, auth, materia["id"], "spazi.txt", b"   \n  ")
@@ -221,3 +221,65 @@ def test_ocr_che_fallisce_e_riprova(client, auth, materia, servizi, server):
     sfondo_tutto(servizi)
     assert leggi(client, auth, m["id"])["stato"] == "pronto"
     assert client.post(f"/api/materiale/{m['id']}/riprova", headers=auth).status_code == 409
+
+
+# --- Foto HEIC (1.3.6): il server le fa diventare JPEG, così vanno bene anche dal computer -------------------
+
+CAMPIONI = Path(__file__).parent / "campioni"
+
+
+def _salvato(servizi, materiale_id) -> Path:
+    with db.aperta(servizi.settings.db_path) as conn:
+        r = conn.execute("SELECT percorso, formato FROM materiali WHERE id = ?", (materiale_id,)).fetchone()
+    assert r["formato"] == "jpg"
+    return Path(servizi.settings.dati_dir) / r["percorso"]
+
+
+def test_foto_heic_diventa_jpeg(client, auth, materia, servizi):
+    from PIL import Image
+
+    r = carica_file(client, auth, materia["id"], "IMG_0042.HEIC", (CAMPIONI / "pagina.heic").read_bytes(), tipo="verifica")
+    assert r.status_code == 201, r.text
+    m = r.json()
+    assert m["origine"] == "foto" and m["stato"] == "in_lettura" and m["nome_file"] == "IMG_0042.jpg"
+    file = _salvato(servizi, m["id"])
+    assert file.suffix == ".jpg" and file.read_bytes()[:3] == b"\xff\xd8\xff"
+    with Image.open(file) as foto:
+        # La foto era girata (come le salva l'iPhone): esce già dritta, in verticale, metà alta blu.
+        assert foto.size == (400, 600)
+        r_, g, b = foto.convert("RGB").getpixel((200, 100))
+        assert b > 150 and r_ < 80
+    sfondo_tutto(servizi)
+    assert leggi(client, auth, m["id"])["stato"] == "pronto"
+
+
+def test_foto_heic_grande_rimpicciolita_e_heif(client, auth, materia, servizi):
+    from PIL import Image
+
+    r = carica_file(client, auth, materia["id"], "scansione.heif", (CAMPIONI / "grande.heic").read_bytes())
+    assert r.status_code == 201, r.text
+    with Image.open(_salvato(servizi, r.json()["id"])) as foto:
+        assert foto.size == (3000, 2250)  # 4032×3024 come un telefono → lato lungo 3000
+
+
+def test_foto_heic_che_e_un_jpeg_va_bene_lo_stesso(client, auth, materia, servizi):
+    r = carica_file(client, auth, materia["id"], "foto.heic", png())
+    assert r.status_code == 201, r.text
+    assert _salvato(servizi, r.json()["id"]).read_bytes()[:3] == b"\xff\xd8\xff"
+
+
+def test_foto_heic_rovinata(client, auth, materia, servizi):
+    finto = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + b"rotto" * 50
+    r = carica_file(client, auth, materia["id"], "IMG_1.heic", finto)
+    assert r.status_code == 422 and r.json()["errore"].startswith("Non riesco ad aprire questa foto HEIC")
+    with db.aperta(servizi.settings.db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM materiali").fetchone()[0] == 0
+
+
+@pagamento
+def test_foto_heic_va_all_ocr_come_jpeg(client, auth, materia, servizi, server):
+    r = carica_file(client, auth, materia["id"], "IMG_7.heic", (CAMPIONI / "pagina.heic").read_bytes())
+    sfondo_tutto(servizi)
+    corpo = [d for p, d in server.chiamate if p == "/v1/ocr"][0]
+    assert corpo["document"]["image_url"].startswith("data:image/jpeg;base64,")
+    assert leggi(client, auth, r.json()["id"])["stato"] == "pronto"

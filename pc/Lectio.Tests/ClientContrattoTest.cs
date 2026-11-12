@@ -238,6 +238,19 @@ public class ClientContrattoTest
         Assert.DoesNotContain("cartella_id", q.Corpo);
     }
 
+    [Theory]
+    [InlineData("IMG_0042.HEIC", "image/heic")]
+    [InlineData("scansione.heif", "image/heif")]
+    public async Task Le_foto_HEIC_partono_cosi_come_sono_le_converte_il_server(string nome, string tipo)
+    {
+        using var b = new Banco(_ => (201, "{\"id\":41,\"stato\":\"in_lettura\"}"));
+        var r = await b.Motore.CaricaFileAsync(1, "verifica", null, null, nome, new byte[] { 0, 0, 0, 24, 102, 116, 121, 112 });
+        Assert.Equal(201, r.Stato);
+        var q = b.Finto.Ricevute.Single();
+        Assert.Contains("filename=" + nome, q.Corpo);
+        Assert.Contains("Content-Type: " + tipo, q.Corpo);
+    }
+
     [Fact]
     public async Task Con_la_cartella_scelta_il_multipart_porta_cartella_id_come_testo()
     {
@@ -264,7 +277,6 @@ public class ClientContrattoTest
 
     [Theory]
     [InlineData("video.mp4", 10, 422)]
-    [InlineData("foto.heic", 10, 422)]
     [InlineData("vuoto.pdf", 0, 422)]
     public async Task File_che_il_server_non_legge_si_fermano_prima(string nome, int byteFile, int stato)
     {

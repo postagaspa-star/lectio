@@ -27,8 +27,13 @@ log = logging.getLogger("uvicorn.error")
 TESTI = {"txt", "md"}
 DOCUMENTI = {"pdf", "docx", "odt", "rtf"}
 IMMAGINI = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
-FORMATI = TESTI | DOCUMENTI | set(IMMAGINI)
-FORMATI_IN_PAROLE = ".txt .md .pdf .docx .odt .rtf .jpg .jpeg .png .webp"
+# Le foto HEIC/HEIF (iPhone e molti Android): l'OCR non le legge, il server le fa diventare JPEG (da_heic).
+HEIC = {"heic", "heif"}
+FORMATI = TESTI | DOCUMENTI | set(IMMAGINI) | HEIC
+FORMATI_IN_PAROLE = ".txt .md .pdf .docx .odt .rtf .jpg .jpeg .png .webp .heic"
+# Lato lungo delle foto convertite: come l'app del telefono, abbastanza per leggere una verifica.
+LATO_MASSIMO_FOTO = 3000
+FRASE_HEIC = "Non riesco ad aprire questa foto HEIC: forse è rovinata. Prova a salvarla come JPG."
 
 # Una pagina di PDF con meno di questi caratteri è una scansione (o è vuota): serve l'OCR.
 CARATTERI_PER_PAGINA_MINIMI = 40
@@ -391,6 +396,40 @@ def testo_travestito(contenuto: bytes, est: str) -> bool:
     testo = _decodifica(campione)
     buoni = sum(1 for c in testo if c.isprintable() or c in "\n\r\t")
     return bool(testo.strip()) and buoni / len(testo) >= 0.95
+
+
+_heic_pronto = False
+
+
+def da_heic(contenuto: bytes) -> bytes:
+    """La foto HEIC/HEIF come JPEG (qualità 90), girata come va vista e col lato lungo al massimo
+    LATO_MASSIMO_FOTO. Se dentro c'è un'altra foto (JPEG, PNG o WebP col nome sbagliato) va bene lo stesso.
+    pi-heif legge e basta (libheif con libde265): niente codec da comprare, niente programmi esterni."""
+    global _heic_pronto
+    from PIL import Image, ImageOps
+
+    try:
+        if not _heic_pronto:
+            import pi_heif
+
+            pi_heif.register_heif_opener()
+            _heic_pronto = True
+        with Image.open(io.BytesIO(contenuto), formats=["HEIF", "JPEG", "PNG", "WEBP"]) as foto:
+            foto = ImageOps.exif_transpose(foto)
+            foto = foto.convert("RGB")
+            foto.thumbnail((LATO_MASSIMO_FOTO, LATO_MASSIMO_FOTO))
+            uscita = io.BytesIO()
+            foto.save(uscita, "JPEG", quality=90)
+            return uscita.getvalue()
+    except Exception as e:  # file rotto, troppo grande per la memoria, formato sconosciuto
+        log.warning("foto HEIC illeggibile: %s", type(e).__name__)
+        raise FileIlleggibile(FRASE_HEIC) from None
+
+
+def nome_jpg(nome_file: str) -> str:
+    """IMG_1234.HEIC → IMG_1234.jpg: il file salvato è ormai un JPEG."""
+    base = nome_file.rsplit(".", 1)[0] if "." in nome_file else nome_file
+    return (base or "foto") + ".jpg"
 
 
 def leggi(contenuto: bytes, est: str) -> Letto:

@@ -695,7 +695,7 @@
   // ================================================================== Aggiungi materiale (§5) e file
 
   /** I file che si possono scegliere: quelli che Lectio legge e gli zip (si aprono e si manda quello che c'è dentro). */
-  const ACCETTA_FILE = '.pdf,.docx,.odt,.rtf,.txt,.md,.jpg,.jpeg,.png,.webp,.zip';
+  const ACCETTA_FILE = '.pdf,.docx,.odt,.rtf,.txt,.md,.jpg,.jpeg,.png,.webp,.heic,.heif,.zip';
 
   /** Sceglie i file dal computer. `cartellaId` = la cartella già scelta (Aggiungi aperto da una cartella, §42.6). */
   function scegliFile(m, accetta, tipo, cartellaId) {
@@ -744,7 +744,7 @@
             riga('cartella', 'Cartella del computer', null, () => scegliCartella(m, o.tipo, o.cartellaId), { 'data-riga': 'cartella-pc' }),
             riga('appunti', 'Appunti', null, () => scritto(ctl2, m, 'appunti', o.cartellaId), { 'data-riga': 'appunti' }),
             riga('interrogazione', 'Interrogazione orale', null, () => scritto(ctl2, m, 'interrogazione', o.cartellaId), { 'data-riga': 'orale' }),
-            riga('foto', 'Foto', 'circa 0,4 cent a foto', () => scegliFile(m, '.jpg,.jpeg,.png,.webp', o.tipo, o.cartellaId), { 'data-riga': 'foto' })));
+            riga('foto', 'Foto', 'circa 0,4 cent a foto', () => scegliFile(m, '.jpg,.jpeg,.png,.webp,.heic,.heif', o.tipo, o.cartellaId), { 'data-riga': 'foto' })));
       },
     });
     ctl.accettaFile = true;

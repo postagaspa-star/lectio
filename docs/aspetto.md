@@ -198,7 +198,7 @@ gli zip dentro gli zip (fino al terzo livello), e si mandano solo i file che Lec
 massimo 300 per volta. Gli avanzi (`__MACOSX`, file e cartelle nascosti, Thumbs.db, desktop.ini, `~$` di Word
 aperto) si saltano senza dirlo; gli altri file rimasti fuori si dicono in una riga per motivo: "Lascio fuori 2
 file che Lectio non sa leggere: video.mp4 e voti.xlsx." (motivi: non lo sa leggere, più grande di 20 MB, vuoto,
-protetto da password, non riesco ad aprirlo; sul PC anche HEIC). Sopra i nomi, in grassetto, "12 file da
+protetto da password, non riesco ad aprirlo; le foto HEIC entrano, dalla 1.3.4 anche sul PC). Sopra i nomi, in grassetto, "12 file da
 Storia.zip" o "12 file dalla cartella Storia"; con più di 6 file si vedono i primi cinque e "e altri N file".
 "Che cos'è", cartella e data valgono per tutti; niente titolo. Il pulsante dice **Aggiungi 12 file**, poi
 **Mando 3 di 12**. Un file che il server rifiuta (senza testo, illeggibile) resta fuori e si va avanti; alla fine

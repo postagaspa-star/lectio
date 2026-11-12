@@ -214,8 +214,12 @@ test('uno zip che mente sulla dimensione si ferma; uno rovinato lo dice; uno vuo
   assert.equal(Ar.fraseNiente(rotto), 'Non riesco ad aprire lo zip: forse è rovinato o non è finito di scaricare.');
   const soloVideo = await Ar.espandi([new File([creaZip([{ nome: 'film.mp4', dati: 'v' }])], 'video.zip')]);
   assert.match(Ar.fraseNiente(soloVideo), /^Nello zip non c'è niente che Lectio sa leggere/);
-  const heic = await Ar.espandi([new File(['x'], 'foto.heic')]);
-  assert.match(Ar.fraseNiente(heic), /HEIC/, 'un file solo: la frase di sempre');
+  const video = await Ar.espandi([new File(['x'], 'lezione.mp4')]);
+  assert.match(Ar.fraseNiente(video), /non lo leggo/, 'un file solo: la frase di sempre');
+  // Le foto HEIC dell'iPhone entrano (le converte il server), anche dentro gli zip.
+  const heic = await Ar.espandi([new File(['x'], 'IMG_0042.HEIC'), new File([creaZip([{ nome: 'IMG_2.heif', dati: 'h' }])], 'foto.zip')]);
+  assert.deepEqual(nomi(heic), ['IMG_0042.HEIC', 'IMG_2.heif']);
+  assert.equal(heic.saltati.length, 0);
 });
 
 test('cartella trascinata: sottocartelle, zip dentro, avanzi fuori, letta a gruppi come fa il browser', async () => {
@@ -236,9 +240,9 @@ test('cartella trascinata: sottocartelle, zip dentro, avanzi fuori, letta a grup
     file('foto.zip', creaZip([{ nome: 'IMG_1.jpg', dati: 'jpg' }, { nome: 'IMG_2.heic', dati: 'heic' }])),
   ]);
   const st = await Ar.espandi([{ cartella: albero }]);
-  assert.deepEqual(nomi(st), ['IMG_1.jpg', 'Platone.pdf', 'verifica 2.docx']);
-  assert.deepEqual(st.saltati.map((s) => s.percorso), ['Filosofia/foto.zip/IMG_2.heic', 'Filosofia/Verifiche/voti.xlsx']);
-  assert.equal(Ar.descrizione(st), '3 file dalla cartella Filosofia');
+  assert.deepEqual(nomi(st), ['IMG_1.jpg', 'IMG_2.heic', 'Platone.pdf', 'verifica 2.docx']);
+  assert.deepEqual(st.saltati.map((s) => s.percorso), ['Filosofia/Verifiche/voti.xlsx']);
+  assert.equal(Ar.descrizione(st), '4 file dalla cartella Filosofia');
   assert.equal(await testo(st.buoni[0]), 'jpg');
 });
 

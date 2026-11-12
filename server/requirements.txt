@@ -12,6 +12,8 @@ httpcore==1.0.9
 httpx==0.28.1
 idna==3.20
 opentelemetry-api==1.45.1
+# Le foto HEIC dell'iPhone: legge e basta (libheif + libde265, licenze BSD/LGPL), niente codec da comprare.
+pi-heif==1.4.0
 pillow==13.0.0
 pydantic==2.14.1
 pydantic_core==2.50.1

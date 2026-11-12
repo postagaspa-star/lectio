@@ -11,8 +11,8 @@
     <AssemblyName>Lectio</AssemblyName>
     <AssemblyTitle>Lectio</AssemblyTitle>
     <Product>Lectio</Product>
-    <Version>1.3.3</Version>
-    <FileVersion>1.3.3.0</FileVersion>
+    <Version>1.3.4</Version>
+    <FileVersion>1.3.4.0</FileVersion>
     <ApplicationIcon>Risorse\lectio.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>it</SatelliteResourceLanguages>

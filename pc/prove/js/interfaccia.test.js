@@ -839,9 +839,9 @@ test('un file di formato sconosciuto si ferma subito con la frase', opz, async (
   const p = await apri();
   p.A.vai('#materia/1');
   await p.aspetta(() => p.q('.zona-trascina'));
-  p.A.suFileTrascinati([new p.w.File(['x'], 'foto.heic')]);
+  p.A.suFileTrascinati([new p.w.File(['x'], 'lezione.mp4')]);
   await p.aspetta(() => p.q('.avviso-breve'));
-  assert.match(p.q('.avviso-breve').textContent, /HEIC/);
+  assert.match(p.q('.avviso-breve').textContent, /non lo leggo/);
   assert.equal(p.s.chiamate('POST', '/locale/carica').length, 0);
 });
 

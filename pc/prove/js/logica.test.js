@@ -323,10 +323,12 @@ test('vince la più recente anche per le stime: la risposta di una richiesta vec
 
 // --- File, materie, rotte ---------------------------------------------------------------------------
 
-test('file: formati letti, HEIC e file troppo grandi rifiutati con la frase', () => {
+test('file: formati letti (anche le foto HEIC), file troppo grandi rifiutati con la frase', () => {
   assert.equal(L.controllaFile('verifica.pdf', 1000), null);
   assert.equal(L.controllaFile('foto.JPG', 1000), null);
-  assert.match(L.controllaFile('foto.heic', 1000), /HEIC/);
+  assert.equal(L.controllaFile('IMG_0042.HEIC', 1000), null);
+  assert.equal(L.controllaFile('foto.heif', 1000), null);
+  assert.ok(L.eImmagine('IMG_0042.HEIC'), 'conta come foto (costo OCR)');
   assert.match(L.controllaFile('video.mp4', 1000), /non lo leggo/);
   assert.match(L.controllaFile('grande.pdf', 21 * 1024 * 1024), /20 MB/);
 });
