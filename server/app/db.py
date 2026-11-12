@@ -396,6 +396,52 @@ CREATE INDEX materiali_cartella ON materiali (cartella_id)
 """
 
 
+# 1.3.8 (12/11): modifiche dopo (contratto 28) e cache dei prompt.
+# modifiche: una richiesta di Andrea su una cosa già fatta; versioni: le versioni messe da parte (Torna a prima).
+# domande.tolta: domanda di una versione della lezione che non c'è più (le risposte date restano).
+# schemi.cambiato_il / riassunti.schema_del: per sapere se un riassunto è più vecchio dello schema.
+# spese.di_cui_cache: i token d'entrata che Mistral ha preso dalla cache (pagati il 10%).
+SCHEMA_6 = """
+CREATE TABLE modifiche (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('lezione', 'schema', 'riassunto', 'simulata')),
+    oggetto_id INTEGER NOT NULL,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    richiesta TEXT NOT NULL,
+    parti TEXT NOT NULL DEFAULT '[]',
+    stato TEXT NOT NULL CHECK (stato IN ('in_coda', 'in_preparazione', 'pronta', 'errore', 'annullata')),
+    fase TEXT,
+    fatto INTEGER NOT NULL DEFAULT 0,
+    totale INTEGER NOT NULL DEFAULT 0,
+    frase TEXT,
+    errore TEXT,
+    nota TEXT,
+    cambiate TEXT NOT NULL DEFAULT '[]',
+    stima_eur REAL NOT NULL DEFAULT 0,
+    creata_il TEXT NOT NULL,
+    in_coda_dal TEXT NOT NULL,
+    pronta_il TEXT
+);
+CREATE INDEX modifiche_coda ON modifiche (stato, in_coda_dal, id);
+CREATE INDEX modifiche_oggetto ON modifiche (tipo, oggetto_id, id);
+CREATE TABLE versioni (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('lezione', 'schema', 'riassunto', 'simulata')),
+    oggetto_id INTEGER NOT NULL,
+    dati TEXT NOT NULL,
+    ruolo TEXT NOT NULL CHECK (ruolo IN ('prima', 'dopo')),
+    perche TEXT NOT NULL CHECK (perche IN ('modifica', 'a_mano')),
+    richiesta TEXT,
+    quando TEXT NOT NULL
+);
+CREATE INDEX versioni_oggetto ON versioni (tipo, oggetto_id, id);
+ALTER TABLE domande ADD COLUMN tolta INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE schemi ADD COLUMN cambiato_il TEXT;
+ALTER TABLE riassunti ADD COLUMN schema_del TEXT;
+ALTER TABLE spese ADD COLUMN di_cui_cache INTEGER
+"""
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
@@ -403,6 +449,7 @@ MIGRAZIONI = [
     (3, SCHEMA_3, _semina_3),
     (4, SCHEMA_4, _semina_4),
     (5, SCHEMA_5, None),
+    (6, SCHEMA_6, None),
 ]
 
 
@@ -548,6 +595,8 @@ def ripristina_dopo_riavvio(db_path: str) -> None:
             conn.execute("UPDATE simulate SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
                          (INTERROTTA_RIAVVIO,))
             conn.execute("UPDATE riassunti SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
+                         (INTERROTTA_RIAVVIO,))
+            conn.execute("UPDATE modifiche SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
                          (INTERROTTA_RIAVVIO,))
     finally:
         conn.close()

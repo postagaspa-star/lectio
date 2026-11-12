@@ -269,3 +269,30 @@ class SimulataPatch(Corpo):
         if v is not None and (len(v) > 200 or any(len(x) > 20_000 for x in v.values())):
             raise ValueError("risposte troppo lunghe")
         return v
+
+
+# --- modifiche dopo (contratto 28) ---------------------------------------------------------------------------
+
+class ModificaIn(Corpo):
+    tipo: Literal["lezione", "schema", "riassunto", "simulata"]
+    id: StrictInt
+    richiesta: str = Field(min_length=1, max_length=4000)
+    parti: list[StrictInt] = Field(default_factory=list, max_length=200)
+
+    @field_validator("richiesta")
+    @classmethod
+    def _richiesta(cls, v):
+        testo = re.sub(r"\n{3,}", "\n\n", "\n".join(" ".join(r.split()) for r in str(v).splitlines())).strip()
+        if not testo or len(testo) > INDICAZIONI_MASSIME:
+            raise ValueError("richiesta vuota o troppo lunga")
+        return testo
+
+
+class TestoSchemaIn(Corpo):
+    titolo: str = Field(default="", max_length=120)
+    contenuto: dict
+
+
+class TestoRiassuntoIn(Corpo):
+    titolo: str = Field(default="", max_length=120)
+    contenuto: dict

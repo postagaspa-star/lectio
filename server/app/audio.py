@@ -93,10 +93,16 @@ class Montatore:
             raise ErroreMontaggio("Non sono riuscito a montare l'audio. Tocca Riprova.")
         return r.stdout.decode("utf-8", "replace")
 
-    # Tre operazioni che i test possono sostituire (senza ffmpeg sul PC).
+    # Quattro operazioni che i test possono sostituire (senza ffmpeg sul PC).
     def in_wav(self, sorgente: Path, destinazione: Path) -> None:
         self._esegui([self.ffmpeg, "-nostdin", "-y", "-v", "error", "-i", str(sorgente), "-ac", "1",
                       "-ar", str(FREQUENZA), "-c:a", "pcm_s16le", "-f", "wav", str(destinazione)], "conversione")
+
+    def taglia(self, sorgente: Path, inizio: float, fine: float, destinazione: Path) -> None:
+        """Un pezzo di un audio già fatto, in WAV come i pezzi di voce (modifiche: i capitoli che non cambiano)."""
+        self._esegui([self.ffmpeg, "-nostdin", "-y", "-v", "error", "-i", str(sorgente), "-ss", f"{max(0.0, inizio):.3f}",
+                      "-to", f"{max(inizio, fine):.3f}", "-ac", "1", "-ar", str(FREQUENZA), "-c:a", "pcm_s16le", "-f", "wav",
+                      str(destinazione)], "taglio")
 
     def durata(self, percorso: Path) -> float:
         uscita = self._esegui([self.ffprobe, "-v", "error", "-show_entries", "format=duration",

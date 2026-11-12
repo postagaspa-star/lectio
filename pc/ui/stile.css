@@ -54,6 +54,7 @@
   --spenta-fondo: #FAFAF8;
   --spenta-bordo: #DCDAD3;
   --fondo-blocco: #F5F4F0;
+  --bordo: #CFCDC5;
   color-scheme: light;
 }
 
@@ -70,6 +71,7 @@
     --questa: #4C55A8; --anello-colore: #1B1B20;
     --scelta-bordo: #3B4290; --scelta-fondo: #1E2140; --casella-bordo: #4A4A52; --spenta-fondo: #17171B; --spenta-bordo: #34343B;
     --fondo-blocco: #26262C;
+    --bordo: #43434B;
     color-scheme: dark;
   }
 }
@@ -84,6 +86,7 @@
   --questa: #4C55A8; --anello-colore: #1B1B20;
   --scelta-bordo: #3B4290; --scelta-fondo: #1E2140; --casella-bordo: #4A4A52; --spenta-fondo: #17171B; --spenta-bordo: #34343B;
   --fondo-blocco: #26262C;
+  --bordo: #43434B;
   color-scheme: dark;
 }
 
@@ -1280,6 +1283,116 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 .rs-manca { background: var(--fondo-blocco); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .rs-attesa { display: flex; flex-direction: column; gap: 12px; }
 .rs-attesa .frase { font-size: 15px; font-weight: 600; color: var(--tenue); }
+
+/* §44 Modifica, Correggi a mano, Torna a prima */
+.finestra-modifica .corpo { gap: 18px; }
+.mod-titoli { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.mod-oggetto { font-size: 14px; font-weight: 500; color: var(--tenue); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.mod-gruppo { display: flex; flex-direction: column; gap: 8px; }
+.mod-campo { display: block; width: 100%; height: 120px; padding: 12px 14px; border: 2px solid transparent; border-radius: 14px; background: var(--sup2); color: var(--testo); font-size: 16px; line-height: 1.45; resize: none; }
+.mod-campo:focus { outline: none; border-color: var(--acc); }
+.mod-campo::placeholder { color: var(--moltotenue); }
+.mod-conta { align-self: flex-end; font-size: 12px; font-weight: 600; color: var(--tenue); font-variant-numeric: tabular-nums; margin-top: -2px; }
+.mod-conta.avviso { color: var(--avv-testo); }
+.mod-spunti { display: flex; flex-wrap: wrap; gap: 8px; }
+.mod-spunto { height: 36px; padding: 0 14px; border: none; border-radius: 999px; background: var(--sup2); color: var(--testo); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.mod-spunto:hover { filter: brightness(.96); }
+.mod-etichetta { font-size: 15px; font-weight: 700; }
+.mod-tutto { font-size: 14px; font-weight: 500; color: var(--tenue); }
+.mod-parti { display: flex; flex-direction: column; max-height: 288px; overflow-y: auto; border-radius: 12px; }
+.mod-parte { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 8px; border: none; border-radius: 12px; background: none; color: var(--testo); text-align: left; width: 100%; flex-shrink: 0; }
+.mod-parte:hover { background: var(--fondo); }
+.mod-parte[aria-checked="true"] .nl-casella { background: var(--acc); border-color: var(--acc); }
+.mod-parte[aria-checked="true"] .nl-casella svg.icona { opacity: 1; }
+.mod-n { width: 24px; height: 24px; border-radius: 999px; background: var(--m-tenue); color: var(--m-testo); font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.mod-parte .t { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-riepilogo { background: var(--fondo-blocco); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.mod-riepilogo[hidden] { display: none; }
+.mod-costo { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mod-riga-riep { font-size: 14px; font-weight: 500; color: var(--tenue); }
+.mod-motivo { font-size: 14px; font-weight: 600; color: var(--avv-testo); }
+.mod-sotto:empty { display: none; }
+
+/* Spenti con la loro frase (§44.1): opacità 0,55. */
+.pillola-azione.mod-pillola:disabled { color: var(--testo); opacity: .55; }
+.pulsante[data-perche]:disabled { opacity: .55; }
+.pulsante.testo[data-perche]:disabled { color: var(--acc-tenue-testo); text-decoration: none; }
+.pulsante.testo.mod-testo-icona { gap: 8px; }
+.pulsante.testo.mod-testo-icona svg.icona { width: 18px; height: 18px; }
+.tendina button.con-icona { display: flex; align-items: center; gap: 10px; }
+.tendina button.con-icona > svg.icona { width: 18px; height: 18px; flex-shrink: 0; }
+.tendina button.con-frase { height: auto; min-height: 42px; padding: 6px 12px; }
+.tendina button.con-frase:disabled { color: var(--testo); opacity: .55; }
+.tendina .testi-voce { display: flex; flex-direction: column; gap: 1px; }
+.tendina .testi-voce .f { font-size: 13px; font-weight: 500; color: var(--tenue); }
+
+/* §44.3 La scheda della modifica: sta modificando, errore, nota. */
+.mod-posto { display: flex; flex-direction: column; }
+.mod-posto:empty { display: none; }
+.mod-scheda { background: var(--sup); box-shadow: var(--ombra); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; animation: entraGiu .25s cubic-bezier(.2, .8, .2, 1); }
+:root[data-tema="scuro"] .mod-scheda { border: 1px solid var(--riga); }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="chiaro"]) .mod-scheda { border: 1px solid var(--riga); } }
+.mod-riga { display: flex; align-items: center; gap: 12px; }
+.mod-testi { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.etichetta.mod-sto { color: var(--acc); }
+.mod-frase { font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.mod-barra > span { transition-duration: .25s; }
+.mod-conferma { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; font-size: 15px; font-weight: 700; }
+.mod-conferma .pulsante.testo { padding: 0 8px; }
+.mod-scheda.errore { background: var(--avv-tenue); color: var(--avv-testo); box-shadow: none; border: none; }
+.mod-scheda.errore .pulsante.testo.tenue-testo { color: var(--avv-testo); }
+.sch-nota.mod-nota { animation: entraGiu .25s cubic-bezier(.2, .8, .2, 1); }
+.mod-nota-riga { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
+.mod-nota-riga > svg.icona { flex-shrink: 0; margin-top: 1px; }
+.mod-nota-riga p { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.tondo.mod-nota-chiudi { width: 32px; height: 32px; background: transparent; color: var(--avv-testo); margin: -6px -8px -6px 0; }
+.tondo.mod-nota-chiudi svg.icona { width: 18px; height: 18px; }
+
+/* Le parti cambiate, per questa visita: filo accento di 3 px a sinistra ed etichetta CAMBIATA. */
+.mod-cambiata-t { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--acc); flex-shrink: 0; white-space: nowrap; }
+.mod-titolo-cambiata { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; }
+.sch-parte.mod-cambiata, .sim-domanda.mod-cambiata { box-shadow: inset 3px 0 0 var(--acc), var(--ombra); }
+.rs-parte.mod-cambiata, .testo-lezione section.mod-cambiata { border-left: 3px solid var(--acc); padding-left: 14px; margin-left: -17px; }
+.capitolo.mod-cambiata { box-shadow: inset 3px 0 0 var(--acc); padding-left: 10px; }
+.pillola.mod-ricarica { align-self: flex-start; height: 40px; padding: 0 14px; font-size: 14px; }
+.pillola.mod-ricarica svg.icona { width: 18px; height: 18px; }
+
+/* §44.6 Il riassunto più vecchio dello schema. */
+.mod-vecchio { background: var(--avv-tenue); color: var(--avv-testo); border-radius: 18px; padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 15px; font-weight: 600; line-height: 1.35; }
+.mod-vecchio > span { flex: 1 1 220px; min-width: 0; }
+.mod-vecchio .pulsante.testo { color: var(--avv-testo); font-weight: 800; text-decoration: underline; padding: 0 6px; }
+
+/* §44.4 Correggi a mano: barra ferma sopra il testo, ogni testo un campo che cresce. */
+.mod-barra-correggi { position: sticky; top: 12px; z-index: 6; display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; min-height: 56px; padding: 6px 8px 6px 16px; border-radius: 16px; background: var(--sup2); box-shadow: var(--ombra-rilievo); }
+:root[data-tema="scuro"] .mod-barra-correggi { border: 1px solid var(--riga); }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="chiaro"]) .mod-barra-correggi { border: 1px solid var(--riga); } }
+.mod-correggi-t { font-size: 15px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.mod-barra-correggi .spazio { flex-grow: 1; }
+.pulsante.pieno.mod-salva { height: 44px; border-radius: 14px; padding: 0 20px; font-size: 15px; box-shadow: none; }
+.mod-correggendo .sch-griglia { grid-template-columns: minmax(0, 672px); justify-content: center; }
+.mod-correggi-parte { padding: 24px 28px; }
+.mod-correggi-parte .sch-testa-parte { margin-right: 0; flex-wrap: nowrap; align-items: flex-start; }
+.mod-correggi-parte .sch-num { margin-top: 10px; }
+.mod-correggi-blocco { gap: 8px; }
+.mod-correggi-blocco .sch-foto img { max-height: 260px; }
+.mod-correggi-campo {
+  display: block; width: 100%; min-height: 44px; padding: 8px 10px; border: 1.5px solid var(--bordo); border-radius: 10px; background: var(--sup); color: var(--testo);
+  font-size: 16px; font-weight: 400; line-height: 1.5; resize: none; overflow: hidden; overflow-wrap: anywhere;
+}
+.mod-correggi-campo:focus { outline: none; border-color: var(--acc); }
+.mod-correggi-campo.mod-titolo { font-weight: 800; }
+.mod-correggi-campo.mod-titolo-parte, .mod-correggi-campo.mod-titolo-blocco { font-weight: 700; }
+.mod-correggi-campo.mod-didascalia { font-size: 16px; font-weight: 600; }
+.mod-dal-prof { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--avv-testo); }
+.mod-dal-prof svg.icona { width: 16px; height: 16px; }
+.mod-tabella { display: grid; gap: 6px; }
+.mod-correggi-rs { gap: 24px; }
+.mod-correggi-rs .rs-parte { gap: 8px; max-width: none; }
+.mod-errore-correggi:empty { display: none; }
+@container schema (max-width: 479.98px) {
+  .mod-tabella { grid-template-columns: minmax(0, 1fr) !important; }
+  .mod-correggi-parte { padding: 18px 16px; }
+}
 
 /* ------------------------------------------------------------------ Movimento */
 

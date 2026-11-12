@@ -29,6 +29,8 @@
     tempoSalvato: 10000, // §36.3: il tempo della verifica si tiene sul computer ogni 10 secondi
     attesaLunga: 15000,  // §34: dopo 15 secondi si dice che ci vuole ancora poco
     fermoEsito: 300,     // §35.2: i tre esiti non rispondono per i primi 300 ms
+    modifica: 4000,      // §44.3: mentre una modifica lavora si chiede ogni 4 secondi
+    stimaModifica: 400,  // §44.2: la stima 400 ms dopo l'ultimo cambiamento del campo o delle parti
   }, window.LectioTempi || {});
 
   const S = {
@@ -66,6 +68,7 @@
       if (S.prova && S.forzaSenzaRete) S.senzaRete = true; // solo la foto 'senza rete'
       if (prima !== S.senzaRete) {
         A.disegnaStato();
+        if (A.reteModifiche) A.reteModifiche();
         if (!S.senzaRete && A.dopoRitornoRete) A.dopoRitornoRete();
       }
       if (r.stato === 401 && r.dati && (r.dati.codice === 'non_autorizzato' || r.dati.codice === 'errore' || r.dati.codice === 'non_abbinato')) {
@@ -155,6 +158,9 @@
     riassunto: 'M21 6H3 M17 10H3 M21 14H3 M17 18H3',
     // §42: cartella a contorno (Feather "folder", licenza MIT).
     cartella: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z',
+    // §44.7: Modifica e Torna a prima.
+    matita: 'M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z',
+    torna: 'M1 4v6h6 M3.51 15a9 9 0 1 0 2.13-9.36L1 10',
   };
   const PIENE = {
     play: 'M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z',
@@ -419,17 +425,38 @@
 
   // --- Navigazione -----------------------------------------------------------------------------
 
+  /**
+   * §44.4: una pagina con cambiamenti non salvati (Correggi a mano) mette S.guardia = { hash, chiedi }: prima di
+   * uscire si chiede ("Lasciare le correzioni?"). Promise<true> = si può uscire.
+   */
+  A.puoiUscire = async function () {
+    const g = S.guardia;
+    if (!g) return true;
+    const ok = await g.chiedi();
+    if (ok && S.guardia === g) S.guardia = null;
+    return ok;
+  };
+  /** Esegue `fai` subito se non c'è niente da salvare, altrimenti dopo il sì. */
+  function dopoLaGuardia(fai) {
+    if (!S.guardia) { fai(); return; }
+    A.puoiUscire().then((ok) => { if (ok) fai(); });
+  }
+
   A.vai = function (hash) {
-    if (location.hash === hash) {
-      A.disegna();
-      return;
-    }
-    location.hash = hash;
+    dopoLaGuardia(() => {
+      if (location.hash === hash) {
+        A.disegna();
+        return;
+      }
+      location.hash = hash;
+    });
   };
 
   A.indietro = function () {
-    if (S.storia.length > 1) history.back();
-    else A.vai('#oggi');
+    dopoLaGuardia(() => {
+      if (S.storia.length > 1) history.back();
+      else A.vai('#oggi');
+    });
   };
 
   A.disegna = function () {
@@ -449,6 +476,8 @@
     S.materiaAperta = null;
     clearTimeout(S.timerPagina);
     S.aggiornaPagina = null;
+    S.guardia = null;
+    S.escPagina = null;
     A.chiudiTuttiIVeli();
     A.disegnaMenu();
     const giro = ++S.giro;
@@ -475,7 +504,18 @@
     if (A.visitaDopoDisegno) A.visitaDopoDisegno();
   };
 
-  window.addEventListener('hashchange', () => { if (S.dom.scorre) A.disegna(); });
+  window.addEventListener('hashchange', () => {
+    if (!S.dom.scorre) return;
+    // Indietro del mouse o della tastiera con correzioni non salvate: si resta qui finché non si sceglie (§44.4).
+    const g = S.guardia;
+    if (g && location.hash !== g.hash) {
+      const voluto = location.hash;
+      history.replaceState(null, '', g.hash);
+      A.puoiUscire().then((ok) => { if (ok) location.replace(voluto); });
+      return;
+    }
+    A.disegna();
+  });
 
   // --- Fogli dal basso e finestre al centro -----------------------------------------------------
 
@@ -581,6 +621,12 @@
     // Il velo in cima può tenersi la tastiera (Ripasso lampo: Spazio, 1, 2, 3; "Non ho capito": niente tasti del lettore).
     if (S.velo.length && S.velo[S.velo.length - 1].tasti) {
       S.velo[S.velo.length - 1].tasti(e);
+      return;
+    }
+    // §44.4: in Correggi a mano Esc vale Annulla.
+    if (e.key === 'Escape' && !S.velo.length && S.escPagina) {
+      e.preventDefault();
+      S.escPagina();
       return;
     }
     if (A.tastoLettore) A.tastoLettore(e);

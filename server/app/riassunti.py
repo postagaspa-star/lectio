@@ -92,7 +92,8 @@ class PreparazioneRiassunto:
         self.id = riassunto_id
         with db.aperta(ctx.settings.db_path) as conn:
             r = conn.execute(
-                "SELECT r.*, s.titolo AS schema_titolo, s.argomento, s.contenuto AS schema_contenuto, m.nome AS materia_nome, m.prof AS materia_prof"
+                "SELECT r.*, s.titolo AS schema_titolo, s.argomento, s.contenuto AS schema_contenuto, s.cambiato_il AS schema_cambiato_il,"
+                " m.nome AS materia_nome, m.prof AS materia_prof"
                 " FROM riassunti r JOIN schemi s ON s.id = r.schema_id JOIN materie m ON m.id = r.materia_id WHERE r.id = ?",
                 (riassunto_id,)).fetchone()
         if r is None:
@@ -149,9 +150,11 @@ class PreparazioneRiassunto:
         nota = "Riassunto di prova: testo preso pari pari dallo schema. Serve la chiave Mistral per quello vero." if not self.ctx.testo.a_pagamento else None
         titolo = stile.ripulisci(_pulito(riveduto.get("titolo"))[:120]) or f"Riassunto: {titolo_schema}"
         with db.aperta(self.ctx.settings.db_path) as conn, db.transazione(conn):
-            cur = conn.execute("UPDATE riassunti SET stato = 'pronto', frase = NULL, errore = NULL, nota = ?, titolo = ?, parole = ?, contenuto = ?, pronto_il = ?"
-                               " WHERE id = ? AND stato = 'in_preparazione'",
-                               (nota, titolo, conta_parole(parti), json.dumps({"parti": parti}, ensure_ascii=False), clock.adesso(), self.id))
+            # schema_del: da quale versione dello schema è scritto (contratto 28.3, "schema_cambiato").
+            cur = conn.execute("UPDATE riassunti SET stato = 'pronto', frase = NULL, errore = NULL, nota = ?, titolo = ?, parole = ?, contenuto = ?, pronto_il = ?,"
+                               " schema_del = ? WHERE id = ? AND stato = 'in_preparazione'",
+                               (nota, titolo, conta_parole(parti), json.dumps({"parti": parti}, ensure_ascii=False), clock.adesso(),
+                                self.riga["schema_cambiato_il"], self.id))
             if cur.rowcount == 0:
                 raise Annullata()
             db.aggiungi_novita(conn, "riassunto_pronto", f"Il riassunto di {self.riga['materia_nome']} è pronto", materia_id=self.riga["materia_id"])

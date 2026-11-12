@@ -107,13 +107,13 @@ internal sealed class Banco : IDisposable
     private readonly CartellaTemporanea cartella = new();
     private readonly ClientLectio client;
 
-    public Banco(Func<HandlerFinto.Richiesta, (int, string)> risponde, bool abbinato = true, string server = Server, string? serverId = null, string? fuori = null, long? cursore = null)
+    public Banco(Func<HandlerFinto.Richiesta, (int, string)> risponde, bool abbinato = true, string server = Server, string? serverId = null, string? fuori = null, long? cursore = null, Action<Configurazione>? config = null)
     {
         Finto = new HandlerFinto(risponde);
         Percorsi = new Percorsi(cartella.Percorso);
         if (abbinato)
         {
-            Archivio.ScriviJson(Percorsi.Config, new Configurazione
+            var c = new Configurazione
             {
                 Server = server,
                 TokenProtetto = Dpapi.Proteggi(Token),
@@ -122,7 +122,9 @@ internal sealed class Banco : IDisposable
                 ServerId = serverId,
                 IndirizzoFuori = fuori,
                 CursoreNovita = cursore,
-            });
+            };
+            config?.Invoke(c);
+            Archivio.ScriviJson(Percorsi.Config, c);
         }
         client = new ClientLectio(Finto);
         Motore = new Motore.Motore(Percorsi, client, () => Adesso);

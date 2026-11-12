@@ -333,23 +333,47 @@
       Object.assign({}, base, { id: 6, argomento: 'La crisi della Repubblica', titolo: 'La crisi della Repubblica', forma: 'auto', livello: 'completo', stato: 'errore', errore: 'Il servizio che scrive i testi non ha risposto. Riprova tra poco.', pronto_il: null, materiali: [10, 7] }),
       Object.assign({}, base, { id: 5, argomento: 'Augusto e il Senato', titolo: 'Augusto e il Senato', forma: 'capitoli', livello: 'essenziale', stato: 'in_preparazione', fase: 'scrittura', fatto: 2, totale: 8, frase: 'Scrivo la parte 2 di 8', pronto_il: null, materiali: [11, 12] }),
       Object.assign({}, base, { id: 4, argomento: 'I ritratti degli imperatori', titolo: 'I ritratti degli imperatori', forma: 'schede', livello: 'essenziale', stato: 'pronto', carte: 0, materiali: [12], contenuto: contenutoOpere() }),
-      Object.assign({}, base, { id: 3, evento_id: 3, argomento: 'L\'Impero romano da Augusto a Nerone', titolo: 'L\'Impero romano da Augusto a Nerone', forma: 'capitoli', livello: 'completo', stato: 'pronto', carte: 12, nota: 'Su Claudio e la Britannia i tuoi documenti dicono poco: quella parte è più corta.', contenuto: contenutoStoria() }),
+      Object.assign({}, base, {
+        id: 3, evento_id: 3, argomento: 'L\'Impero romano da Augusto a Nerone', titolo: 'L\'Impero romano da Augusto a Nerone', forma: 'capitoli', livello: 'completo', stato: 'pronto', carte: 12,
+        nota: 'Su Claudio e la Britannia i tuoi documenti dicono poco: quella parte è più corta.', contenuto: contenutoStoria(),
+        creato_il: '2026-10-23T17:00:00+01:00', pronto_il: '2026-10-23T17:05:00+01:00',
+        // §44.8: lo schema d'esempio è già stato modificato una volta ("Aggiungi le date"): Torna a prima c'è.
+        _vdp: { ruolo: 'prima', perche: 'modifica', richiesta: 'Aggiungi le date', quando: '2026-10-24T17:30:00+01:00' },
+        _prima: { titolo: 'L\'Impero romano da Augusto a Nerone', contenuto: storiaSenzaDate(), carte: 12 },
+      }),
     ];
+  }
+
+  /** La versione di prima dello schema d'esempio: nei passaggi di Tiberio non c'erano gli anni. */
+  function storiaSenzaDate() {
+    const c = contenutoStoria();
+    const b = c.sezioni[1].blocchi.find((x) => x.tipo === 'passaggi');
+    b.voci = ['Tiberio non si fida del senato', 'Si ritira a Capri', 'Roma resta in mano a Seiano', 'Scopre la congiura e Seiano viene ucciso'];
+    return c;
+  }
+
+  /** Le modifiche già fatte (contratto §28): quella dello schema 3, finita da qualche giorno. */
+  function modificheIniziali() {
+    return [{
+      id: 1, tipo: 'schema', oggetto_id: 3, materia_id: 1, richiesta: 'Aggiungi le date', parti: [2], stato: 'pronta', fase: null, fatto: 1, totale: 1, frase: null,
+      errore: null, nota: null, cambiate: [2], stima_eur: 0.02, creata_il: '2026-10-24T17:25:00+01:00', pronta_il: '2026-10-24T17:30:00+01:00',
+    }];
   }
 
   function riassunti() {
     const base = { schema_id: 3, materia_id: 1, titolo: 'L\'Impero romano da Augusto a Nerone', frase: null, errore: null, nota: null, stima_eur: 0.01, creato_il: '2026-10-26T18:00:00+01:00', pronto_il: '2026-10-26T18:01:00+01:00' };
     return [
       Object.assign({}, base, {
-        id: 4, forma: 'misto', stato: 'pronto', parole: 212, nota: 'Su Claudio i tuoi documenti dicono poco.',
+        id: 4, forma: 'misto', stato: 'pronto', parole: 212, nota: 'Su Claudio i tuoi documenti dicono poco.', schema_cambiato: false,
         contenuto: { parti: [
           { titolo: 'Da Augusto a Tiberio', paragrafi: ['Nel 27 avanti Cristo Ottaviano diventa **Augusto**. Non si fa chiamare re e tiene in piedi le istituzioni della Repubblica, ma il potere vero è suo.', 'Tiberio, il figlio adottivo, controlla bene i conti. Dal 26 vive a Capri e lascia Roma a Seiano.'], punti: ['Principato: istituzioni repubblicane, potere di uno solo.', 'I processi per **lesa maestà** riempiono Roma di paura.', 'Nel 31 Tiberio scopre la congiura di Seiano.'] },
           { titolo: 'Caligola e Claudio', paragrafi: ['Caligola umilia il senato e viene ucciso dai pretoriani nel 41. Claudio sembra debole, ma organizza bene lo Stato.'], punti: ['Claudio crea uffici con i liberti.', 'Nel 43 conquista la **Britannia**.'] },
           { titolo: 'Nerone', paragrafi: ['Nerone parte bene con Seneca. Dopo l\'incendio del 64 accusa i cristiani. Nel 68 il senato lo dichiara nemico pubblico e lui si uccide.'], punti: ['Con lui finisce la dinastia giulio-claudia.'] },
         ] },
       }),
+      // Scritto prima che lo schema cambiasse (§44.6): "Lo schema è cambiato dopo questo riassunto."
       Object.assign({}, base, {
-        id: 5, forma: 'punti', stato: 'pronto', parole: 96,
+        id: 5, forma: 'punti', stato: 'pronto', parole: 96, schema_cambiato: true, creato_il: '2026-10-24T09:00:00+01:00', pronto_il: '2026-10-24T09:01:00+01:00',
         contenuto: { parti: [
           { titolo: 'Augusto', paragrafi: [], punti: ['27 avanti Cristo: Ottaviano diventa **Augusto**.', 'Si presenta come princeps, non come re.', 'Comanda l\'esercito e sceglie i governatori.'] },
           { titolo: 'Dopo Augusto', paragrafi: [], punti: ['Tiberio: conti in ordine, processi, Capri, Seiano.', 'Caligola: padrone assoluto, ucciso nel 41.', 'Claudio: uffici con i liberti, Britannia nel 43.', 'Nerone: incendio del 64, si uccide nel 68.'] },
@@ -460,16 +484,19 @@
       lampo: o.vuoto ? [] : carteLampo(),
       lampo_domani: o.vuoto ? 0 : 3,
       chiarimenti: [],
+      modifiche: o.vuoto ? [] : modificheIniziali(),
       prossimoId: 200,
       chiamate: [],
     };
-    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare', 'schemi', 'riassunti', 'simulate']) s[k] = spostaDate(s[k], giorni);
+    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare', 'schemi', 'riassunti', 'simulate', 'modifiche']) s[k] = spostaDate(s[k], giorni);
+    // §44.8: una modifica finta lavora 2 secondi, poi è pronta (i test la accorciano).
+    const durataModifica = o.tempoModifica != null ? o.tempoModifica : 2000;
 
     const materia = (id) => s.materie.find((m) => m.id === Number(id)) || null;
     const breve = (m) => (m ? { id: m.id, nome: m.nome, colore: m.colore } : null);
     const listaLezione = (l) => {
       const c = copia(l);
-      delete c.capitoli; delete c.domande; delete c.testo;
+      delete c.capitoli; delete c.domande; delete c.testo; delete c._prima; delete c._vdp;
       return c;
     };
     const avanza = (l) => {
@@ -597,15 +624,151 @@
     };
     const senzaInterni = (x) => {
       const c = copia(x);
-      delete c._t0;
+      delete c._t0; delete c._prima; delete c._vdp;
       return c;
     };
+
+    // --- Modifiche dopo (contratto §28): modifica finta, versione di prima, correzione a mano ---
+    const LISTA = { lezione: 'lezioni', schema: 'schemi', riassunto: 'riassunti', simulata: 'simulate' };
+    const oggettoDi = (tipo, id) => (s[LISTA[tipo]] || []).find((x) => x.id === Number(id)) || null;
+    const modificaDi = (tipo, id) => s.modifiche.filter((md) => md.tipo === tipo && md.oggetto_id === Number(id)).reduce((u, md) => (!u || md.id > u.id ? md : u), null);
+    const lavora = (md) => !!md && (md.stato === 'in_coda' || md.stato === 'in_preparazione');
+    const modificabile = (tipo, x) => !!x && (tipo === 'lezione' ? x.stato === 'pronta' : tipo === 'simulata' ? ['pronta', 'in_corso', 'corretta'].includes(x.stato) : x.stato === 'pronto');
+    const partiDi = (tipo, x) => {
+      if (!modificabile(tipo, x)) return [];
+      if (tipo === 'schema') return ((x.contenuto && x.contenuto.sezioni) || []).map((z) => ({ n: z.n, titolo: z.titolo }));
+      if (tipo === 'riassunto') return ((x.contenuto && x.contenuto.parti) || []).map((q, i) => ({ n: i + 1, titolo: q.titolo || 'Parte ' + (i + 1) }));
+      if (tipo === 'lezione') return (x.capitoli || []).map((c) => ({ n: c.n, titolo: c.titolo }));
+      return (x.domande || []).map((d) => ({ n: d.n, titolo: d.testo.length > 60 ? d.testo.slice(0, 57) + '…' : d.testo }));
+    };
+    const CAMPI_VERSIONE = { schema: ['titolo', 'contenuto', 'carte'], riassunto: ['titolo', 'contenuto', 'parole'], lezione: ['capitoli', 'domande', 'testo', 'durata_s', 'audio'], simulata: ['stato', 'domande', 'risposte', 'esito', 'iniziata_il', 'consegnata_il'] };
+    const versioneDi = (tipo, x) => Object.fromEntries(CAMPI_VERSIONE[tipo].map((k) => [k, copia(x[k])]));
+    /** Prima di ogni cambiamento la versione di adesso va da parte (§28.2): "Torna a prima". */
+    const mettiDaParte = (tipo, x, perche, richiesta) => {
+      x._prima = versioneDi(tipo, x);
+      x._vdp = { ruolo: 'prima', perche, richiesta: richiesta || null, quando: new Date().toISOString() };
+    };
+    const scambiaVersione = (tipo, x) => {
+      const ora = versioneDi(tipo, x);
+      Object.assign(x, copia(x._prima));
+      x._prima = ora;
+      x._vdp = Object.assign({}, x._vdp, { ruolo: x._vdp.ruolo === 'prima' ? 'dopo' : 'prima', quando: new Date().toISOString() });
+    };
+    const schemaCambiato = (schemaId) => { for (const r of s.riassunti) if (r.schema_id === schemaId) r.schema_cambiato = true; };
+    const DATE_PARTI = {
+      1: ['27 avanti Cristo: Ottaviano diventa **Augusto**.', '14 dopo Cristo: muore Augusto.'],
+      2: ['14: Tiberio diventa imperatore.', '26: si ritira a Capri.', '31: cade Seiano.'],
+      3: ['37: Caligola sale al trono.', '41: i pretoriani lo uccidono e arriva Claudio.', '43: Claudio conquista la Britannia.'],
+      4: ['54: Nerone diventa imperatore.', '64: l\'incendio di Roma.'],
+      5: ['68: Nerone si uccide e finisce la dinastia.'],
+    };
+    /** Il cambiamento finto della parte `n` (in esempio ogni richiesta fa la stessa cosa). */
+    const cambiaFinto = (tipo, x, n) => {
+      if (tipo === 'schema') {
+        const sez = ((x.contenuto && x.contenuto.sezioni) || []).find((z) => z.n === n);
+        if (sez) sez.blocchi.push({ tipo: 'punti', titolo: 'Le date', voci: (DATE_PARTI[n] || ['Le date di questa parte sono nei tuoi appunti.']).slice(), fonti: ['B1'] });
+        schemaCambiato(x.id);
+      } else if (tipo === 'riassunto') {
+        const parte = ((x.contenuto && x.contenuto.parti) || [])[n - 1];
+        if (parte) parte.punti = (parte.punti || []).concat(['Le date da sapere: 14, 26, 31, 41, 54, 68.']);
+        x.parole = (Number(x.parole) || 0) + 9;
+      } else if (tipo === 'lezione') {
+        const t = (x.testo || []).find((z) => z.capitolo === n);
+        if (t) t.paragrafi = ['Riprendiamo questo capitolo con calma, un passo alla volta.'].concat(t.paragrafi || []);
+        x.audio = Object.assign({}, x.audio || {}, { sha256: (Date.now().toString(16) + '0'.repeat(64)).slice(0, 64) });
+        // Il punto di ascolto (§28.1): resta dov'era, ma se era nel capitolo cambiato va al suo inizio.
+        const c = (x.capitoli || []).find((z) => z.n === n);
+        const pos = x.ascolto ? Number(x.ascolto.posizione_s) || 0 : 0;
+        if (c && pos >= c.inizio_s && pos < c.fine_s) x.ascolto = Object.assign({}, x.ascolto, { posizione_s: c.inizio_s, aggiornato_il: new Date().toISOString() });
+      } else {
+        const d = (x.domande || []).find((z) => z.n === n);
+        if (d) d.testo = d.testo.replace(/[?.]\s*$/, '') + ': spiegalo con un esempio.';
+        if (x.stato === 'corretta') Object.assign(x, { stato: 'pronta', risposte: {}, esito: null, iniziata_il: null, consegnata_il: null });
+        else if (x.risposte) delete x.risposte[String(n)];
+      }
+    };
+    const finisciModifica = (md) => {
+      delete md._t0;
+      const x = oggettoDi(md.tipo, md.oggetto_id);
+      const parti = partiDi(md.tipo, x);
+      if (!parti.length) { Object.assign(md, { stato: 'errore', fase: null, frase: null, errore: 'Adesso non si può modificare.' }); return; }
+      // "Tutto": Lectio sceglie da solo; nell'esempio sceglie la parte 2.
+      const n = md.parti.length ? md.parti[0] : (parti.some((q) => q.n === 2) ? 2 : parti[0].n);
+      mettiDaParte(md.tipo, x, 'modifica', md.richiesta);
+      cambiaFinto(md.tipo, x, n);
+      const nota = /crociat/i.test(md.richiesta) ? 'I tuoi documenti non parlano delle crociate: quelle non le ho aggiunte.' : null;
+      Object.assign(md, { stato: 'pronta', fase: null, fatto: md.totale, frase: null, cambiate: [n], nota, pronta_il: new Date().toISOString() });
+    };
+    const avanzaModifica = (md) => {
+      if (!md || !md._t0 || !lavora(md)) return;
+      const passati = Date.now() - md._t0;
+      if (passati >= durataModifica) { finisciModifica(md); return; }
+      const totale = Math.max(1, md.parti.length);
+      const fatto = Math.min(totale - 1, Math.floor(passati / durataModifica * totale));
+      Object.assign(md, { stato: 'in_preparazione', fase: 'scrittura', fatto, totale, frase: 'Riscrivo la parte ' + (md.parti[fatto] || 2) });
+    };
+    const avanzaModificheDi = (tipo, x) => { const md = x && modificaDi(tipo, x.id); if (md) avanzaModifica(md); };
+    /** I campi in più di §28.3: l'ultima modifica, la versione da parte, le parti che si possono cambiare. */
+    const conModifiche = (tipo, x, c) => {
+      const md = modificaDi(tipo, x.id);
+      return Object.assign(c, { modifica: md ? senzaInterni(md) : null, versione_da_parte: x._vdp ? copia(x._vdp) : null, parti_modificabili: partiDi(tipo, x) });
+    };
+    const COSTO_PARTE = { lezione: 0.03, schema: 0.02, riassunto: 0.01, simulata: 0.01 };
+    /** Le regole di POST /api/modifiche e della stima: un errore [stato, dati] oppure quello che serve. */
+    const leggiModifica = (c) => {
+      const tipo = String(c.tipo || '');
+      if (!LISTA[tipo]) return [422, { errore: 'Tipo sconosciuto.', codice: 'non_valido', campo: 'tipo' }];
+      const x = oggettoDi(tipo, c.id);
+      if (!x) return [404, { errore: 'Non c\'è più.', codice: 'non_trovato' }];
+      avanzaModificheDi(tipo, x);
+      const richiesta = String(c.richiesta || '').trim();
+      if (!richiesta || richiesta.length > 600) return [422, { errore: 'Scrivi cosa vuoi cambiare, al massimo 600 caratteri.', codice: 'non_valido', campo: 'richiesta' }];
+      const tutte = partiDi(tipo, x).map((q) => q.n);
+      const parti = Array.isArray(c.parti) ? c.parti.map(Number) : [];
+      if (parti.some((n) => !tutte.includes(n))) return [422, { errore: 'Scegli le parti tra quelle che ci sono.', codice: 'non_valido', campo: 'parti' }];
+      const quante = parti.length || tutte.length || 1;
+      const st = Object.assign(stimaStudio(Math.round(COSTO_PARTE[tipo] * quante * 100) / 100, {}, 1 + Math.ceil(quante / 2), null), { fino_a: !parti.length });
+      return { tipo, x, richiesta, parti, st };
+    };
+    const pulisci = (t) => String(t == null ? '' : t).trim();
+    /** §28.4: dal contenuto mandato contano solo i testi; le voci vuote si tolgono, un blocco senza testo sparisce. */
+    const testiSchema = (orig, nuovo) => {
+      const vecchie = (orig && orig.sezioni) || [];
+      if (!nuovo || !Array.isArray(nuovo.sezioni) || nuovo.sezioni.length !== vecchie.length) return null;
+      const fuori = copia(orig);
+      fuori.sezioni.forEach((z, i) => {
+        const nz = nuovo.sezioni[i] || {};
+        if (typeof z.titolo === 'string' && typeof nz.titolo === 'string') z.titolo = pulisci(nz.titolo);
+        (z.campi || []).forEach((k, j) => { const nk = (nz.campi || [])[j]; if (k && nk && typeof nk.valore === 'string') k.valore = pulisci(nk.valore); });
+        z.blocchi = (z.blocchi || []).map((b, j) => {
+          const nb = (nz.blocchi || [])[j];
+          if (!nb || nb.tipo !== b.tipo) return b;
+          for (const k of ['titolo', 'testo', 'termine', 'didascalia']) if (typeof b[k] === 'string' && typeof nb[k] === 'string') b[k] = pulisci(nb[k]);
+          if (Array.isArray(b.voci) && Array.isArray(nb.voci)) b.voci = nb.voci.map(pulisci).filter(Boolean);
+          if (Array.isArray(b.intestazione) && Array.isArray(nb.intestazione)) b.intestazione = b.intestazione.map((v, k) => (typeof nb.intestazione[k] === 'string' ? pulisci(nb.intestazione[k]) : v));
+          if (Array.isArray(b.righe) && Array.isArray(nb.righe)) b.righe = b.righe.map((r, ri) => r.map((v, ci) => { const t = (nb.righe[ri] || [])[ci]; return typeof t === 'string' ? pulisci(t) : v; }));
+          return b;
+        }).filter((b) => {
+          if (b.tipo === 'paragrafo' || b.tipo === 'prof') return !!pulisci(b.testo);
+          if (b.tipo === 'punti' || b.tipo === 'passaggi') return (b.voci || []).length > 0;
+          if (b.tipo === 'definizione') return !!(pulisci(b.termine) || pulisci(b.testo));
+          return true;
+        });
+      });
+      return fuori;
+    };
+    const contaParole = (c) => ((c && c.parti) || []).reduce((n, q) => n + (q.paragrafi || []).concat(q.punti || []).join(' ').split(/\s+/).filter(Boolean).length, 0);
+    const titoloValido = (t) => { const x = String(t || '').replace(/\s+/g, ' ').trim(); return x && x.length <= 120 ? x : null; };
+    const ERRORE_TITOLO = [422, { errore: 'Il titolo deve avere da 1 a 120 caratteri.', codice: 'non_valido', campo: 'titolo' }];
+
     const riassuntiDi = (x) => (x.stato === 'pronto' ? { stima_eur: 0.01, fatti: s.riassunti.filter((r) => r.schema_id === x.id).map((r) => ({ id: r.id, forma: r.forma, stato: r.stato })) } : null);
-    const schemaPerApi = (x) => Object.assign(senzaInterni(x), { riassunti: riassuntiDi(x) });
+    const schemaPerApi = (x) => conModifiche('schema', x, Object.assign(senzaInterni(x), { riassunti: riassuntiDi(x) }));
     const schemaInLista = (x) => Object.assign(senzaInterni(x), { contenuto: null, riassunti: null });
-    const riassuntoPerApi = senzaInterni;
+    const riassuntoPerApi = (r) => conModifiche('riassunto', r, Object.assign(senzaInterni(r), { schema_cambiato: !!r.schema_cambiato }));
     /** Le risposte attese e le correzioni si vedono solo a verifica corretta (contratto §21). */
-    const simulataPerApi = senzaInterni;
+    const simulataPerApi = (x) => conModifiche('simulata', x, senzaInterni(x));
+    const lezionePerApi = (l) => conModifiche('lezione', l, senzaInterni(l));
+    const perApi = { schema: schemaPerApi, riassunto: riassuntoPerApi, simulata: simulataPerApi, lezione: lezionePerApi };
     const simulataInLista = (x) => {
       const c = senzaInterni(x);
       delete c.domande;
@@ -847,9 +1010,8 @@
         if (metodo === 'DELETE') { s.lezioni = s.lezioni.filter((x) => x !== l); return [200, { ok: true }]; }
         if (metodo === 'PATCH') { if (corpo.domande_saltabili != null) l.domande_saltabili = !!corpo.domande_saltabili; return [200, listaLezione(l)]; }
         avanza(l);
-        const c = copia(l);
-        delete c._t0;
-        return [200, c];
+        avanzaModificheDi('lezione', l);
+        return [200, lezionePerApi(l)];
       }
       if ((m = /^\/server\/api\/lezioni\/(\d+)\/ascolto$/.exec(p))) {
         const l = s.lezioni.find((x) => x.id === Number(m[1]));
@@ -922,6 +1084,7 @@
         if (!x) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
         if (metodo === 'DELETE') { s.schemi = s.schemi.filter((y) => y !== x); return [200, { ok: true }]; }
         avanzaSchema(x);
+        avanzaModificheDi('schema', x);
         return [200, schemaPerApi(x)];
       }
       // --- Riassunti (§26) ---
@@ -936,6 +1099,100 @@
         if (!r) return [404, { errore: 'Questo riassunto non c\'è più.', codice: 'non_trovato' }];
         if (metodo === 'DELETE') { s.riassunti = s.riassunti.filter((y) => y !== r); return [200, { ok: true }]; }
         avanzaRiassunto(r);
+        avanzaModificheDi('riassunto', r);
+        return [200, riassuntoPerApi(r)];
+      }
+      // --- Modifiche dopo (§28) ---
+      if (p === '/server/api/modifiche/stima' && metodo === 'POST') {
+        const v = leggiModifica(corpo || {});
+        return Array.isArray(v) ? v : [200, v.st];
+      }
+      if (p === '/server/api/modifiche' && metodo === 'POST') {
+        const v = leggiModifica(corpo || {});
+        if (Array.isArray(v)) return v;
+        if (!modificabile(v.tipo, v.x) || lavora(modificaDi(v.tipo, v.x.id))) return [409, { errore: 'Adesso non si può modificare: aspetta che finisca quello che sta facendo.', codice: 'conflitto' }];
+        if (!v.st.consentita) return [402, { errore: v.st.motivo, codice: 'tetto_raggiunto' }];
+        const md = {
+          id: s.prossimoId++, tipo: v.tipo, oggetto_id: v.x.id, materia_id: v.x.materia_id, richiesta: v.richiesta, parti: v.parti, stato: 'in_coda', fase: null, fatto: 0,
+          totale: Math.max(1, v.parti.length), frase: null, errore: null, nota: null, cambiate: [], stima_eur: v.st.costo_eur, creata_il: new Date().toISOString(), pronta_il: null, _t0: Date.now(),
+        };
+        s.modifiche.push(md);
+        return [201, senzaInterni(md)];
+      }
+      if (p === '/server/api/modifiche' && metodo === 'GET') {
+        s.modifiche.forEach(avanzaModifica);
+        const attive = qs.get('attive') === '1';
+        return [200, s.modifiche.filter((md) => !attive || lavora(md)).map(senzaInterni)];
+      }
+      if ((m = /^\/server\/api\/modifiche\/(\d+)\/(annulla|riprova)$/.exec(p)) && metodo === 'POST') {
+        const md = s.modifiche.find((y) => y.id === Number(m[1]));
+        if (!md) return [404, { errore: 'Questa modifica non c\'è più.', codice: 'non_trovato' }];
+        avanzaModifica(md);
+        if (m[2] === 'annulla') {
+          if (!lavora(md) && md.stato !== 'errore') return [409, { errore: 'Questa modifica è già finita.', codice: 'conflitto' }];
+          md.stato = 'annullata';
+          delete md._t0;
+        } else {
+          if (md.stato !== 'errore') return [409, { errore: 'Questa modifica non è ferma.', codice: 'conflitto' }];
+          Object.assign(md, { stato: 'in_coda', errore: null, _t0: Date.now() });
+        }
+        return [200, senzaInterni(md)];
+      }
+      if ((m = /^\/server\/api\/modifiche\/(\d+)$/.exec(p))) {
+        const md = s.modifiche.find((y) => y.id === Number(m[1]));
+        if (!md) return [404, { errore: 'Questa modifica non c\'è più.', codice: 'non_trovato' }];
+        avanzaModifica(md);
+        return [200, senzaInterni(md)];
+      }
+      if ((m = /^\/server\/api\/(lezioni|schemi|riassunti|simulate)\/(\d+)\/scambia-versione$/.exec(p)) && metodo === 'POST') {
+        const tipo = { lezioni: 'lezione', schemi: 'schema', riassunti: 'riassunto', simulate: 'simulata' }[m[1]];
+        const x = oggettoDi(tipo, m[2]);
+        if (!x) return [404, { errore: 'Non c\'è più.', codice: 'non_trovato' }];
+        avanzaModificheDi(tipo, x);
+        if (!x._vdp || !x._prima) return [409, { errore: 'Non c\'è una versione messa da parte.', codice: 'conflitto' }];
+        if (lavora(modificaDi(tipo, x.id))) return [409, { errore: 'Aspetta che finisca la modifica.', codice: 'conflitto' }];
+        scambiaVersione(tipo, x);
+        if (tipo === 'schema') schemaCambiato(x.id);
+        return [200, perApi[tipo](x)];
+      }
+      if ((m = /^\/server\/api\/schemi\/(\d+)\/testo$/.exec(p)) && metodo === 'PUT') {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
+        avanzaModificheDi('schema', x);
+        if (x.stato !== 'pronto' || lavora(modificaDi('schema', x.id))) return [409, { errore: 'Adesso non si può correggere.', codice: 'conflitto' }];
+        const titolo = titoloValido((corpo || {}).titolo);
+        if (!titolo) return ERRORE_TITOLO;
+        const nuovo = testiSchema(x.contenuto, (corpo || {}).contenuto);
+        if (!nuovo) return [422, { errore: 'La forma dello schema non torna.', codice: 'non_valido', campo: 'contenuto' }];
+        mettiDaParte('schema', x, 'a_mano', null);
+        x.titolo = titolo;
+        x.contenuto = nuovo;
+        schemaCambiato(x.id);
+        return [200, schemaPerApi(x)];
+      }
+      if ((m = /^\/server\/api\/riassunti\/(\d+)\/testo$/.exec(p)) && metodo === 'PUT') {
+        const r = s.riassunti.find((y) => y.id === Number(m[1]));
+        if (!r) return [404, { errore: 'Questo riassunto non c\'è più.', codice: 'non_trovato' }];
+        avanzaModificheDi('riassunto', r);
+        if (r.stato !== 'pronto' || lavora(modificaDi('riassunto', r.id))) return [409, { errore: 'Adesso non si può correggere.', codice: 'conflitto' }];
+        const titolo = titoloValido((corpo || {}).titolo);
+        if (!titolo) return ERRORE_TITOLO;
+        const nuove = (corpo || {}).contenuto && corpo.contenuto.parti;
+        const vecchie = (r.contenuto && r.contenuto.parti) || [];
+        if (!Array.isArray(nuove) || nuove.length !== vecchie.length) return [422, { errore: 'Le parti del riassunto non tornano.', codice: 'non_valido', campo: 'contenuto' }];
+        mettiDaParte('riassunto', r, 'a_mano', null);
+        r.titolo = titolo;
+        r.contenuto = Object.assign({}, r.contenuto, {
+          parti: vecchie.map((v, i) => {
+            const n = nuove[i] || {};
+            return {
+              titolo: typeof v.titolo === 'string' && typeof n.titolo === 'string' ? pulisci(n.titolo) : v.titolo,
+              paragrafi: (Array.isArray(n.paragrafi) ? n.paragrafi : v.paragrafi || []).map(pulisci).filter(Boolean),
+              punti: (Array.isArray(n.punti) ? n.punti : v.punti || []).map(pulisci).filter(Boolean),
+            };
+          }),
+        });
+        r.parole = contaParole(r.contenuto);
         return [200, riassuntoPerApi(r)];
       }
       // --- Non ho capito (§19) ---
@@ -1007,6 +1264,7 @@
           return [200, simulataPerApi(x)];
         }
         avanzaSimulata(x);
+        avanzaModificheDi('simulata', x);
         return [200, simulataPerApi(x)];
       }
       // Il programma, in esempio: niente scaricamenti e niente tasti; il lettore usa un orologio finto.

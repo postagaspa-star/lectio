@@ -52,6 +52,7 @@
     A.mandaCode();
     if (S.motore.tutorial_visto === false) A.avviaVisita(true);
     else if (S.motore.tutorial_novita_visto === false) A.avviaVisita(false, 'novita');
+    else if (S.motore.novita_nuove === true) A.avviaVisita(false, 'ultime');
   };
 
   // --- Primo avvio: collegare il computer al server di casa (§10) -------------------------------
@@ -111,7 +112,11 @@
     if (S.esempio) return;
     const voci = Array.isArray(lista) ? lista : [];
     for (const v of voci) if (v.lezione_id && A.dimenticaDettaglio) A.dimenticaDettaglio(v.lezione_id);
-    const pronta = voci.find((v) => ['lezione_pronta', 'schema_pronto', 'riassunto_pronto', 'simulata_pronta', 'simulata_corretta'].includes(v.tipo));
+    // §44.3 Una modifica finita o fermata: la pagina che la segue richiede subito e dà lei l'avviso ("Fatto: …").
+    const modifiche = voci.some((v) => v.tipo === 'modifica_pronta' || v.tipo === 'modifica_errore');
+    const seguita = modifiche && A.novitaModifica ? A.novitaModifica() : false;
+    const pronta = voci.find((v) => ['lezione_pronta', 'schema_pronto', 'riassunto_pronto', 'simulata_pronta', 'simulata_corretta'].includes(v.tipo))
+      || (seguita ? null : voci.find((v) => v.tipo === 'modifica_pronta'));
     if (pronta && document.hasFocus()) A.avviso(pronta.testo || 'È pronto.');
     A.aggiornaMotore();
     A.caricaMaterie();
@@ -298,6 +303,103 @@
       case 'simulata-corso': await vai('#simulata/3', '.sim-domanda'); break;
       case 'simulata-consegna': await vai('#simulata/3', '.sim-domanda'); document.querySelector('[data-azione="consegna"]').click(); await aspetta('[data-consegna="conto"]'); break;
       case 'simulata-risultati': await vai('#simulata/4', '.sim-testata'); break;
+      // §44 Modifica, Correggi a mano, Torna a prima.
+      case 'modifica-foglio': {
+        await vai('#schema/3', '.sch-parte');
+        document.querySelector('[data-visita="modifica"]').click();
+        await aspetta('[data-campo="richiesta"]');
+        const c = document.querySelector('[data-campo="richiesta"]');
+        c.value = 'Aggiungi le date di ogni imperatore';
+        c.dispatchEvent(new Event('input'));
+        document.querySelector('[data-dove="io"]').click();
+        document.querySelector('.mod-parte[data-parte="2"]').click();
+        document.querySelector('.mod-parte[data-parte="3"]').click();
+        await aspetta('[data-riep="costo"]');
+        await aspetta('[data-azione="manda-modifica"]:not(:disabled)');
+        break;
+      }
+      case 'modifica-lavoro': case 'modifica-errore': {
+        A.T.modifica = 1e9;
+        const errore = scena === 'modifica-errore';
+        server.stato.modifiche.push({
+          id: 50, tipo: 'schema', oggetto_id: 3, materia_id: 1, richiesta: 'Aggiungi le date di ogni imperatore', parti: [2, 3], stato: errore ? 'errore' : 'in_preparazione', fase: errore ? null : 'scrittura',
+          fatto: 1, totale: 2, frase: errore ? null : 'Riscrivo la parte 3', errore: errore ? 'Il servizio che scrive i testi non ha risposto. Riprova tra poco.' : null, nota: null, cambiate: [], stima_eur: 0.04, creata_il: new Date().toISOString(), pronta_il: null,
+        });
+        await vai('#schema/3', '[data-modifica="' + (errore ? 'errore' : 'lavoro') + '"]');
+        break;
+      }
+      case 'modifica-pronta': {
+        A.T.modifica = 1e9;
+        const md = { id: 51, tipo: 'schema', oggetto_id: 3, materia_id: 1, richiesta: 'Aggiungi le date delle crociate', parti: [], stato: 'in_preparazione', fase: 'scrittura', fatto: 0, totale: 1, frase: 'Riscrivo la parte 1', errore: null, nota: null, cambiate: [], stima_eur: 0.06, creata_il: new Date().toISOString(), pronta_il: null };
+        server.stato.modifiche.push(md);
+        await vai('#schema/3', '[data-modifica="lavoro"]');
+        md._t0 = Date.now() - 60000; // al prossimo giro il server finto la finisce
+        A.novitaModifica();
+        await aspetta('[data-modifica="nota"]');
+        await aspetta('.mod-cambiata');
+        // Subito (non a scorrimento morbido), così la foto prende la parte cambiata e non un punto a metà strada.
+        S.dom.scorre.style.scrollBehavior = 'auto';
+        S.dom.scorre.scrollTop += document.querySelector('.mod-cambiata').getBoundingClientRect().top - 24;
+        await new Promise((r) => setTimeout(r, 200));
+        break;
+      }
+      case 'correggi': {
+        await vai('#schema/3', '.sch-parte');
+        document.querySelector('[data-azione="puntini"]').click();
+        await aspetta('[data-azione="correggi-a-mano"]');
+        document.querySelector('[data-azione="correggi-a-mano"]').click();
+        await aspetta('[data-barra="correggi"]');
+        await new Promise((r) => setTimeout(r, 100));
+        break;
+      }
+      case 'schema-menu': {
+        await vai('#schema/3', '.sch-parte');
+        document.querySelector('.sch-colonna [data-azione="puntini"]').click();
+        await aspetta('[data-azione="correggi-a-mano"]');
+        break;
+      }
+      case 'riassunto-correggi': {
+        await vai('#riassunto/4', '[data-riassunto]');
+        document.querySelector('[data-azione="puntini"]').click();
+        await aspetta('[data-azione="correggi-a-mano"]');
+        document.querySelector('[data-azione="correggi-a-mano"]').click();
+        await aspetta('[data-barra="correggi"]');
+        await new Promise((r) => setTimeout(r, 100));
+        break;
+      }
+      case 'riassunto-vecchio': await vai('#riassunto/5', '[data-vecchio]'); break;
+      case 'lettore-modifica': {
+        A.T.modifica = 1e9;
+        server.stato.modifiche.push({ id: 52, tipo: 'lezione', oggetto_id: 12, materia_id: 1, richiesta: 'Spiega meglio Seiano', parti: [2], stato: 'in_coda', fase: null, fatto: 0, totale: 1, frase: null, errore: null, nota: null, cambiate: [], stima_eur: 0.05, creata_il: new Date().toISOString(), pronta_il: null });
+        await vai('#lettore/12', '.lettore-pagina');
+        await A.ascolta(12, { posizione: 462 });
+        await aspetta('[data-modifica="lavoro"]');
+        A.lettoreSalto(462, false);
+        break;
+      }
+      case 'lettore-ricarica': {
+        A.T.modifica = 1e9;
+        const md = { id: 53, tipo: 'lezione', oggetto_id: 12, materia_id: 1, richiesta: 'Spiega meglio Seiano', parti: [2], stato: 'in_preparazione', fase: 'scrittura', fatto: 0, totale: 1, frase: 'Riscrivo il capitolo 2', errore: null, nota: null, cambiate: [], stima_eur: 0.05, creata_il: new Date().toISOString(), pronta_il: null };
+        server.stato.modifiche.push(md);
+        await vai('#lettore/12', '.lettore-pagina');
+        await A.ascolta(12, { posizione: 462 });
+        await aspetta('[data-modifica="lavoro"]');
+        A.lettoreSalto(462, false);
+        document.querySelector('[data-azione="play"]').click();
+        md._t0 = Date.now() - 60000; // al prossimo giro il server finto la finisce, mentre la lezione suona
+        A.novitaModifica();
+        await aspetta('[data-azione="ricarica-versione"]');
+        break;
+      }
+      case 'simulata-modifica': {
+        await vai('#simulata/4', '.sim-testata');
+        document.querySelector('[data-visita="modifica-simulata"]').click();
+        await aspetta('[data-campo="richiesta"]');
+        document.querySelector('[data-spunto="Più domande aperte"]').click();
+        await aspetta('[data-riep="costo"]');
+        await aspetta('[data-azione="manda-modifica"]:not(:disabled)');
+        break;
+      }
       case 'gemini': await vai('#gemini', '.testo-gemini'); await new Promise((r) => setTimeout(r, 100)); break;
       case 'impostazioni': await vai('#impostazioni', '.voce-imp'); break;
       case 'lezioni': await vai('#lezioni', '.riga-lezione-elenco'); break;

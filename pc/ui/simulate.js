@@ -21,7 +21,51 @@
     let esame = null;
 
     const indietro = () => A.tornaIndietroDa(s && s.materia_id, 'simulate');
-    S.aggiornaPagina = () => { if (esame) esame.manda(); else carica(); };
+    // §44.3 La modifica della verifica: scheda sotto la testata e giro ogni 4 s finché lavora. Se arriva mentre la si
+    // sta facendo, prima vanno sul server le risposte scritte, poi si riapre la verifica cambiata.
+    const seg = A.seguiModifica({
+      tipo: 'simulata', id, vivo,
+      ricarica: () => A.api.get('/server/api/simulate/' + id),
+      pronta: async (nuovo) => {
+        let x = nuovo;
+        if (esame) {
+          await esame.manda();
+          if (!vivo()) return;
+          const r = await A.api.get('/server/api/simulate/' + id);
+          if (!vivo()) return;
+          if (r.ok && r.dati) x = r.dati;
+        }
+        // Una verifica corretta diventata una prova nuova: il tempo e le risposte della volta prima non valgono più.
+        if (s && s.stato === 'corretta' && x.stato !== 'corretta') A.memoriaStudio.togli(chiaveLocale(id));
+        s = x;
+        disegna();
+      },
+      cambia: (nuovo) => { if (s) s.modifica = nuovo.modifica; },
+    });
+    S.aggiornaPagina = () => {
+      if (seg.attiva()) { seg.subito(); return; }
+      if (esame) esame.manda(); else carica();
+    };
+
+    function apriModifica() {
+      A.apriModifica({ tipo: 'simulata', oggetto: s, titolo: s.titolo || s.argomento, materia: m, inviata: (md) => seg.avvia(md) });
+    }
+
+    async function scambia() {
+      const nuovo = await A.scambiaVersione('simulata', id, s.versione_da_parte);
+      if (!nuovo || !vivo()) return;
+      A.memoriaStudio.togli(chiaveLocale(id));
+      s = nuovo;
+      seg.evidenzia = new Set();
+      disegna();
+    }
+
+    /** §44.1 Torna a prima / Rimetti la modifica: pulsante testo in fondo, se c'è una versione da parte. */
+    function pulsanteVersione() {
+      const p = L.pulsanteVersione(s.versione_da_parte);
+      if (!p) return null;
+      return seg.spegnibile(h('button', { type: 'button', class: 'pulsante testo mod-testo-icona', 'data-azione': 'scambia-versione', onclick: scambia }, icona('torna'), p.testo), seg.motivoVersione);
+    }
 
     async function carica() {
       const [r] = await Promise.all([A.api.get('/server/api/simulate/' + id), S.materie ? null : A.caricaMaterie(), S.salute ? null : A.caricaSalute()]);
@@ -40,7 +84,9 @@
     }
 
     function disegna() {
+      if (esame && esame.ferma) esame.ferma();
       esame = null;
+      seg.imposta(s);
       if (inLavoro(s)) {
         svuota(pag, A.vistaLavoro({
           materia: m, titolo: s.titolo || s.argomento, frase: s.stato === 'in_coda' ? 'In coda' : s.frase || 'In preparazione', percentuale: s.stato === 'in_coda' ? 0 : L.percentualeLavoro(s), indietro,
@@ -112,6 +158,7 @@
       }, 'Inizia');
       svuota(pag, h('div', { class: 'sim-centro ' + A.classeMateria(m.colore), 'data-simulata': 'pronta' },
         testaSemplice(),
+        seg.el,
         h('h1', { class: 'titolo-grande' }, s.titolo || s.argomento),
         h('span', { class: 'riassunto-sim', 'data-riassunto': 'simulata' }, L.riassuntoSimulata(s)),
         s.nota ? A.messaggio('avviso', s.nota) : null,
@@ -120,8 +167,9 @@
           testo: 'Fai su carta', classe: 'pulsante secondario-alto', azione: 'fai-su-carta', senzaIcona: true,
           dopo: () => svuota(sotto, A.messaggio('info', 'Quando hai finito, premi Inizia e copia qui le risposte: te le correggo.')),
         }),
+        h('div', null, seg.spegnibile(h('button', { type: 'button', class: 'pulsante testo', 'data-azione': 'modifica', 'data-visita': 'modifica-simulata', onclick: apriModifica }, 'Modifica le domande'))),
         sotto,
-        h('div', null, h('button', { type: 'button', class: 'pulsante testo tenue-testo', 'data-azione': 'elimina-simulata', onclick: elimina }, 'Elimina'))));
+        h('div', { class: 'azioni' }, pulsanteVersione(), h('button', { type: 'button', class: 'pulsante testo tenue-testo', 'data-azione': 'elimina-simulata', onclick: elimina }, 'Elimina'))));
     }
 
     // --- §36.3 Mentre la fai -------------------------------------------------------------------------------------
@@ -139,6 +187,7 @@
       let ultimoSalvataggio = Date.now();
       let avvisoFine = null;
       let consegnata = false;
+      let fermato = false;
       const totale = (Number(s.minuti) || 0) * 60;
       const statiEl = new Map();
       const domandeEl = new Map();
@@ -225,7 +274,7 @@
         });
       }
       function tic() {
-        if (!vivo() || consegnata) { clearInterval(timerTempo); return; }
+        if (!vivo() || consegnata || fermato) { clearInterval(timerTempo); return; }
         if (document.hidden) return;
         const prima = totale - usati;
         usati += 1;
@@ -314,8 +363,9 @@
         area.addEventListener('input', () => { adatta(area); scritto(d, area); });
         const stato = h('div', { class: 'sim-stato', 'data-stato-risposta': n, 'aria-live': 'polite' });
         statiEl.set(n, stato);
-        const scheda = h('section', { class: 'sim-domanda', 'data-domanda': n },
-          h('span', { class: 'etichetta' }, 'Domanda ' + d.n + ' · ' + L.plurale(Number(d.punti) || 0, 'punto', 'punti')),
+        const cambiata = seg.evidenzia.has(Number(d.n));
+        const scheda = h('section', { class: 'sim-domanda' + (cambiata ? ' mod-cambiata' : ''), 'data-domanda': n },
+          h('span', { class: 'mod-titolo-cambiata' }, h('span', { class: 'etichetta' }, 'Domanda ' + d.n + ' · ' + L.plurale(Number(d.punti) || 0, 'punto', 'punti')), cambiata ? A.etichettaCambiata() : null),
           h('p', { class: 'testo-d' }, d.testo), area, stato);
         domandeEl.set(n, scheda);
         schede.push(scheda);
@@ -336,6 +386,7 @@
 
       svuota(pag, h('div', { class: 'schema-contenitore ' + A.classeMateria(m.colore), 'data-simulata': 'in_corso' }, h('div', { class: 'sch-griglia' }, colonnaSx, h('div', { class: 'sch-colonna' },
         h('div', { class: 'sch-testa' }, h('button', { type: 'button', class: 'tondo grande', 'aria-label': 'Esci', 'data-azione': 'esci-simulata', onclick: esci }, icona('chiudi')), A.pillolaMateria(m)),
+        seg.el,
         h('h1', { class: 'titolo-grande' }, s.titolo || s.argomento),
         barraStretta,
         s.nota ? A.messaggio('avviso', s.nota) : null,
@@ -348,7 +399,15 @@
       const timerTempo = setInterval(tic, 1000);
       if (sporche.size && !S.senzaRete) manda();
       if (A.visitaDopoDisegno) A.visitaDopoDisegno();
-      return { manda };
+      /** La pagina si ridisegna (verifica cambiata): il tempo resta sul computer e questo esame si ferma. */
+      function ferma() {
+        if (fermato) return;
+        salvaLocale();
+        fermato = true;
+        clearInterval(timerTempo);
+        clearTimeout(timerManda);
+      }
+      return { manda, ferma };
     }
 
     // --- §36.4 Risultati -----------------------------------------------------------------------------------------
@@ -386,10 +445,12 @@
       }
 
       const daRifare = Number(e.da_rifare) || 0;
+      const versione = pulsanteVersione();
       svuota(pag, h('div', { class: 'sim-risultati ' + A.classeMateria(m.colore), 'data-simulata': 'corretta' },
         h('div', { class: 'sch-testa' }, A.frecciaIndietro(indietro), A.pillolaMateria(m), h('span', { class: 'spazio' }),
           A.pulsantePdf('api/simulate/' + id + '/pdf', L.nomeFilePdf(s.titolo, 'Verifica')),
           A.menuPuntini(() => [{ testo: 'Elimina', pericolo: true, azione: 'elimina-simulata', fai: elimina }])),
+        seg.el,
         h('h1', { class: 'titolo-grande' }, s.titolo || s.argomento),
         h('section', { class: 'sim-testata', 'data-visita': 'stima' },
           h('span', { class: 'etichetta' }, 'Voto stimato'),
@@ -402,7 +463,9 @@
           daRifare > 0 ? h('span', { class: 'frase-rifare', 'data-rifare': 'si' }, daRifare === 1 ? '1 domanda da rifare è già in Ripasso lampo.' : daRifare + ' domande da rifare sono già in Ripasso lampo.') : null,
           h('div', { class: 'azioni' },
             daRifare > 0 ? h('button', { type: 'button', class: 'pulsante pieno medio', 'data-azione': 'ripassa-adesso', onclick: () => A.apriLampo({ materiaId: m.id }) }, 'Ripassa adesso') : null,
-            h('button', { type: 'button', class: 'pulsante tenue alto', 'data-azione': 'rifai-simulata', onclick: () => A.nuovaSimulata(m.id, { argomento: s.argomento, materiali: s.materiali, minuti: s.minuti, indicazioni: s.indicazioni, eventoId: s.evento_id }) }, 'Rifai la verifica')))));
+            h('button', { type: 'button', class: 'pulsante tenue alto', 'data-azione': 'rifai-simulata', onclick: () => A.nuovaSimulata(m.id, { argomento: s.argomento, materiali: s.materiali, minuti: s.minuti, indicazioni: s.indicazioni, eventoId: s.evento_id }) }, 'Rifai la verifica'),
+            seg.spegnibile(h('button', { type: 'button', class: 'pulsante tenue alto', 'data-azione': 'modifica', 'data-visita': 'modifica-simulata', onclick: apriModifica }, 'Modifica e rifai')))),
+        versione ? h('div', null, versione) : null));
       if (A.visitaDopoDisegno) A.visitaDopoDisegno();
     }
 

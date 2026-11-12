@@ -1,4 +1,4 @@
-# Lectio — contratto delle API (v1.6)
+# Lectio — contratto delle API (v1.7)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (risposte scritte alle domande, materiale solo nella materia) sono nella sezione 15 e
@@ -671,3 +671,91 @@ il Discobolo» nella cartella Arte greca".
   "Arte greca" sceglie i file della cartella Arte greca.
 - Nelle app (Nuova lezione, Nuovo schema, Nuova verifica simulata) una pillola per cartella spunta o toglie in un tocco
   tutto il suo materiale pronto (`docs/aspetto.md` §42.7).
+
+## 28. Modifiche dopo (v1.7, richiesta di Andrea del 12/11)
+
+Una lezione, uno schema, un riassunto o una verifica simulata già fatti si possono cambiare: con l'AI ("Modifica", Andrea
+scrive cosa vuole), a mano (schemi e riassunti, gratis) e tornando alla versione di prima. Il programma PC lo fa dalla
+1.3.6; il telefono per ora no (le app che non conoscono questi campi li ignorano).
+
+### 28.1 Modifica con l'AI
+
+`tipo`: `lezione` | `schema` | `riassunto` | `simulata`. `id` = l'id della lezione, dello schema, del riassunto o della
+verifica. `parti`: i numeri delle parti da cambiare (vedi `parti_modificabili` in 28.3); lista vuota = "Tutto": Lectio
+sceglie da solo quali parti toccano la richiesta. `richiesta`: 1-600 caratteri.
+
+- `POST /api/modifiche/stima` `{"tipo": "schema", "id": 12, "richiesta": "Aggiungi le date", "parti": [2, 3]}` → gli
+  stessi campi della stima degli schemi (`costo_eur`, `spesa_mese_eur`, `impegnato_eur`, `tetto_eur`, `dopo_eur`,
+  `consentita`, `motivo`, `si_azzera_il`) più `"minuti_preparazione"` e `"fino_a": true|false` (`true` con "Tutto": il
+  costo è il massimo, se Lectio cambia tutte le parti; di solito costa meno).
+- `POST /api/modifiche` (stesso corpo) → 201 `Modifica` in `in_coda`. 404 se l'oggetto non c'è; 409 se l'oggetto non si
+  può modificare adesso (lezione non `pronta`, schema o riassunto non `pronto`, verifica non `pronta`, `in_corso` o
+  `corretta`) o se ha già una modifica in coda o in preparazione; 422 con `campo` `richiesta` o `parti`; 402 se il tetto
+  non basta (come le lezioni).
+- `GET /api/modifiche?attive=1` → `[Modifica]` in coda o in preparazione (serve al PC per sapere se c'è lavoro in corso).
+  `GET /api/modifiche/{id}` → `Modifica`.
+- `POST /api/modifiche/{id}/annulla` (in coda, in preparazione o in errore: diventa `annullata`, l'oggetto resta com'era;
+  le spese già fatte restano nel conto). `POST /api/modifiche/{id}/riprova` (solo `errore`: riparte da dove si era
+  fermata, senza ripagare le parti già riscritte).
+
+`Modifica`: `{"id": 4, "tipo": "schema", "oggetto_id": 12, "materia_id": 5, "richiesta": "Aggiungi le date",
+"parti": [2, 3], "stato": "in_preparazione", "fase": "scrittura", "fatto": 1, "totale": 2, "frase": "Riscrivo la parte 3",
+"errore": null, "nota": null, "cambiate": [], "stima_eur": 0.06, "creata_il": "…", "pronta_il": null}`.
+`stato`: `in_coda` | `in_preparazione` | `pronta` | `errore` | `annullata`. Si chiede ogni 3-5 s finché è in lavorazione
+(oppure si richiede l'oggetto, che la contiene). `cambiate` = le parti cambiate davvero (numeri della versione nuova).
+`nota`: quello che Lectio non ha potuto fare, per esempio "I tuoi documenti non dicono le date della quarta crociata:
+quelle non le ho aggiunte." Novità (sezione 11): `modifica_pronta` ("Ho modificato lo schema «…»") e `modifica_errore`
+("La modifica dello schema «…» si è fermata: tocca Riprova"), con `materia_id` e, per le lezioni, `lezione_id`.
+
+Come lavora il server: riscrive con il modello di scrittura (Medium) solo le parti scelte, una alla volta, partendo dal
+testo di adesso, dalla richiesta e dagli stessi documenti e regole della prima volta; poi il solito controllo sui
+documenti (17.1). Se la richiesta chiede cose che i documenti non dicono, non le inventa e lo scrive nella `nota`. Con
+"Tutto" prima una richiesta breve sceglie le parti. Si fa una modifica alla volta per oggetto; quelle delle lezioni
+aspettano in coda con le lezioni, le altre con gli schemi.
+- **Lezione:** le parti sono i capitoli. Durante la modifica la lezione resta `pronta` e si ascolta quella di prima. La
+  voce si rifà solo per i capitoli cambiati (con la voce della lezione: con Giovanni è gratis); gli altri capitoli
+  riusano l'audio di prima. Alla fine cambiano `audio.sha256`, `durata_s`, `capitoli`, `domande`, `testo`: le app
+  riscaricano l'audio. Le domande rimaste uguali tengono il loro `id` e le risposte date; quelle cambiate o tolte spariscono
+  dalla lezione, ma le risposte date restano salvate (e le schede del Ripasso lampo restano). `ascolto.posizione_s` va
+  allo stesso punto se quel capitolo non è cambiato, altrimenti all'inizio del capitolo cambiato.
+- **Schema:** le parti sono le sezioni (anche il quadro d'insieme). Le foto restano dove sono; le schede del Ripasso
+  lampo delle parti cambiate si rifanno. I riassunti fatti prima diventano "vecchi" (28.3).
+- **Riassunto:** le parti sono le parti del riassunto. Si riscrive partendo dallo schema, come la prima volta.
+- **Verifica simulata:** le parti sono le domande; la richiesta può anche aggiungerne o toglierne. Se era `corretta`
+  diventa una prova nuova (`pronta`, senza risposte né `esito`): quella di prima, con il suo voto, resta come versione
+  da parte (28.2). Se era `in_corso` le risposte alle domande rimaste uguali restano.
+
+### 28.2 Versione di prima
+
+Prima di ogni cambiamento (modifica con l'AI, correzione a mano) il server mette da parte la versione di adesso.
+`POST /api/lezioni/{id}/scambia-versione`, `POST /api/schemi/{id}/scambia-versione`,
+`POST /api/riassunti/{id}/scambia-versione`, `POST /api/simulate/{id}/scambia-versione` → l'oggetto. Rimette la versione
+messa da parte e mette da parte quella di adesso: toccando di nuovo si torna alla versione modificata. 409 se non c'è una
+versione da parte o se c'è una modifica in coda o in preparazione. Si tengono le ultime 3 versioni (le lezioni 1, per lo
+spazio dell'audio).
+
+### 28.3 Campi in più
+
+`Lezione` (completa), `Schema` (con `contenuto`), `Riassunto` e `Simulata` (completa) hanno in più:
+- `"modifica"`: l'ultima `Modifica` di quell'oggetto (in qualunque stato), o `null`;
+- `"versione_da_parte"`: `{"ruolo": "prima" | "dopo", "perche": "modifica" | "a_mano", "richiesta": "Aggiungi le date",
+  "quando": "…"}` o `null`. `ruolo: "prima"` = è la versione di prima di un cambiamento (pulsante "Torna a prima");
+  `"dopo"` = è una versione cambiata messa da parte con lo scambio (pulsante "Rimetti la modifica");
+- `"parti_modificabili"`: `[{"n": 1, "titolo": "Le crociate"}]`. Schema: le sezioni (`n` di `contenuto.sezioni`).
+  Riassunto: le parti, contate da 1 (titolo `null` → "Parte 3"). Simulata: le domande (`titolo` = inizio del testo).
+  Lezione: i capitoli. Vuota quando l'oggetto non si può modificare.
+`Riassunto` ha anche `"schema_cambiato": true` se lo schema è stato cambiato dopo che il riassunto è stato scritto (le app
+lo dicono e offrono Rifai).
+
+### 28.4 Correzione a mano (schemi e riassunti, gratis)
+
+- `PUT /api/schemi/{id}/testo` `{"titolo": "…", "contenuto": {…}}` → `Schema`. Il `contenuto` ha la stessa forma di
+  quello ricevuto (sezione 18): contano solo i testi (`sezioni[].titolo`, `campi[].valore`, e nei blocchi `titolo`,
+  `testo`, `termine`, `voci`, `intestazione`, `righe`, `didascalia`); tipi, ordine, foto e fonti restano quelli del
+  server. Le voci vuote si tolgono; un blocco rimasto senza testo sparisce. `**grassetto**` resta com'è.
+- `PUT /api/riassunti/{id}/testo` `{"titolo": "…", "contenuto": {"parti": [{"titolo": "…", "paragrafi": ["…"],
+  "punti": ["…"]}]}}` → `Riassunto`. Stesso numero di parti; paragrafi e punti vuoti si tolgono.
+- Testi al massimo 20.000 caratteri ciascuno, titolo al massimo 120. 409 se non è pronto o c'è una modifica in coda o in
+  preparazione; 422 se la forma non torna (`campo: "contenuto"`).
+Prima di salvare il server mette da parte la versione di adesso (`perche: "a_mano"`), quindi "Torna a prima" funziona
+anche qui.

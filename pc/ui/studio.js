@@ -32,17 +32,23 @@
   /** Il testo del server con il grassetto: mai HTML, solo testo e <strong>. */
   A.conGrassetto = (testo) => L.pezziGrassetto(testo).map((p) => (p.forte ? h('strong', null, p.t) : p.t));
 
-  /** Il menu con i puntini. `voci()` = [{ testo, fai, pericolo, spenta, azione }]; `o.aperto(si)` dice se è aperto. */
+  /** Una voce della tendina: con `frase` (perché è spenta, §44.1) va su due righe; `icona` la mette davanti. */
+  A.voceTendina = (v, fai) => h('button', {
+    type: 'button', role: 'menuitem', class: [v.pericolo ? 'pericolo' : '', v.frase ? 'con-frase' : '', v.icona ? 'con-icona' : ''].join(' ').trim() || null,
+    disabled: v.spenta ? true : null, 'data-azione': v.azione || null, onclick: fai,
+  }, v.icona ? icona(v.icona) : null, v.frase ? h('span', { class: 'testi-voce' }, h('span', null, v.testo), h('span', { class: 'f' }, v.frase)) : v.testo);
+
+  /**
+   * Il menu con i puntini. `voci()` = [{ testo, fai, pericolo, spenta, azione, frase, icona }] (le voci null si
+   * saltano); `o.aperto(si)` dice se è aperto.
+   */
   A.menuPuntini = function (voci, o) {
     const opz = o || {};
     const menu = h('div', { class: 'menu-piccolo' });
     const apri = () => {
       const c = menu.querySelector('.tendina');
       if (c) { c.remove(); if (opz.aperto) opz.aperto(false); return; }
-      const t = h('div', { class: 'tendina', role: 'menu' }, voci().map((v) => h('button', {
-        type: 'button', role: 'menuitem', class: v.pericolo ? 'pericolo' : null, disabled: v.spenta ? true : null, 'data-azione': v.azione || null,
-        onclick: () => { chiudi(); v.fai(); },
-      }, v.testo)));
+      const t = h('div', { class: 'tendina', role: 'menu' }, voci().filter(Boolean).map((v) => A.voceTendina(v, () => { chiudi(); v.fai(); })));
       function chiudi() { t.remove(); document.removeEventListener('mousedown', fuori, true); if (opz.aperto) opz.aperto(false); }
       function fuori(e) { if (!menu.contains(e.target)) chiudi(); }
       document.addEventListener('mousedown', fuori, true);

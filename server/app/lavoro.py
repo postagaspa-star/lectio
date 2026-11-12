@@ -16,7 +16,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import ai, cartelle, db, lettura, memoria, prompt, riassunti, schema_ripasso, simulata, titoli
+from . import ai, cartelle, db, lettura, memoria, modifiche, prompt, riassunti, schema_ripasso, simulata, titoli
 from . import scheda as schede
 from .ai import RispostaNonUsabile
 from .audio import ErroreMontaggio
@@ -68,13 +68,25 @@ class Lavoro:
     def passo_lezione(self) -> str:
         with db.aperta(self.db_path) as conn, db.transazione(conn):
             riga = conn.execute(
-                "SELECT id FROM lezioni WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1"
+                "SELECT id, in_coda_dal FROM lezioni WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1"
             ).fetchone()
-            if riga is None:
+            # Le modifiche delle lezioni (contratto 28) aspettano nella stessa coda: anche loro rifanno la voce.
+            modifica = conn.execute("SELECT id, in_coda_dal FROM modifiche WHERE tipo = 'lezione' AND stato = 'in_coda'"
+                                    " ORDER BY in_coda_dal, id LIMIT 1").fetchone()
+            if riga is None and modifica is None:
                 return VUOTO
-            if conn.execute("SELECT 1 FROM lezioni WHERE stato = 'in_preparazione' LIMIT 1").fetchone():
+            if conn.execute("SELECT 1 FROM lezioni WHERE stato = 'in_preparazione' UNION ALL SELECT 1 FROM modifiche"
+                            " WHERE tipo = 'lezione' AND stato = 'in_preparazione' LIMIT 1").fetchone():
                 return VUOTO  # una alla volta
-            conn.execute("UPDATE lezioni SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (riga["id"],))
+            if modifica is not None and (riga is None or modifica["in_coda_dal"] <= riga["in_coda_dal"]):
+                conn.execute("UPDATE modifiche SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (modifica["id"],))
+                riga = None
+            else:
+                modifica = None
+                conn.execute("UPDATE lezioni SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (riga["id"],))
+        if modifica is not None:
+            self._esegui_modifica(modifica["id"])
+            return FATTO
         lezione_id = riga["id"]
         try:
             Preparazione(self.ctx, lezione_id).esegui()
@@ -106,6 +118,27 @@ class Lavoro:
             db.aggiungi_novita(conn, "lezione_errore", f"La lezione di {r['nome']} si è fermata: {_minuscola(frase)}",
                                lezione_id=lezione_id, materia_id=r["materia_id"])
 
+    # ------------------------------------------------------------------ modifiche dopo (contratto 28)
+
+    def _esegui_modifica(self, modifica_id: int) -> None:
+        dati_dir = self.ctx.settings.dati_dir
+        try:
+            modifiche.PreparazioneModifica(self.ctx, modifica_id).esegui()
+        except Annullata:
+            log.info("modifica %s annullata durante il lavoro", modifica_id)
+            with db.aperta(self.db_path) as conn:
+                r = conn.execute("SELECT stato FROM modifiche WHERE id = ?", (modifica_id,)).fetchone()
+            if r is None or r["stato"] == "annullata":
+                modifiche.cancella_file(dati_dir, modifica_id)
+        except Exception as e:
+            frase = frase_errore(e)
+            if frase is None:
+                log.exception("modifica %s: errore inatteso", modifica_id)
+                frase = "Lectio ha avuto un problema interno. Tocca Riprova."
+            modifiche.in_errore(self.db_path, modifica_id, frase)
+        else:
+            modifiche.cancella_file(dati_dir, modifica_id)
+
     # ------------------------------------------------------------------ schemi e verifiche simulate
 
     def passo_studio(self) -> str:
@@ -117,18 +150,28 @@ class Lavoro:
                 "SELECT id FROM simulate WHERE stato = 'in_correzione' ORDER BY consegnata_il, id LIMIT 1").fetchone()
             schema = conn.execute("SELECT id, in_coda_dal FROM schemi WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
             prova = conn.execute("SELECT id, in_coda_dal FROM simulate WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
-            if da_correggere is None and riassunto is None and schema is None and prova is None:
+            # Le modifiche (contratto 28) dopo correzioni e riassunti: riscrivono poche parti, fanno presto.
+            modifica = conn.execute("SELECT id FROM modifiche WHERE tipo <> 'lezione' AND stato = 'in_coda' ORDER BY in_coda_dal, id"
+                                    " LIMIT 1").fetchone()
+            if da_correggere is None and riassunto is None and schema is None and prova is None and modifica is None:
                 return VUOTO
             if da_correggere is not None:
                 riassunto = None
+            if da_correggere is not None or riassunto is not None:
+                modifica = None
             if riassunto is not None:
                 conn.execute("UPDATE riassunti SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (riassunto["id"],))
-            prima_schema = da_correggere is None and riassunto is None and schema is not None and (prova is None or schema["in_coda_dal"] <= prova["in_coda_dal"])
+            if modifica is not None:
+                conn.execute("UPDATE modifiche SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (modifica["id"],))
+            libero = da_correggere is None and riassunto is None and modifica is None
+            prima_schema = libero and schema is not None and (prova is None or schema["in_coda_dal"] <= prova["in_coda_dal"])
             if prima_schema:
                 conn.execute("UPDATE schemi SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (schema["id"],))
-            elif da_correggere is None and riassunto is None:
+            elif libero:
                 conn.execute("UPDATE simulate SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (prova["id"],))
-        if da_correggere is not None:
+        if modifica is not None:
+            self._esegui_modifica(modifica["id"])
+        elif da_correggere is not None:
             self._esegui_studio("simulata", da_correggere["id"], lambda: simulata.correggi(self.ctx, da_correggere["id"]))
         elif riassunto is not None:
             self._esegui_studio("riassunto", riassunto["id"], lambda: riassunti.PreparazioneRiassunto(self.ctx, riassunto["id"]).esegui())

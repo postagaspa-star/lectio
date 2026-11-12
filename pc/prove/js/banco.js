@@ -12,7 +12,7 @@ const path = require('path');
 
 // LECTIO_UI: un'altra cartella dell'interfaccia (per esempio quella di una versione vecchia, per vedere che i test la bocciano).
 const UI = process.env.LECTIO_UI || path.join(__dirname, '..', '..', 'ui');
-const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'visita.js', 'avvio.js'];
+const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'modifiche.js', 'visita.js', 'avvio.js'];
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 

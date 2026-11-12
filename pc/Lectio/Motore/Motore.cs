@@ -65,7 +65,8 @@ public sealed class Motore : IDisposable
     private static readonly Regex PercorsoNuovaLezione = new(@"^api/lezioni/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoRiprovaLezione = new(@"^api/lezioni/\d+/riprova/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoRisposta = new(@"^api/lezioni/\d+/domande/\d+/risposta/?$", RegexOptions.CultureInvariant);
-    private static readonly Regex PercorsoLavoroStudio = new(@"^api/(schemi|simulate)/?$|^api/(schemi|simulate)/\d+/riprova/?$|^api/simulate/\d+/consegna/?$", RegexOptions.CultureInvariant);
+    // §28: anche una modifica chiesta (o ripresa dopo un errore) accende il giro; la sua stima no.
+    private static readonly Regex PercorsoLavoroStudio = new(@"^api/(schemi|simulate)/?$|^api/(schemi|simulate)/\d+/riprova/?$|^api/simulate/\d+/consegna/?$|^api/modifiche/?$|^api/modifiche/\d+/riprova/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoRiassunto = new(@"^api/schemi/\d+/riassunti/?$|^api/riassunti/\d+/riprova/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoChiarimenti = new(@"^api/chiarimenti/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoFotoSchema = new(@"^api/schemi/(\d{1,12})/immagini/(\d{1,6})(/cambia)?/?$", RegexOptions.CultureInvariant);
@@ -108,7 +109,7 @@ public sealed class Motore : IDisposable
         if (token == null && config.Server != null)
         {
             // Il token non si decifra (copiato da un altro utente o computer): si ricomincia dall'abbinamento.
-            config = new Configurazione { TutorialVisto = config.TutorialVisto, TutorialNovitaVisto = config.TutorialNovitaVisto, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
+            config = new Configurazione { TutorialVisto = config.TutorialVisto, TutorialNovitaVisto = config.TutorialNovitaVisto, NovitaViste = config.NovitaViste, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
         }
         Audio = new CacheAudio(percorsi.Lezioni, this.client);
         Aggiornatore = new Aggiornatore(this.client, Versione.Codice);
@@ -400,11 +401,14 @@ public sealed class Motore : IDisposable
         }
     }
 
-    /// <summary>Uno schema, una verifica o un riassunto in lavorazione tengono acceso il giro ogni 20 secondi, come le lezioni.</summary>
+    /// <summary>
+    /// Uno schema, una verifica, un riassunto o una modifica (§28) in lavorazione tengono acceso il giro ogni 20 secondi,
+    /// come le lezioni. Le modifiche si chiedono con <c>?attive=1</c>: un server che non le conosce (404) vale "niente".
+    /// </summary>
     private async Task<bool> StudioInLavorazioneAsync(string base_, string tok, CancellationToken annulla)
     {
         if (RiassuntiInAttesa()) return true;
-        foreach (var elenco in new[] { "api/schemi", "api/simulate" })
+        foreach (var elenco in new[] { "api/schemi", "api/simulate", "api/modifiche?attive=1" })
         {
             var r = await client.InviaAsync("GET", base_, elenco, tok, null, annulla: annulla).ConfigureAwait(false);
             if (r.Ok && Json.Nodo(r.Corpo) is JsonArray righe && righe.Any(x => x is JsonObject o && StatiInLavorazione.Contains(Json.Testo(o["stato"]) ?? ""))) return true;
@@ -450,8 +454,12 @@ public sealed class Motore : IDisposable
         var frammento = v.LezioneId is long id ? "lezione/" + id.ToString(CultureInfo.InvariantCulture) : null;
         var schemi = v.MateriaId is long m ? "materia/" + m.ToString(CultureInfo.InvariantCulture) + "/schemi" : null;
         var simulate = v.MateriaId is long n ? "materia/" + n.ToString(CultureInfo.InvariantCulture) + "/simulate" : null;
+        // §28: una modifica porta alla lezione (se è di una lezione), altrimenti alla materia.
+        var modifica = frammento ?? (v.MateriaId is long k ? "materia/" + k.ToString(CultureInfo.InvariantCulture) : null);
         return v.Tipo switch
         {
+            "modifica_pronta" => new Notifica(Testo(v.Testo, "La modifica è pronta"), "Fai clic per aprirla.", modifica),
+            "modifica_errore" => new Notifica(Testo(v.Testo, "La modifica non è riuscita"), "Fai clic per vedere cosa è successo.", modifica),
             "schema_pronto" => new Notifica(Testo(v.Testo, "Lo schema è pronto"), "Fai clic per aprirlo.", schemi),
             "schema_errore" => new Notifica(Testo(v.Testo, "Lo schema non è riuscito"), "Fai clic per vedere cosa è successo.", schemi),
             "riassunto_pronto" => new Notifica(Testo(v.Testo, "Il riassunto è pronto"), "Fai clic per aprire gli schemi.", schemi),
@@ -517,6 +525,8 @@ public sealed class Motore : IDisposable
             ["versione"] = Versione.Nome,
             ["tutorial_visto"] = c.TutorialVisto,
             ["tutorial_novita_visto"] = c.TutorialNovitaVisto,
+            // Visita delle cose nuove già vista, ma prima dell'ultimo giro: si mostrano solo i passi nuovi.
+            ["novita_nuove"] = c.TutorialNovitaVisto && c.NovitaViste < Configurazione.GiroNovita,
             ["tema"] = c.Tema ?? "sistema",
             ["diagnosi"] = Diagnosi,
             ["scaricate"] = new JsonArray(scaricate.Select(v => (JsonNode)JsonValue.Create(v.Id)).ToArray()),
@@ -579,6 +589,7 @@ public sealed class Motore : IDisposable
                 ServerId = serverId,
                 TutorialVisto = config.TutorialVisto,
                 TutorialNovitaVisto = config.TutorialNovitaVisto,
+                NovitaViste = config.NovitaViste,
                 Tema = config.Tema,
                 IndirizzoFuori = config.IndirizzoFuori,
             };
@@ -615,7 +626,7 @@ public sealed class Motore : IDisposable
         }
         lock (stato)
         {
-            config = new Configurazione { TutorialVisto = config.TutorialVisto, TutorialNovitaVisto = config.TutorialNovitaVisto, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
+            config = new Configurazione { TutorialVisto = config.TutorialVisto, TutorialNovitaVisto = config.TutorialNovitaVisto, NovitaViste = config.NovitaViste, Tema = config.Tema, IndirizzoFuori = config.IndirizzoFuori };
             token = null;
             inPreparazione = false;
             casaVerificataFino = null;
@@ -679,6 +690,7 @@ public sealed class Motore : IDisposable
         lock (stato)
         {
             config.TutorialNovitaVisto = true;
+            config.NovitaViste = Configurazione.GiroNovita;
             SalvaConfig();
         }
         return new JsonObject { ["ok"] = true };

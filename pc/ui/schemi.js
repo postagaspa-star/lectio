@@ -17,6 +17,7 @@
     if (S.esempio && window.LectioEsempio) return window.LectioEsempio.immagine(n, versione);
     return '/server/api/schemi/' + schemaId + '/immagini/' + n + (versione ? '?v=' + versione : '');
   }
+  A.indirizzoFotoSchema = indirizzoFoto;
 
   /** La foto a tutto schermo: la rotella ingrandisce, X o Esc chiudono. */
   A.apriFoto = function (indirizzo, descrizione) {
@@ -79,7 +80,18 @@
     let m = null;
 
     const indietro = () => A.tornaIndietroDa(s && s.materia_id, 'schemi');
-    S.aggiornaPagina = () => { if (!s || s.stato !== 'pronto') carica(); };
+    // §44.3 La modifica dello schema: scheda sotto la testata e giro ogni 4 s finché lavora.
+    let seg = null;
+    const seguito = () => seg || (seg = A.seguiModifica({
+      tipo: 'schema', id, vivo,
+      ricarica: () => A.api.get('/server/api/schemi/' + id),
+      pronta: (nuovo) => { s = nuovo; disegna(); },
+      cambia: (nuovo) => { if (s) s.modifica = nuovo.modifica; },
+    }));
+    S.aggiornaPagina = () => {
+      if (!s || s.stato !== 'pronto') { carica(); return; }
+      if (seg && !document.querySelector('[data-correggi]')) { seg.subito(); seg.aggiorna(); }
+    };
     // §43.3 Da "Cosa vuoi fare?" → Riassunto: la lettura si apre col foglio dei riassunti già aperto (una volta sola).
     let conRiassunto = S.riassuntoDaAprire != null && Number(S.riassuntoDaAprire) === Number(id);
     S.riassuntoDaAprire = null;
@@ -323,6 +335,7 @@
       }
 
       function disegnaParte(x) {
+        const cambiata = seguito().evidenzia.has(Number(x.n));
         const testaOp = L.testaOpera(x);
         const noti = testaOp.blocchi;
         const segni = L.segniDeiBlocchi(noti, mappa);
@@ -330,10 +343,11 @@
         const opera = testaOp.campi.length ? h('div', { class: testaOp.foto ? 'sch-opera' : null },
           testaOp.foto ? foto(testaOp.foto) : null,
           h('div', { class: 'sch-campi' }, testaOp.campi.map((c) => h('div', { class: 'sch-campo' }, h('span', { class: 'k' }, c.nome), h('span', { class: 'v' }, c.valore))))) : null;
-        const sezEl = h('section', { class: 'sch-parte', 'data-parte': String(x.n) },
+        const sezEl = h('section', { class: 'sch-parte' + (cambiata ? ' mod-cambiata' : ''), 'data-parte': String(x.n) },
           h('div', { class: 'sch-testa-parte' },
             h('span', { class: 'sch-num', 'aria-hidden': 'true' }, String(x.n)),
             h('h2', { class: 'sch-titolo-parte' }, x.titolo),
+            cambiata ? A.etichettaCambiata() : null,
             h('button', {
               type: 'button', class: 'pillola-azione', 'data-azione': 'ascolta-parte', disabled: spento() ? true : null,
               onclick: () => A.nuovaLezione(m.id, { argomento: x.titolo, materiali: s.materiali || [] }),
@@ -362,12 +376,41 @@
           h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': ultimo ? 'apri-riassunto' : 'fai-riassunto', onclick: () => (ultimo ? A.vai('#riassunto/' + ultimo.id) : A.apriSceltaRiassunto(s, m)) }, ultimo ? 'Apri il riassunto' : 'Fai il riassunto')) : null,
       ];
 
+      // §44.1 Modifica a sinistra di Scarica PDF; nel menu Correggi a mano e Torna a prima (o Rimetti la modifica).
+      const sg = seguito();
+      sg.imposta(s);
+      const modifica = () => A.apriModifica({ tipo: 'schema', oggetto: s, titolo: s.titolo || s.argomento, materia: m, inviata: (md) => sg.avvia(md) });
+      const correggi = () => A.correggiAMano(pag, {
+        // Si resta alla parte che si leggeva; dalla prima si parte dall'alto (col campo del titolo in vista).
+        tipo: 'schema', oggetto: s, materia: m, indietro, parte: corrente !== sezioni[0].n ? corrente : null,
+        foto: (b) => h('div', { class: 'sch-foto' }, h('img', { src: indirizzoFoto(id, b.n, versioni.get(b.n) || 0), alt: b.didascalia || 'Foto' })),
+        salvato: (nuovo) => { s = nuovo; disegna(); },
+        annullato: () => disegna(),
+      });
+      const scambia = async () => {
+        const nuovo = await A.scambiaVersione('schema', id, s.versione_da_parte);
+        if (!nuovo || !vivo()) return;
+        s = nuovo;
+        sg.evidenzia = new Set();
+        disegna();
+      };
+      const vociMenu = () => {
+        const perche = sg.motivo();
+        return [
+          { testo: 'Correggi a mano', azione: 'correggi-a-mano', spenta: !!perche, frase: perche, fai: correggi },
+          A.voceVersione(s, scambia),
+          { testo: 'Elimina', pericolo: true, azione: 'elimina-schema', fai: elimina },
+        ];
+      };
+
       const colonna = h('div', { class: 'sch-colonna' },
         h('div', { class: 'sch-testa' }, A.frecciaIndietro(indietro), A.pillolaMateria(m), h('span', { class: 'spazio' }),
           s.riassunti ? h('button', { type: 'button', class: 'pillola-azione', 'data-azione': 'riassunto', onclick: () => A.apriSceltaRiassunto(s, m) }, icona('riassunto'), 'Riassunto') : null,
+          sg.pillola(modifica),
           A.pulsantePdf('api/schemi/' + id + '/pdf', L.nomeFilePdf(s.titolo, 'Schema')),
-          A.menuPuntini(() => [{ testo: 'Elimina', pericolo: true, azione: 'elimina-schema', fai: elimina }])),
+          A.menuPuntini(vociMenu)),
         h('div', { class: 'sch-titoli' }, h('h1', null, s.titolo || s.argomento), h('span', { class: 'sottotitolo', 'data-riassunto': 'schema' }, L.riassuntoSchema(s))),
+        sg.el,
         nota,
         pillolaIndice,
         sezioni.map(disegnaParte),
@@ -389,13 +432,14 @@
 
       if (contenitore) {
         let inCoda = false;
+        // Ridisegnata (modifica pronta, correzione a mano): l'ascoltatore di questa lettura non serve più.
         const suScorri = () => {
-          if (!vivo()) { contenitore.removeEventListener('scroll', suScorri); return; }
+          if (!vivo() || !colonna.isConnected) { contenitore.removeEventListener('scroll', suScorri); return; }
           if (inCoda) return;
           inCoda = true;
           requestAnimationFrame(() => {
             inCoda = false;
-            if (!vivo()) return;
+            if (!vivo() || !colonna.isConnected) return;
             const sopra = contenitore.getBoundingClientRect().top;
             let attuale = sezioni[0].n;
             for (const x of sezioni) {

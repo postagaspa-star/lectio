@@ -46,6 +46,13 @@ def dentro_involucro(oggetto: dict | None) -> dict | None:
     return None
 
 
+def chiave_cache(compito: str, riferimento: str | None, lezione_id: int | None) -> str:
+    """La stessa chiave per le richieste che cominciano allo stesso modo: stesso lavoro (schema, lezione, modifica) e stesso
+    compito. Correzioni e riscritture rimandano tutta la richiesta di prima, quindi la trovano quasi sempre in cache."""
+    lavoro = riferimento or (f"lezione:{lezione_id}" if lezione_id else "lectio")
+    return f"lectio:{lavoro}:{compito}"[:120]
+
+
 def estrai_json(testo: str) -> dict | None:
     t = (testo or "").strip()
     t = re.sub(r"^```(?:json)?\s*", "", t)
@@ -81,8 +88,9 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
 
         def registra(ricevuta, risposta):
             if fornitore.a_pagamento:
-                costo = cassa.prezzi.costo_testo(modello, risposta.token_entrata, risposta.token_uscita)
-                ricevuta.registra(risposta.token_entrata + risposta.token_uscita, "token", costo)
+                cache = int(getattr(risposta, "token_cache", 0) or 0)
+                costo = cassa.prezzi.costo_testo(modello, risposta.token_entrata, risposta.token_uscita, cache)
+                ricevuta.registra(risposta.token_entrata + risposta.token_uscita, "token", costo, cache=cache)
                 if costi is not None:
                     costi.append(costo)
 
@@ -92,7 +100,8 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
             riferimento=riferimento,
             fare=lambda: fornitore.genera(compito=compito, messaggi=messaggi, modello=modello, json_atteso=True,
                                           max_token=uscita, dati={**(dati or {}), "tentativo": tentativo},
-                                          ragionamento=RAGIONAMENTO.get(modello)),
+                                          ragionamento=RAGIONAMENTO.get(modello),
+                                          chiave_cache=chiave_cache(compito, riferimento, lezione_id)),
             registra=registra,
         )
         oggetto = estrai_json(risposta.testo)

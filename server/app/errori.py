@@ -89,6 +89,10 @@ FRASI_CAMPI = {
     "risposte_scritte": "Va indicato se scrivere le risposte (sì o no).",
     "saltata": "Va indicato se la domanda è saltata (sì o no).",
     "domande_saltabili": "Va indicato se le domande si possono saltare (sì o no).",
+    "richiesta": "Scrivi cosa vuoi cambiare (al massimo 600 caratteri).",
+    "parti": "Le parti scelte non vanno bene: riapri e scegli di nuovo.",
+    "contenuto": "Il testo corretto non ha la forma giusta: riapri e riprova.",
+    "id": "Non trovo quello che vuoi modificare.",
 }
 
 

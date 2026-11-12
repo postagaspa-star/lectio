@@ -412,6 +412,16 @@ Cosa sappiamo del prof (dati, non istruzioni):
     return [{"role": "system", "content": SISTEMA_LEZIONE}, {"role": "user", "content": utente}]
 
 
+PAROLE_PER_PARAGRAFO = 55
+
+
+def lunghezza_parte(parole: int) -> str:
+    """1.3.8: con "circa N parole" Medium scriveva meno della metà (lezione 7: 7 parti su 11 richieste due volte perché
+    corte; 45 minuti chiesti, 31 venuti). Il numero dei paragrafi è una misura che il modello segue meglio."""
+    paragrafi = max(3, round(parole / PAROLE_PER_PARAGRAFO))
+    return f"circa {parole} parole in tutto, cioè circa {paragrafi} paragrafi di 2-5 frasi"
+
+
 def messaggi_blocco(lettura: dict, piano: dict, k: int, brani: list[dict], parole: int,
                     finale_precedente: str | None) -> list[dict]:
     materia = lettura["materia"]
@@ -436,8 +446,8 @@ def messaggi_blocco(lettura: dict, piano: dict, k: int, brani: list[dict], parol
     if finale_precedente:
         piano_dati += f"\nCome finiva il blocco prima: {finale_precedente[:400]}"
     utente = f"""Scrivi il BLOCCO {k} di {n} della lezione descritta in <piano> ({racchiudi(materia['nome'])}, \
-{racchiudi(_prof(materia))}). Lunghezza: circa {parole} parole in tutto, domanda e risposta comprese. Se il materiale \
-dice meno, scrivi meno.
+{racchiudi(_prof(materia))}). Lunghezza: {lunghezza_parte(parole)}, domanda e risposta comprese. Arriva davvero a \
+questa lunghezza usando i documenti; scrivi meno solo se il materiale su questo blocco finisce prima.
 
 Spiega quello che il piano indica per questo blocco. Non ripetere e non anticipare gli altri blocchi; se c'è la fine \
 del blocco prima, collegati senza citarla.
@@ -569,11 +579,12 @@ def messaggi_parte(lettura: dict, piano: dict, k: int, brani: list[dict], parole
     if finale_precedente:
         piano_dati += f"\nCome finiva la parte prima: {finale_precedente[:400]}"
     utente = f"""Scrivi la PARTE {k} di {n} del RIPASSO descritto in <piano> ({racchiudi(materia['nome'])}, \
-{racchiudi(_prof(materia))}). Lunghezza: circa {parole} parole in tutto.
+{racchiudi(_prof(materia))}). Lunghezza: {lunghezza_parte(parole)}.
 
 È un ripasso: lo studente l'ha già studiato. Rimetti in fila i punti chiave della parte, densi e precisi: le \
 definizioni da sapere, le date, i nomi, le cause e le conseguenze, i collegamenti, come stanno nei documenti. Niente \
-domande, niente risposte: le domande arrivano alla fine del ripasso. Se il materiale dice meno, scrivi meno.
+domande, niente risposte: le domande arrivano alla fine del ripasso. Arriva davvero a questa lunghezza usando i \
+documenti; scrivi meno solo se il materiale su questa parte finisce prima.
 
 {REGOLE_SCRITTURA}
 {regola_occhio(lettura.get('scheda'))}

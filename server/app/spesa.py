@@ -135,9 +135,14 @@ class Prezzi:
                (self.voce, settings.modello_voce, "per la voce espressiva")]
         return [uso for listino, modello, uso in usi if modello not in listino]
 
-    def costo_testo(self, modello: str, token_entrata: int, token_uscita: int) -> float:
+    def costo_testo(self, modello: str, token_entrata: int, token_uscita: int, token_cache: int = 0) -> float:
+        """`token_cache`: quanti dei token d'entrata Mistral ha preso dalla cache (si pagano il 10%, provato il 12/11/2026
+        su Medium 3.5 e Small 4: la cache c'è da sola, una chiave uguale la rende più probabile)."""
         p = self._voce_listino(self.testo, modello)
-        dollari = token_entrata / 1e6 * p["entrata_per_milione"] + token_uscita / 1e6 * p["uscita_per_milione"]
+        cache = max(0, min(int(token_cache or 0), int(token_entrata)))
+        prezzo_cache = p.get("cache_per_milione", p["entrata_per_milione"] * 0.1)
+        dollari = ((token_entrata - cache) / 1e6 * p["entrata_per_milione"] + cache / 1e6 * prezzo_cache
+                   + token_uscita / 1e6 * p["uscita_per_milione"])
         return dollari * self.cambio
 
     def costo_ocr(self, modello: str, pagine: int) -> float:
@@ -174,8 +179,8 @@ class Ricevuta:
         self.materia_id = materia_id
         self.registrata = False
 
-    def registra(self, quantita: float, unita: str, costo_eur: float, cosa: str | None = None) -> None:
-        self._cassa._registra(self, quantita, unita, costo_eur, cosa or self.cosa)
+    def registra(self, quantita: float, unita: str, costo_eur: float, cosa: str | None = None, cache: int | None = None) -> None:
+        self._cassa._registra(self, quantita, unita, costo_eur, cosa or self.cosa, cache)
         self.registrata = True
 
 
@@ -250,6 +255,7 @@ class Cassa:
             caratteri += max(0, int(r["stima_caratteri"]) - int(r["usati"]))
         for tabella, parola, stati in (("schemi", "schema", "'in_coda', 'in_preparazione'"),
                                        ("riassunti", "riassunto", "'in_coda', 'in_preparazione'"),
+                                       ("modifiche", "modifica", "'in_coda', 'in_preparazione'"),
                                        ("simulate", "simulata", "'in_coda', 'in_preparazione', 'in_correzione'")):
             for r in conn.execute(
                 f"SELECT t.stima_eur, (SELECT COALESCE(SUM(costo_eur), 0) FROM spese WHERE riferimento = '{parola}:' || t.id)"
@@ -354,21 +360,21 @@ class Cassa:
             conn.execute("UPDATE spese SET stato = 'stimata', cosa = ? WHERE id = ? AND stato = 'prenotata'",
                          (f"{cosa} (risposta persa: conto la stima)", riga_id))
 
-    def _registra(self, r: Ricevuta, quantita: float, unita: str, costo_eur: float, cosa: str) -> None:
+    def _registra(self, r: Ricevuta, quantita: float, unita: str, costo_eur: float, cosa: str, cache: int | None = None) -> None:
         ora = clock.now()
         costo_eur = max(0.0, float(costo_eur))
         with db.aperta(self.db_path) as conn, db.transazione(conn):
             if r.riga_id is not None:
-                conn.execute("UPDATE spese SET quantita = ?, unita = ?, costo_eur = ?, cosa = ?, stato = 'fatta'"
-                             " WHERE id = ?", (float(quantita), unita, costo_eur, cosa, r.riga_id))
+                conn.execute("UPDATE spese SET quantita = ?, unita = ?, costo_eur = ?, cosa = ?, stato = 'fatta', di_cui_cache = ?"
+                             " WHERE id = ?", (float(quantita), unita, costo_eur, cosa, cache, r.riga_id))
                 mese = conn.execute("SELECT mese FROM spese WHERE id = ?", (r.riga_id,)).fetchone()["mese"]
             else:
                 mese = clock.mese(ora)
                 conn.execute(
                     "INSERT INTO spese (quando, mese, cosa, fornitore, quantita, unita, costo_eur, lezione_id,"
-                    " materiale_id, materia_id, stato) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fatta')",
+                    " materiale_id, materia_id, stato, di_cui_cache) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fatta', ?)",
                     (clock.iso(ora), mese, cosa, r.fornitore, float(quantita), unita, costo_eur, r.lezione_id,
-                     r.materiale_id, r.materia_id),
+                     r.materiale_id, r.materia_id, cache),
                 )
             tetto = self.tetto(conn)
             dopo = self.speso(conn, mese)

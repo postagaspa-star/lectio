@@ -25,11 +25,11 @@ public class PacchettoTest
         Assert.Equal("false", Valore("PublishTrimmed"));
         Assert.Equal("win-x64", Valore("RuntimeIdentifier"));
         var progetto = File.ReadAllText(Pc("Lectio", "Lectio.csproj"));
-        Assert.Contains("<Version>1.3.5</Version>", progetto);
+        Assert.Contains("<Version>1.3.6</Version>", progetto);
         Assert.Contains("<AssemblyName>Lectio</AssemblyName>", progetto);
         Assert.DoesNotContain("PublishSingleFile>true", progetto);
-        Assert.Equal("1.3.5", Versione.Nome);
-        Assert.Equal(11, Versione.Codice);
+        Assert.Equal("1.3.6", Versione.Nome);
+        Assert.Equal(12, Versione.Codice);
     }
 
     [Fact]

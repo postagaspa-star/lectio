@@ -62,10 +62,10 @@
     });
   };
 
-  /** Il testo di un riassunto: titolo, paragrafi e punti, senza segni di fonte. */
-  function testoRiassunto(r) {
-    return ((r.contenuto && r.contenuto.parti) || []).map((p) => h('section', { class: 'rs-parte' },
-      p.titolo ? h('h2', null, p.titolo) : null,
+  /** Il testo di un riassunto: titolo, paragrafi e punti, senza segni di fonte. `cambiate` = parti appena modificate (§44.3). */
+  function testoRiassunto(r, cambiate) {
+    return ((r.contenuto && r.contenuto.parti) || []).map((p, i) => h('section', { class: 'rs-parte' + (cambiate && cambiate.has(i + 1) ? ' mod-cambiata' : ''), 'data-parte': String(i + 1) },
+      cambiate && cambiate.has(i + 1) ? (p.titolo ? h('div', { class: 'mod-titolo-cambiata' }, h('h2', null, p.titolo), A.etichettaCambiata()) : A.etichettaCambiata()) : p.titolo ? h('h2', null, p.titolo) : null,
       (p.paragrafi || []).length ? h('div', { class: 'rs-paragrafi' }, p.paragrafi.map((t) => h('p', { class: 'rs-testo' }, A.conGrassetto(t)))) : null,
       (p.punti || []).length ? h('ul', { class: 'sch-punti' }, p.punti.map((t) => h('li', null, A.conGrassetto(t)))) : null));
   }
@@ -83,7 +83,26 @@
     const ricorda = (r) => { attuale = r; forma = r.forma; schemaId = r.schema_id; };
     const dellaForma = (f) => L.riassuntoDellaForma(elenco, f);
 
-    S.aggiornaPagina = () => { if (attuale && inLavoro(attuale)) richiedi(); };
+    // §44.3 La modifica del riassunto aperto (cambia forma = cambia riassunto: si segue quello nuovo).
+    let seg = null;
+    const aggiornaElenco = (r) => { elenco = elenco.filter((x) => x.id !== r.id).concat([r]); };
+    function seguito() {
+      if (seg && seg.id === attuale.id) return seg;
+      const idQui = attuale.id;
+      seg = A.seguiModifica({
+        tipo: 'riassunto', id: idQui,
+        vivo: () => vivo() && !!attuale && attuale.id === idQui,
+        ricarica: () => A.api.get('/server/api/riassunti/' + idQui),
+        pronta: (nuovo) => { aggiornaElenco(nuovo); ricorda(nuovo); disegna(false); },
+        cambia: (nuovo) => { if (attuale && attuale.id === idQui) attuale.modifica = nuovo.modifica; },
+      });
+      return seg;
+    }
+
+    S.aggiornaPagina = () => {
+      if (attuale && inLavoro(attuale)) { richiedi(); return; }
+      if (seg && !document.querySelector('[data-correggi]')) { seg.subito(); seg.aggiorna(); }
+    };
 
     async function carica() {
       const r = await A.api.get('/server/api/riassunti/' + rotta.id);
@@ -147,17 +166,48 @@
       mostra(r.dati);
     }
 
-    function testata() {
+    /** `sg` = la modifica seguita, solo se si sta guardando un riassunto pronto (§44.1: Modifica, Correggi, Torna a prima). */
+    function testata(sg) {
       const pronto = attuale && attuale.stato === 'pronto';
       const nome = L.FORME_RIASSUNTO.find((x) => x.forma === attuale.forma);
       return h('div', { class: 'sch-testa' },
         A.frecciaIndietro(() => A.vai('#schema/' + schemaId)), A.pillolaMateria(m), h('span', { class: 'spazio' }),
         A.modalitaProva() ? h('span', { class: 'pillola stato prova' }, 'Prova') : null,
+        sg ? sg.pillola(apriModifica) : null,
         pronto ? A.pulsantePdf('api/riassunti/' + attuale.id + '/pdf', L.nomeFilePdf((attuale.titolo || 'Riassunto') + ' - ' + (nome ? nome.nome : ''), 'Riassunto')) : null,
-        A.menuPuntini(() => [
-          { testo: 'Rifai', azione: 'rifai-riassunto', spenta: S.senzaRete || inLavoro(attuale), fai: rifai },
-          { testo: 'Elimina', pericolo: true, azione: 'elimina-riassunto', spenta: S.senzaRete, fai: elimina },
-        ]));
+        A.menuPuntini(() => {
+          const perche = sg ? sg.motivo() : null;
+          return [
+            { testo: 'Rifai', azione: 'rifai-riassunto', spenta: S.senzaRete || inLavoro(attuale), fai: rifai },
+            sg ? { testo: 'Correggi a mano', azione: 'correggi-a-mano', spenta: !!perche, frase: perche, fai: correggi } : null,
+            sg ? A.voceVersione(attuale, scambia) : null,
+            { testo: 'Elimina', pericolo: true, azione: 'elimina-riassunto', spenta: S.senzaRete, fai: elimina },
+          ];
+        }));
+    }
+
+    function apriModifica() {
+      const sg = seguito();
+      const nome = L.FORME_RIASSUNTO.find((x) => x.forma === attuale.forma);
+      A.apriModifica({ tipo: 'riassunto', oggetto: attuale, titolo: (attuale.titolo || 'Riassunto') + (nome ? ' · ' + nome.nome : ''), materia: m, inviata: (md) => sg.avvia(md) });
+    }
+
+    function correggi() {
+      A.correggiAMano(pag, {
+        tipo: 'riassunto', oggetto: attuale, materia: m, indietro: () => A.vai('#schema/' + schemaId),
+        salvato: (nuovo) => { aggiornaElenco(nuovo); ricorda(nuovo); disegna(false); },
+        annullato: () => disegna(false),
+      });
+    }
+
+    async function scambia() {
+      const id = attuale.id;
+      const nuovo = await A.scambiaVersione('riassunto', id, attuale.versione_da_parte);
+      if (!nuovo || !vivo() || !attuale || attuale.id !== id) return;
+      aggiornaElenco(nuovo);
+      ricorda(nuovo);
+      if (seg) seg.evidenzia = new Set();
+      disegna(false);
     }
 
     async function rifai() {
@@ -195,9 +245,17 @@
     /** `formaVuota` = si sta guardando una forma che non esiste ancora. */
     function disegna(cambio, formaVuota, erroreChiedi) {
       const vista = formaVuota || attuale.forma;
-      const parti = [testata(),
+      const prontoQui = !formaVuota && attuale.stato === 'pronto';
+      const sg = prontoQui ? seguito() : null;
+      if (sg) sg.imposta(attuale);
+      const parti = [testata(sg),
         h('div', { class: 'sch-titoli' }, h('h1', null, attuale.titolo || 'Riassunto'),
-          !formaVuota && attuale.stato === 'pronto' ? h('span', { class: 'sottotitolo', 'data-parole': 'si' }, L.fraseParole(attuale.parole)) : null),
+          prontoQui ? h('span', { class: 'sottotitolo', 'data-parole': 'si' }, L.fraseParole(attuale.parole)) : null),
+        // §44.6 Il riassunto è più vecchio dello schema: si dice, con Rifallo (la stessa conferma di Rifai).
+        prontoQui && attuale.schema_cambiato ? h('div', { class: 'mod-vecchio', 'data-vecchio': 'si' },
+          h('span', null, 'Lo schema è cambiato dopo questo riassunto.'),
+          h('button', { type: 'button', class: 'pulsante testo', 'data-azione': 'rifallo', disabled: S.senzaRete ? true : null, onclick: rifai }, 'Rifallo')) : null,
+        sg ? sg.el : null,
         barraForme(vista)];
       if (formaVuota) {
         const spesa = invio ? 'Chiedo il riassunto…' : A.modalitaProva() ? 'Scrivilo' : 'Scrivilo · ' + L.euro(stima);
@@ -221,7 +279,7 @@
         }, 'Riprova')]), h('div', null, h('button', { type: 'button', class: 'pulsante testo tenue-testo', 'data-azione': 'elimina-riassunto', onclick: elimina }, 'Elimina')));
       } else {
         if (attuale.nota) parti.push(h('div', { class: 'sch-nota', 'data-nota': 'riassunto' }, h('div', { class: 'testa' }, icona('domanda'), 'Non ho trovato tutto'), h('p', null, attuale.nota)));
-        parti.push(h('article', { class: 'rs-scheda' + (cambio ? ' cambia' : ''), 'data-riassunto': attuale.forma }, testoRiassunto(attuale)));
+        parti.push(h('article', { class: 'rs-scheda' + (cambio ? ' cambia' : ''), 'data-riassunto': attuale.forma }, testoRiassunto(attuale, sg ? sg.evidenzia : null)));
       }
       svuota(pag, h('div', { class: 'rs-pagina ' + A.classeMateria(m.colore) }, parti));
     }

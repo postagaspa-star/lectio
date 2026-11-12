@@ -478,7 +478,7 @@ test('dopo l\'aggiornamento parte una volta la visita delle cose nuove, e si ric
   const p = await B.pagina(s, { tempi: TEMPI });
   await p.aspetta(() => p.A.S.visita, 5000);
   assert.equal(p.A.S.visita.modo, 'novita');
-  assert.equal(p.A.S.visita.passi.length, 16);
+  assert.equal(p.A.S.visita.passi.length, 17);
   await p.aspetta(() => p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   p.clic(p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   await p.aspetta(() => s.chiamate('POST', '/locale/tutorial-novita-visto').length === 1);
@@ -493,13 +493,28 @@ test('la visita delle cose nuove trova il suo bersaglio a ogni passo', opz, asyn
   await p.A.avviaVisita(false, 'novita');
   await p.aspetta(() => p.A.S.visita && !p.A.S.visita.preparando);
   const passi = p.A.S.visita.passi;
-  assert.equal(passi.length, 16);
+  assert.equal(passi.length, 17);
   for (let i = 0; i < passi.length - 1; i++) {
     await p.A.visitaVai(i);
     const trovato = await p.aspetta(() => passi[i].bersaglio.some((b) => p.q(b)), 3000).catch(() => false);
     assert.ok(trovato, 'passo ' + (i + 1) + ', ' + passi[i].titolo + ': manca ' + passi[i].bersaglio.join(' o '));
   }
   assert.equal(s.log.filter((x) => x.metodo !== 'GET' && x.percorso.startsWith('/server/')).length, 0, 'la visita non manda niente al server');
+});
+
+test('chi aveva già visto le novità vede una volta solo il passo nuovo (Modifica)', opz, async () => {
+  const s = B.server({});
+  s.stato.tutorial_novita_visto = true;
+  s.stato.novita_nuove = true;
+  const p = await B.pagina(s, { tempi: TEMPI });
+  await p.aspetta(() => p.A.S.visita && !p.A.S.visita.preparando, 5000);
+  assert.equal(p.A.S.visita.modo, 'ultime');
+  assert.equal(p.A.S.visita.passi.map((x) => x.titolo || 'fine').join(' | '), 'Modifica | fine');
+  assert.ok(await p.aspetta(() => p.q('[data-visita="modifica"]'), 3000));
+  p.clic(p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
+  await p.aspetta(() => s.chiamate('POST', '/locale/tutorial-novita-visto').length === 1);
+  assert.equal(s.chiamate('POST', '/locale/tutorial-visto').length, 0);
+  assert.ok(await p.aspetta(() => p.A.S.motore.novita_nuove === false));
 });
 
 test('chi ha già visto le novità non rivede niente', opz, async () => {
@@ -514,7 +529,7 @@ test('chi ha già visto le novità non rivede niente', opz, async () => {
 test('nei testi nuovi niente emoji e niente punti esclamativi', () => {
   const ui = path.join(__dirname, '..', '..', 'ui');
   const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
-  for (const f of ['studio.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js']) {
+  for (const f of ['studio.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'modifiche.js', 'lettore.js']) {
     const testo = fs.readFileSync(path.join(ui, f), 'utf8');
     assert.doesNotMatch(testo, emoji, f);
     for (const m of testo.matchAll(/'([^'\n]*[A-Za-zà-ù ]!)'/g)) assert.fail(f + ': punto esclamativo in ' + m[1]);

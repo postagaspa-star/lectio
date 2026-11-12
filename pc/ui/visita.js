@@ -239,6 +239,16 @@
       },
     },
     {
+      // §44.8: la pillola Modifica dello schema. giro 2 (1.3.6): chi aveva già visto le novità vede solo questo.
+      giro: 2,
+      titolo: 'Modifica', frase: 'Qui chiedi di cambiare qualcosa senza rifare tutto. Se non ti piace, Torna a prima è nel menu.', leggi: true,
+      bersaglio: ['[data-visita="modifica"]'],
+      prepara: async () => {
+        await apriSchema();
+        portaInVista(await aspetta(() => document.querySelector('[data-visita="modifica"]'), 2000), 'center'); // in cima alla pagina: si torna su del tutto, l'anello non si taglia
+      },
+    },
+    {
       titolo: 'Ripasso lampo', frase: 'Poche schede al giorno, tre minuti.', evento: 'lampo-apri', tasto: 'clic',
       bersaglio: ['[data-visita="lampo-inizia"]'],
       prepara: async () => { A.chiudiTuttiIVeli(); A.chiudiLettore(false); await vaiA('#oggi', '[data-visita="lampo-inizia"]'); },
@@ -275,10 +285,14 @@
     },
   ];
   const FINE = { fine: true };
+  /** Il giro di novità di questa versione: uguale a Configurazione.GiroNovita nel programma. */
+  const GIRO_NOVITA = 2;
 
-  /** Le visite: quella di sempre, le cose nuove (una volta sola dopo l'aggiornamento), tutte e due da Impostazioni. */
+  /** Le visite: quella di sempre, le cose nuove (una volta sola dopo l'aggiornamento), solo i passi dell'ultimo giro per chi
+   *  aveva già visto le novità, tutte e due da Impostazioni. */
   function passiDi(modo) {
     if (modo === 'novita') return PASSI_NUOVI.concat([FINE]);
+    if (modo === 'ultime') return PASSI_NUOVI.filter((p) => p.giro === GIRO_NOVITA).concat([FINE]);
     if (modo === 'tutta') return PASSI.concat(PASSI_NUOVI, [FINE]);
     return PASSI.concat([FINE]);
   }
@@ -326,8 +340,8 @@
     salvato = null;
     A.disegnaStato();
     if (segna !== false && !S.prova) {
-      if (v.modo !== 'novita') ApiBase.post('/locale/tutorial-visto', {}).then((r) => { if (r.ok && S.motore) S.motore.tutorial_visto = true; });
-      if (v.modo !== 'base') ApiBase.post('/locale/tutorial-novita-visto', {}).then((r) => { if (r.ok && S.motore) S.motore.tutorial_novita_visto = true; });
+      if (v.modo === 'base' || v.modo === 'tutta') ApiBase.post('/locale/tutorial-visto', {}).then((r) => { if (r.ok && S.motore) S.motore.tutorial_visto = true; });
+      if (v.modo !== 'base') ApiBase.post('/locale/tutorial-novita-visto', {}).then((r) => { if (r.ok && S.motore) { S.motore.tutorial_novita_visto = true; S.motore.novita_nuove = false; } });
     }
     await A.caricaMaterie();
     if (location.hash === '#oggi') A.disegna();

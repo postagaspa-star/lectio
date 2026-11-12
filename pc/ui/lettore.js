@@ -153,13 +153,17 @@
     const mio = (P.giro = (P.giro || 0) + 1);
     const vivo = () => P.giro === mio;
     P.inAttesa = null;
-    const primaSalvata = scarica(true); // il punto della lezione di prima va sul server (prima di "sto caricando")
+    // Il punto della lezione di prima va sul server (prima di "sto caricando"). Dopo una modifica no: era un punto
+    // dell'audio vecchio, e quello giusto nell'audio nuovo arriva già in o.posizione (contratto §28.1).
+    const primaSalvata = o.senzaSalvare ? Promise.resolve() : scarica(true);
     P.idInCarico = id;
     P.caricando = true;
     await primaSalvata;
     if (!vivo()) return;
     if (P.audio) { P.audio.pause(); scollega(P.audio); }
-    Object.assign(P, { lezione: null, id, audio: null, fermate: null, caricando: true, percentuale: 0, errore: null, domanda: null, finita: false, torna: null });
+    Object.assign(P, { lezione: null, id, audio: null, fermate: null, caricando: true, percentuale: 0, errore: null, domanda: null, finita: false, torna: null, versioneNuova: null });
+    // §44.3 La modifica della lezione si segue finché la lezione resta nel lettore (anche dalle altre pagine).
+    if (!P.seg || P.seg.id !== id) P.seg = seguiLezione(id);
     disegnaTutto();
     if (!S.impostazioni) await A.caricaImpostazioni();
     if (!S.materie) await A.caricaMaterie();
@@ -172,6 +176,7 @@
       return;
     }
     P.lezione = det.dati;
+    P.seg.imposta(P.lezione);
     disegnaTutto();
     // L'audio sul computer: il programma lo scarica (col token) se non c'è; intanto la percentuale.
     const controllo = setInterval(async () => {
@@ -191,7 +196,7 @@
     const audio = A.creaAudio(r.dati && r.dati.url, P.lezione.durata_s);
     P.audio = audio;
     P.fermate = new L.Fermate(P.lezione.domande || [], { attive: fermateAttive() });
-    const locale = S.esempio ? null : leggi(CHIAVE_POS + id);
+    const locale = S.esempio || o.dopoCambio ? null : leggi(CHIAVE_POS + id);
     const partenza = o.posizione != null ? o.posizione : L.puntoDiPartenza(L.piuRecente(P.lezione.ascolto, locale), P.lezione.durata_s);
     audio.playbackRate = velocitaPreferita();
     collega(audio);
@@ -206,6 +211,8 @@
       if (oo.domandaId) apriDomandaId(oo.domandaId);
       else if (aperta) apriDomandaId(aperta.id); // lasciata a metà: si riparte da lì, senza saltarla
       else if (oo.suona) suona();
+      // Versione nuova: il punto giusto nell'audio nuovo va subito sul server e sul computer.
+      if (o.dopoCambio) sinc(false);
       disegnaTutto();
     };
     if (audio.readyState >= 1) pronto();
@@ -221,6 +228,62 @@
     }
     sessioneMedia();
   };
+
+  // --- §44 Modifica della lezione e versione di prima ---------------------------------------------------
+
+  function seguiLezione(id) {
+    return A.seguiModifica({
+      tipo: 'lezione', id,
+      vivo: () => P.id === id && !!P.seg && P.seg.id === id,
+      ricarica: () => A.dettaglioLezione(id, true),
+      pronta: (nuova, m) => modificaPronta(id, nuova, m),
+      cambia: (nuova) => { if (P.id === id && P.lezione) { P.lezione.modifica = nuova.modifica; disegnaTutto(); } },
+    });
+  }
+
+  /**
+   * Una modifica finita mentre la lezione è nel lettore: ferma, si ricarica da sola; mentre suona (o con una domanda
+   * aperta) compare "Versione nuova pronta · Ricarica" e si decide quando.
+   */
+  function modificaPronta(id, nuova, m) {
+    if (P.id !== id) return;
+    if ((P.audio && !P.audio.paused) || P.domanda || P.caricando) {
+      P.versioneNuova = { lezione: nuova, cambiate: (m && m.cambiate) || [] };
+      disegnaTutto();
+      return;
+    }
+    ricaricaVersione(nuova, (m && m.cambiate) || [], false);
+  }
+
+  /** Riapre la lezione nella versione nuova, allo stesso punto se quel capitolo non è cambiato, se no al suo inizio. */
+  function ricaricaVersione(nuova, cambiate, suonare) {
+    if (!P.id) return null;
+    const punto = L.puntoDopoModifica((P.lezione && P.lezione.capitoli) || [], (nuova && nuova.capitoli) || [], cambiate, P.audio ? adesso() : 0);
+    P.versioneNuova = null;
+    if (A.dimenticaDettaglio) A.dimenticaDettaglio(P.id);
+    P.promessa = carica(P.id, { senzaSalvare: true, dopoCambio: true, posizione: punto != null ? punto : undefined, suona: !!suonare });
+    return P.promessa;
+  }
+
+  function apriModificaLezione() {
+    const l = P.lezione;
+    const sg = P.seg;
+    if (!l || !sg) return;
+    A.apriModifica({ tipo: 'lezione', oggetto: l, titolo: l.argomento, materia: materia(), inviata: (m) => sg.avvia(m) });
+  }
+
+  /** §44.5 Torna a prima / Rimetti la modifica: l'audio dell'altra versione si riscarica da solo. */
+  async function scambiaLezione() {
+    const l = P.lezione;
+    if (!l) return;
+    const id = l.id;
+    const cambiate = l.modifica && l.modifica.stato === 'pronta' ? l.modifica.cambiate || [] : [];
+    const suonava = !!(P.audio && !P.audio.paused);
+    const nuova = await A.scambiaVersione('lezione', id, l.versione_da_parte);
+    if (!nuova || P.id !== id) return;
+    if (P.seg) P.seg.evidenzia = new Set();
+    ricaricaVersione(nuova, cambiate, suonava);
+  }
 
   /** "Da ripassare": apre il lettore fermo su quella domanda, per rispondere di nuovo. */
   A.apriDomanda = function (lezioneId, domandaId) {
@@ -250,7 +313,7 @@
     if (P.audio) { P.audio.pause(); scollega(P.audio); try { P.audio.removeAttribute('src'); P.audio.load(); } catch (e) { /* niente */ } }
     clearInterval(P.ticker);
     P.giro = (P.giro || 0) + 1; // un'apertura ancora in corso si ferma
-    Object.assign(P, { lezione: null, id: null, idInCarico: null, audio: null, fermate: null, domanda: null, errore: null, caricando: false, promessa: null });
+    Object.assign(P, { lezione: null, id: null, idInCarico: null, audio: null, fermate: null, domanda: null, errore: null, caricando: false, promessa: null, seg: null, versioneNuova: null });
     aggiornaTasti();
     disegnaTutto();
     return salvato;
@@ -486,7 +549,7 @@
       const chiavi = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && (k.startsWith(CHIAVE_POS) || k === CHIAVE_CODA || k.startsWith('lectio.schema.') || k.startsWith('lectio.simulata.'))) chiavi.push(k);
+        if (k && (k.startsWith(CHIAVE_POS) || k === CHIAVE_CODA || k.startsWith('lectio.schema.') || k.startsWith('lectio.simulata.') || k.startsWith('lectio.modifica.'))) chiavi.push(k);
       }
       chiavi.forEach((k) => localStorage.removeItem(k));
     } catch (e) { /* senza memoria del browser non c'è niente da togliere */ }
@@ -826,6 +889,11 @@
       icona(P.audio && !P.audio.paused ? 'pausa' : 'play'));
     const sinistra = h('div', { class: 'sinistra' },
       alto, piastrella,
+      P.seg ? P.seg.el : null,
+      P.versioneNuova ? h('button', {
+        type: 'button', class: 'pillola accento mod-ricarica', 'data-azione': 'ricarica-versione',
+        onclick: () => { const v = P.versioneNuova; if (v) ricaricaVersione(v.lezione, v.cambiate, !!(P.audio && !P.audio.paused)); },
+      }, icona('ripeti'), 'Versione nuova pronta · Ricarica') : null,
       P.errore ? A.messaggio('errore', P.errore) : null,
       P.caricando ? h('div', { class: 'scaricamento' }, h('span', { class: 'secondario' }, P.percentuale > 0 && P.percentuale < 100 ? 'Scarico la lezione · ' + P.percentuale + '%' : 'Apro la lezione…'), A.barra(P.percentuale, 'sottile')) : null,
       h('div', { class: 'avanzamento' }, traccia, h('div', { class: 'tempi-lettore' }, passato, manca)),
@@ -842,19 +910,22 @@
         l.evento_id ? h('span', { class: 'piu' }, 'Dopo la verifica raccontami com\'è andata.') : null) : null);
 
     const destra = h('div', { class: 'colonna' });
+    // Le parti cambiate si segnano nella versione nuova: mentre suona ancora quella di prima ("Ricarica") no.
+    const cambiato = (n) => !!(P.seg && !P.versioneNuova && P.seg.evidenzia.has(Number(n)));
     if (P.testo) {
       const sezioni = (l.testo || []).map((s) => {
         const i = caps.findIndex((c) => c.n === s.capitolo);
         const cap = caps[i];
-        return h('section', { class: stati[i] === 'corso' ? 'corso' : '', 'data-capitolo': String(s.capitolo) },
-          h('h3', null, cap ? cap.titolo : 'Capitolo ' + s.capitolo), (s.paragrafi || []).map((p) => h('p', null, p.replace(/^\s*(\[[a-z]+=[a-z]+\])+\s*/i, ''))));
+        return h('section', { class: (stati[i] === 'corso' ? 'corso' : '') + (cambiato(s.capitolo) ? ' mod-cambiata' : ''), 'data-capitolo': String(s.capitolo) },
+          h('h3', { class: 'mod-titolo-cambiata' }, h('span', null, cap ? cap.titolo : 'Capitolo ' + s.capitolo), cambiato(s.capitolo) ? A.etichettaCambiata() : null),
+          (s.paragrafi || []).map((p) => h('p', null, p.replace(/^\s*(\[[a-z]+=[a-z]+\])+\s*/i, ''))));
       });
       destra.append(h('div', { class: 'testo-lezione' }, sezioni.length ? sezioni : h('p', { class: 'secondario' }, 'Il testo di questa lezione non c\'è.')));
     } else {
       destra.append(h('div', { class: 'sezione' }, h('span', { class: 'etichetta' }, 'Capitoli'),
-        h('div', { class: 'capitoli' }, caps.map((c, i) => h('button', { type: 'button', class: 'capitolo ' + stati[i], 'data-capitolo': String(c.n), onclick: () => salto(c.inizio_s, true) },
+        h('div', { class: 'capitoli' }, caps.map((c, i) => h('button', { type: 'button', class: 'capitolo ' + stati[i] + (cambiato(c.n) ? ' mod-cambiata' : ''), 'data-capitolo': String(c.n), onclick: () => salto(c.inizio_s, true) },
           h('span', { class: 'segno', 'aria-hidden': 'true' }, stati[i] === 'fatto' ? icona('spunta') : stati[i] === 'corso' ? h('span', { class: 'barrette-corso' }, h('i'), h('i'), h('i')) : null),
-          h('span', { class: 'titolo' }, c.titolo), h('span', { class: 'durata' }, L.durataBreve(c.fine_s - c.inizio_s)))))));
+          h('span', { class: 'titolo' }, c.titolo), cambiato(c.n) ? A.etichettaCambiata() : null, h('span', { class: 'durata' }, L.durataBreve(c.fine_s - c.inizio_s)))))));
       if (l.nota) destra.append(h('p', { class: 'secondario' }, l.nota));
     }
     svuota(pag, h('div', { class: 'lettore' + (P.audio && !P.audio.paused ? ' suona' : '') }, sinistra, destra));
@@ -872,7 +943,12 @@
     const l = P.lezione;
     if (!l) return;
     const scaricata = S.motore && (S.motore.scaricate || []).includes(l.id);
+    // §44.1 Modifica la lezione e, se c'è, Torna a prima / Rimetti la modifica (niente correzione a mano: è audio).
+    const perche = P.seg ? P.seg.motivo() : 'Adesso non si può modificare';
+    const versione = A.voceVersione(l, null);
     const t = h('div', { class: 'tendina', role: 'menu' },
+      A.voceTendina({ testo: 'Modifica la lezione', azione: 'modifica-lezione', spenta: !!perche, frase: perche }, () => { chiudi(); apriModificaLezione(); }),
+      versione ? A.voceTendina(versione, () => { chiudi(); scambiaLezione(); }) : null,
       h('button', { type: 'button', 'data-azione': 'cambia-saltabili', onclick: async () => {
         chiudi();
         const nuovo = !l.domande_saltabili;

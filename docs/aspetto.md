@@ -1331,3 +1331,99 @@ della materia), poi nome 17/700 e frase 14/500 tenue, a destra la freccia `avant
 
 I passi che indicavano **Nuova lezione** o **Nuovo schema** ora indicano **Nuovo**, poi la riga giusta del foglio
 (Lezione da ascoltare, Schema). Il testo dei passi cambia solo dove nomina il vecchio pulsante.
+
+## 44. Modifica, Correggi a mano, Torna a prima (v1.3.6 PC, richiesta di Andrea del 12/11)
+
+Una cosa già fatta (lezione, schema, riassunto, verifica simulata) si cambia senza rifarla: Andrea scrive cosa vuole e
+Lectio riscrive solo le parti che servono. Campi e indirizzi: `docs/contratto-api.md` §28. Solo PC per ora; stesso
+stile delle altre pagine, niente schermate nuove a sé: un foglio, una scheda di avanzamento, una modalità di correzione.
+
+### 44.1 Dove si entra
+
+- **Schema** (33.2) e **riassunto** (41.3): nella testata, a sinistra di Scarica PDF, pillola **Modifica** (Superficie
+  2, icona `matita`, stessa misura). Nel menu puntini, sopra Elimina: **Correggi a mano**, e se c'è
+  `versione_da_parte` **Torna a prima** (ruolo `prima`) oppure **Rimetti la modifica** (ruolo `dopo`), icona `torna`.
+- **Lezione** (Lettore, 7): nel menu della testata **Modifica la lezione** e, se c'è, **Torna a prima** / **Rimetti
+  la modifica**. Niente correzione a mano (è audio).
+- **Verifica simulata**: in Pronta (36.2) pulsante testo **Modifica le domande** sotto Fai su carta; nei Risultati
+  (36.4) secondario **Modifica e rifai** accanto a Rifai la verifica; Torna a prima / Rimetti la modifica come
+  pulsante testo in fondo, se c'è.
+- La pillola e le voci sono spente (opacità 0,55) senza rete, quando l'oggetto non è pronto e mentre una modifica è in
+  coda o in preparazione (la frase spiega perché, come le righe spente di 43.3).
+
+### 44.2 Il foglio "Cosa vuoi cambiare?"
+
+Finestra larga 560 come 43.3, X sempre visibile, Esc chiude. Titolo "Cosa vuoi cambiare?" 21/800, sotto il titolo
+dell'oggetto 14/500 tenue.
+1. **Campo** di più righe (16 px, Superficie 2, raggio 14, alto 120), segnaposto per tipo: schema "Per esempio:
+   aggiungi le date delle crociate"; riassunto "Per esempio: più corto, solo le cose da sapere"; lezione "Per esempio:
+   spiega meglio la terza crociata"; verifica "Per esempio: più domande aperte, meno crocette". Contatore "0 / 600"
+   12/600 tenue a destra sotto il campo, ambra oltre 550.
+2. **Spunti**: una riga di pillole Superficie 2 alte 36 (14/600): un tocco aggiunge la frase al campo (se il campo ha
+   già testo, la aggiunge dopo un punto). Schema: Aggiungi le date · Più semplice · Più dettagli · Più corto.
+   Riassunto: Più corto · Più semplice · Più dettagli. Lezione: Spiega meglio · Più esempi · Più semplice. Verifica:
+   Più difficile · Più facile · Più domande aperte · Meno crocette.
+3. **Dove?** barra a due segmenti alta 44: **Tutto** (predefinito) | **Scelgo io**. Con Scelgo io sotto compare
+   l'elenco di `parti_modificabili`: righe da 48 con casella di spunta, tondo 24 con `n` e titolo (una riga, puntini se
+   lungo); al massimo 6 visibili, poi la lista scorre. Con Tutto, una riga 14/500 tenue: "Lectio sceglie da solo le
+   parti che servono."
+4. **Riepilogo** (Fondo blocco, raggio 14): costo "circa 0,03 €" oppure con `fino_a` "fino a 0,15 € (di solito meno)";
+   "Pronta in circa N minuti"; per la lezione anche "Intanto la lezione si ascolta com'è adesso."; per una verifica
+   corretta "Diventa una prova nuova: il voto di adesso resta in Torna a prima." In modalità prova "Prova". La stima
+   si chiede (`POST /api/modifiche/stima`) 400 ms dopo l'ultima modifica del campo o delle parti.
+5. Pulsante pieno **Modifica** (spento con campo vuoto, con Scelgo io senza parti spuntate, o con `consentita`
+   falso: allora sotto c'è la frase `motivo`). Tocco → `POST /api/modifiche`, il foglio si chiude e la pagina mostra
+   la scheda di 44.3. Errore del server: il foglio resta aperto con la frase sotto il pulsante.
+
+### 44.3 Mentre la modifica lavora, e dopo
+
+- **In coda / in preparazione**: sotto la testata una scheda Fondo blocco, raggio 18, padding 16: "STO MODIFICANDO"
+  12/700 accento, la `frase` del server 15/600 (o "In coda"), barra sottile `fatto`/`totale` (250 ms), a destra
+  pulsante testo **Annulla** (conferma in linea "Annullare la modifica?" **Sì** / **No**). Si legge e si ascolta
+  intanto la versione di adesso. Si richiede l'oggetto ogni 4 s finché la modifica lavora.
+- **Errore**: stessa scheda con fondo avviso tenue: la frase `errore`, pulsante secondario **Riprova** e pulsante testo
+  **Lascia stare** (annulla).
+- **Pronta**: la pagina si ricarica da sola; un avviso breve in basso (4 s) "Fatto: ho cambiato le parti 2 e 3"
+  (una parte: "la parte 2"). Le parti in `cambiate` hanno per questa visita un filo di 3 px a sinistra nel colore
+  accento e l'etichetta "CAMBIATA" 11/800 accento accanto al titolo. Se c'è `nota`, scheda avviso come 33.7 sotto la
+  testata, con X per chiuderla (si ricorda finché non arriva un'altra modifica).
+- **Annullata**: niente scheda.
+- **Notifica** di Windows per `modifica_pronta` e `modifica_errore` come le altre (clic → apre la materia, o la lezione).
+
+### 44.4 Correggi a mano (schemi e riassunti)
+
+La pagina passa in **modalità correzione**: sopra il testo una barra fissa (Superficie 2, alta 56) con "Stai
+correggendo a mano" 15/700, a destra pulsante testo **Annulla** e pulsante pieno **Salva**. Indice, Non ho capito,
+segni di fonte, foto (cambia/togli), Ascolta questa parte e Modifica sono nascosti. Ogni testo diventa un campo che
+cresce con il testo (16 px come il Testo di lettura, fondo bianco, bordo 1,5 px `--bordo`, raggio 10; a fuoco bordo
+accento): titoli delle parti e dei blocchi, paragrafi, definizioni (termine e testo), voci (una per riga, nello stesso
+campo: va a capo = voce nuova), tabelle (un campo per cella), didascalie. Il grassetto si vede come `**parola**` e così
+si salva. Le foto restano al loro posto, solo da guardare.
+- **Salva** → `PUT …/testo`; poi la pagina torna in lettura con l'avviso "Salvato. Se serve, Torna a prima è nel
+  menu." Errore: resta in correzione con la frase in una scheda avviso sopra il testo.
+- **Annulla** con cambiamenti fatti: conferma "Lasciare le correzioni?" **Lascia** / **Continua**. Esc = Annulla.
+  Anche uscire dalla pagina con correzioni non salvate chiede la stessa conferma.
+
+### 44.5 Torna a prima / Rimetti la modifica
+
+Tocco → conferma in linea nel menu o in una piccola finestra: "Torno alla versione di prima? Quella di adesso resta
+da parte." (Rimetti: "Rimetto la versione modificata? Quella di adesso resta da parte."), **Sì** / **No**. Poi
+`POST …/scambia-versione`, la pagina si ricarica, avviso "Fatto". Per la lezione l'audio si riscarica da solo.
+
+### 44.6 Riassunto vecchio
+
+Se `schema_cambiato` è vero, sotto il titolo del riassunto una scheda avviso tenue: "Lo schema è cambiato dopo questo
+riassunto." e pulsante testo **Rifallo** (come Rifai di 41.3, con la sua conferma).
+
+### 44.7 Icone nuove
+
+| Nome | Percorso |
+|---|---|
+| `matita` | `M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z` |
+| `torna` | `M1 4v6h6 M3.51 15a9 9 0 1 0 2.13-9.36L1 10` |
+
+### 44.8 Esempio e visita guidata
+
+Nella modalità esempio lo schema di esempio ha `versione_da_parte` e la modifica funziona finta (2 s in preparazione,
+poi pronta con la parte 2 cambiata). Visita guidata: un passo nuovo sulla pillola **Modifica** dello schema: "Qui
+chiedi di cambiare qualcosa senza rifare tutto. Se non ti piace, Torna a prima è nel menu."

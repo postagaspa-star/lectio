@@ -211,6 +211,8 @@ public class ClientContrattoTest
     [InlineData("lezione_errore", true)]
     [InlineData("materiale_errore", true)]
     [InlineData("tetto_vicino", true)]
+    [InlineData("modifica_pronta", true)]
+    [InlineData("modifica_errore", true)]
     [InlineData("scheda_aggiornata", false)]
     [InlineData("materiale_letto", false)]
     [InlineData("materiale_in_cartella", false)]

@@ -26,6 +26,7 @@ class RispostaTesto:
     token_uscita: int
     modello: str
     troncata: bool = False  # finita perché era arrivata al massimo di token: il testo è a metà
+    token_cache: int = 0  # quanti dei token d'entrata Mistral ha preso dalla cache (si pagano il 10%)
 
 
 class TestoMistral:
@@ -41,8 +42,11 @@ class TestoMistral:
 
     def genera(self, *, compito: str, messaggi: list[dict], modello: str, json_atteso: bool = True,
                max_token: int = 4000, temperatura: float = 0.4, dati: dict | None = None,
-               ragionamento: str | None = None) -> RispostaTesto:
+               ragionamento: str | None = None, chiave_cache: str | None = None) -> RispostaTesto:
         corpo = {"model": modello, "messages": messaggi, "temperature": temperatura, "max_tokens": max_token}
+        if chiave_cache:
+            # Le richieste con lo stesso inizio e la stessa chiave trovano più spesso la cache (dati, mai segreti).
+            corpo["prompt_cache_key"] = chiave_cache
         if json_atteso:
             corpo["response_format"] = {"type": "json_object"}
         if ragionamento:
@@ -60,10 +64,12 @@ class TestoMistral:
             contenuto = "".join(str(p.get("text") or "") for p in contenuto
                                 if isinstance(p, dict) and p.get("type") != "thinking")
         uso = d.get("usage") or {}
+        dettagli = uso.get("prompt_tokens_details") or {}
         return RispostaTesto(
             testo=contenuto or "",
             token_entrata=int(uso.get("prompt_tokens") or 0),
             token_uscita=int(uso.get("completion_tokens") or 0),
             modello=d.get("model") or modello,
             troncata=d["choices"][0].get("finish_reason") == "length",
+            token_cache=int((dettagli.get("cached_tokens") if isinstance(dettagli, dict) else 0) or 0),
         )

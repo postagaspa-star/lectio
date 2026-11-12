@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import FileResponse, Response
 
-from .. import clock, db, forme, misure, ripasso
+from .. import clock, db, forme, misure, modifiche, ripasso
 from ..auth import richiede_token
 from ..db import get_conn
 from ..errori import ErroreApi, conflitto, non_trovato, non_valido, tetto
@@ -246,6 +246,7 @@ def riprova(lezione_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Se
 def cancella(lezione_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     trova_lezione(conn, lezione_id)
     conn.execute("DELETE FROM lezioni WHERE id = ?", (lezione_id,))
+    modifiche.togli_di(conn, s.settings.dati_dir, "lezione", lezione_id)
     shutil.rmtree(Path(s.settings.dati_dir) / "lezioni" / str(lezione_id), ignore_errors=True)
     s.lavoro.sveglia("lezioni")
     return {"ok": True}

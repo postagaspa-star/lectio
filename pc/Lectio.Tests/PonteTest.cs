@@ -279,6 +279,28 @@ public class PonteTest
         Assert.Equal(false, Json.Booleano(Json.Nodo(dopo.Json)!["tutorial_visto"]));
     }
 
+    [Fact]
+    public async Task Chi_aveva_visto_le_novita_vede_una_volta_solo_quelle_del_giro_nuovo()
+    {
+        using var b = new Banco(_ => (200, "{}"), config: c => c.TutorialNovitaVisto = true);
+        var ponte = new Ponte(b.Motore);
+        var prima = Json.Nodo((await ponte.GestisciAsync("GET", new Uri(Base, "locale/stato"), null)).Json)!;
+        Assert.Equal(true, Json.Booleano(prima["tutorial_novita_visto"]));
+        Assert.Equal(true, Json.Booleano(prima["novita_nuove"]));
+        Assert.Equal(200, (await ponte.GestisciAsync("POST", new Uri(Base, "locale/tutorial-novita-visto"), Encoding.UTF8.GetBytes("{}"))).Stato);
+        var dopo = Json.Nodo((await ponte.GestisciAsync("GET", new Uri(Base, "locale/stato"), null)).Json)!;
+        Assert.Equal(false, Json.Booleano(dopo["novita_nuove"]));
+        Assert.Equal(Lectio.Motore.Configurazione.GiroNovita, Archivio.LeggiJson<Lectio.Motore.Configurazione>(b.Percorsi.Config)!.NovitaViste);
+    }
+
+    [Fact]
+    public async Task Chi_non_ha_mai_visto_le_novita_non_ha_il_giro_nuovo_a_parte()
+    {
+        using var b = new Banco(_ => (200, "{}"));
+        var stato = Json.Nodo((await new Ponte(b.Motore).GestisciAsync("GET", new Uri(Base, "locale/stato"), null)).Json)!;
+        Assert.Equal(false, Json.Booleano(stato["novita_nuove"]));
+    }
+
     [Theory]
     [InlineData("POST", "api/chiarimenti", 65)]
     [InlineData("POST", "api/schemi/3/immagini/1/cambia", 120)]
@@ -357,6 +379,76 @@ public class PonteTest
         await ponte.GestisciAsync("POST", new Uri(Base, "server/api/schemi/3/riassunti"), Encoding.UTF8.GetBytes("{\"forma\":\"punti\"}"));
         b.Adesso += Motore.Motore.AttesaRiassunto + TimeSpan.FromSeconds(1);
         await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+    }
+
+    [Theory]
+    [InlineData("modifica_pronta", null, "materia/2", "La modifica è pronta", "Fai clic per aprirla.")]
+    [InlineData("modifica_errore", null, "materia/2", "La modifica non è riuscita", "Fai clic per vedere cosa è successo.")]
+    [InlineData("modifica_pronta", 12L, "lezione/12", "La modifica è pronta", "Fai clic per aprirla.")]
+    [InlineData("modifica_errore", 12L, "lezione/12", "La modifica non è riuscita", "Fai clic per vedere cosa è successo.")]
+    public void Gli_avvisi_delle_modifiche_aprono_la_lezione_o_la_materia(string tipo, long? lezione, string frammento, string titolo, string testo)
+    {
+        // Senza testo del server valgono le frasi del programma; con il testo, quello del server.
+        var n = Motore.Motore.NotificaPer(new VoceNovita { Id = 1, Tipo = tipo, Testo = null, MateriaId = 2, LezioneId = lezione });
+        Assert.NotNull(n);
+        Assert.Equal(frammento, n!.Frammento);
+        Assert.Equal(titolo, n.Titolo);
+        Assert.Equal(testo, n.Testo);
+        Assert.True(FinestraLectio.FrammentoValido(n.Frammento));
+        var conTesto = Motore.Motore.NotificaPer(new VoceNovita { Id = 2, Tipo = tipo, Testo = "Ho modificato lo schema «Le crociate»", MateriaId = 2 });
+        Assert.Equal("Ho modificato lo schema «Le crociate»", conTesto!.Titolo);
+    }
+
+    [Fact]
+    public async Task Il_giro_resta_acceso_finche_una_modifica_lavora_e_un_server_vecchio_vale_niente()
+    {
+        var modifiche = (200, "[{\"id\":4,\"tipo\":\"schema\",\"oggetto_id\":12,\"stato\":\"in_preparazione\"}]");
+        using var b = new Banco(q => q.Percorso == "/api/modifiche?attive=1" ? modifiche : (200, "[]"), cursore: 0);
+        await b.Motore.GiroAsync();
+        Assert.True(b.Motore.InPreparazione);
+        Assert.Contains(b.Finto.Ricevute, r => r.Metodo == "GET" && r.Percorso == "/api/modifiche?attive=1");
+
+        modifiche = (200, "[]");
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+
+        modifiche = (200, "[{\"id\":4,\"stato\":\"in_coda\"}]");
+        await b.Motore.GiroAsync();
+        Assert.True(b.Motore.InPreparazione);
+
+        // Un server di prima della 1.7 non conosce l'indirizzo: niente in corso.
+        modifiche = (404, "{\"errore\":\"Non trovato.\",\"codice\":\"non_trovato\"}");
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+    }
+
+    [Theory]
+    [InlineData("server/api/modifiche", true)]
+    [InlineData("server/api/modifiche/4/riprova", true)]
+    [InlineData("server/api/modifiche/stima", false)]
+    [InlineData("server/api/modifiche/4/annulla", false)]
+    [InlineData("server/api/schemi/3/scambia-versione", false)]
+    public async Task Chiedere_una_modifica_accende_il_giro_la_stima_no(string percorso, bool acceso)
+    {
+        using var b = new Banco(q => q.Metodo == "POST" ? (201, "{\"id\":4,\"stato\":\"in_coda\"}") : (200, "[]"));
+        var ponte = new Ponte(b.Motore);
+        Assert.False(b.Motore.InPreparazione);
+        var r = await ponte.GestisciAsync("POST", new Uri(Base, percorso), Encoding.UTF8.GetBytes("{\"tipo\":\"schema\",\"id\":12,\"richiesta\":\"Aggiungi le date\",\"parti\":[2]}"));
+        Assert.Equal(201, r.Stato);
+        Assert.Equal(acceso, b.Motore.InPreparazione);
+    }
+
+    [Fact]
+    public async Task La_correzione_a_mano_va_al_server_con_PUT_e_il_suo_corpo()
+    {
+        using var b = new Banco(_ => (200, "{\"id\":3,\"stato\":\"pronto\"}"));
+        var ponte = new Ponte(b.Motore);
+        var corpo = "{\"titolo\":\"Le crociate\",\"contenuto\":{\"parti\":[{\"titolo\":null,\"paragrafi\":[\"Uno\"],\"punti\":[]}]}}";
+        var r = await ponte.GestisciAsync("PUT", new Uri(Base, "server/api/riassunti/4/testo"), Encoding.UTF8.GetBytes(corpo));
+        Assert.Equal(200, r.Stato);
+        var q = Assert.Single(b.Finto.Di("PUT", "/api/riassunti/4/testo"));
+        Assert.Equal(corpo, q.Corpo);
         Assert.False(b.Motore.InPreparazione);
     }
 

@@ -3,7 +3,7 @@
 import json
 import sqlite3
 
-from . import clock, ripasso
+from . import clock, modifiche, ripasso
 from .lezione import FRASI_FASE
 from .spesa import arrotonda
 
@@ -152,7 +152,7 @@ def lezione(conn: sqlite3.Connection, r: sqlite3.Row, completa: bool = False) ->
                     "aggiornato_il": clock.per_utente(r["ascolto_il"])},
         "audio": ({"byte": r["audio_byte"], "sha256": r["audio_sha256"]}
                   if r["stato"] == "pronta" and r["audio_sha256"] else None),
-        "domande_totali": conn.execute("SELECT COUNT(*) FROM domande WHERE lezione_id = ?", (r["id"],)).fetchone()[0],
+        "domande_totali": conn.execute("SELECT COUNT(*) FROM domande WHERE lezione_id = ? AND tolta = 0", (r["id"],)).fetchone()[0],
     }
     if completa:
         mie = ripasso.mie_risposte(conn, r["id"])
@@ -162,7 +162,8 @@ def lezione(conn: sqlite3.Connection, r: sqlite3.Row, completa: bool = False) ->
              "testo": d["testo"], "risposta": d["risposta"], "inizio_s": d["inizio_s"],
              "fine_domanda_s": d["fine_domanda_s"], "inizio_risposta_s": d["inizio_risposta_s"], "fine_s": d["fine_s"],
              "mia_risposta": mie.get(d["id"])}
-            for d in conn.execute("SELECT * FROM domande WHERE lezione_id = ? ORDER BY n", (r["id"],))
+            for d in conn.execute("SELECT * FROM domande WHERE lezione_id = ? AND tolta = 0 ORDER BY n", (r["id"],))
         ]
         uscita["testo"] = json.loads(r["testo"] or "[]")
+        uscita.update(modifiche.campi_in_piu(conn, "lezione", r))
     return uscita

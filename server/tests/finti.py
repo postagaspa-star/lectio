@@ -18,6 +18,7 @@ from pathlib import Path
 import httpx
 
 from app.audio import FREQUENZA, Montatore
+from app.finto import _segna_modifica
 from app.voci import Audio, senza_segni
 
 SECONDI_PER_CARATTERE = 1 / 60
@@ -82,6 +83,18 @@ class MontatoreFinto(Montatore):
     def codifica(self, wav: Path, mp3: Path) -> None:
         shutil.copyfile(wav, mp3)
 
+    def taglia(self, sorgente: Path, inizio: float, fine: float, destinazione: Path) -> None:
+        with wave.open(str(sorgente), "rb") as w:
+            frequenza = w.getframerate()
+            w.setpos(min(w.getnframes(), int(round(inizio * frequenza))))
+            dati = w.readframes(max(0, int(round((fine - inizio) * frequenza))))
+            canali, larghezza = w.getnchannels(), w.getsampwidth()
+        with wave.open(str(destinazione), "wb") as out:
+            out.setnchannels(canali)
+            out.setsampwidth(larghezza)
+            out.setframerate(frequenza)
+            out.writeframes(dati)
+
 
 # --------------------------------------------------------------------------- server finto
 
@@ -122,6 +135,7 @@ class ServerFinto:
     def __init__(self):
         self.chiamate: list[tuple[str, dict | str]] = []
         self.guasti: dict[str, list[int]] = {}  # percorso → codici da restituire, uno per chiamata
+        self.richieste_modifica: list[str] = []  # i messaggi "Lo studente vuole cambiare…" arrivati
         self.chat_rotta = 0  # quante risposte di chat non valide dare prima di quelle buone
         self.chat_forzata = None  # un testo fisso per la prossima chat
         self.scheda_forzata = None
@@ -242,6 +256,11 @@ class ServerFinto:
         if "Qui sotto ci sono delle frasi numerate" not in primo:
             self.ultimo_prompt = primo
         ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
+        ultimo = dati["messages"][-1]["content"] if isinstance(dati["messages"][-1]["content"], str) else ""
+        if "Lo studente vuole cambiare" in ultimo:
+            self.richieste_modifica.append(ultimo)
+        if "Quali parti bisogna riscrivere" in primo:
+            return self._risposta_chat(json.dumps({"parti": [1]}), dati)
         if "Qui sotto ci sono delle frasi numerate" in primo:
             oggetto = {"fuori": self.fuori_coda.pop(0) if self.fuori_coda else []}
         elif "Qui sotto ci sono i concetti" in primo:
@@ -389,5 +408,7 @@ class ServerFinto:
             oggetto = self.correttore
         else:
             oggetto = {}
+        if "Lo studente vuole cambiare" in ultimo and "Riscrivi tenendo conto" in ultimo:
+            _segna_modifica(oggetto, "prova vera")
         return self._risposta_chat(json.dumps(oggetto, ensure_ascii=False), dati)
 

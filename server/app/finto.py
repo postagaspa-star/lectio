@@ -81,16 +81,46 @@ def _titolo_da(frase: str, riserva: str) -> str:
     return " ".join(parole[:6]).capitalize() if parole else riserva
 
 
+def _segna_modifica(oggetto, richiesta: str) -> None:
+    """Modalità prova: una modifica cambia davvero il testo (si vede e si può controllare), senza AI."""
+    segno = f" (Cambiato in prova: {richiesta[:80]})"
+    for b in oggetto.get("blocchi") or []:
+        if isinstance(b, dict) and b.get("testo"):
+            b["testo"] += segno
+            return
+        if isinstance(b, dict) and b.get("voci"):
+            b["voci"][0] += segno
+            return
+    for p in oggetto.get("paragrafi") or []:
+        if isinstance(p, dict) and p.get("testo"):
+            p["testo"] += segno
+            return
+    if isinstance(oggetto.get("riepilogo"), list) and oggetto["riepilogo"]:
+        oggetto["riepilogo"][0] = str(oggetto["riepilogo"][0]) + segno
+        return
+    if isinstance(oggetto.get("introduzione"), str) and oggetto["introduzione"]:
+        oggetto["introduzione"] += segno
+        return
+    if isinstance(oggetto.get("chiusura"), str) and oggetto["chiusura"]:
+        oggetto["chiusura"] += segno
+        return
+    righe = oggetto.get("righe")
+    if isinstance(righe, list) and righe and isinstance(righe[0], list) and righe[0]:
+        righe[0][-1] = str(righe[0][-1]) + segno
+
+
 class TestoFinto:
     nome = "prova"
     a_pagamento = False
 
     def genera(self, *, compito: str, messaggi: list[dict], modello: str, json_atteso: bool = True,
                max_token: int = 4000, temperatura: float = 0.4, dati: dict | None = None,
-               ragionamento: str | None = None) -> RispostaTesto:
+               ragionamento: str | None = None, chiave_cache: str | None = None) -> RispostaTesto:
         dati = dati or {}
         fare = getattr(self, f"_{compito}", None)
         oggetto = fare(dati) if fare else {}
+        if dati.get("modifica"):
+            _segna_modifica(oggetto, dati["modifica"])
         testo = json.dumps(oggetto, ensure_ascii=False)
         entrata = sum(len(m.get("content", "")) for m in messaggi) // 4
         return RispostaTesto(testo=testo, token_entrata=entrata, token_uscita=len(testo) // 4, modello="prova")
@@ -315,6 +345,32 @@ class TestoFinto:
             else:
                 parti.append({"titolo": sezione["titolo"], "paragrafi": [" ".join(righe[:2])], "punti": righe[2:]})
         return {"titolo": "Riassunto", "parti": parti}
+
+    def _modifica_scelta(self, d: dict) -> dict:
+        return {"parti": list(d.get("numeri") or [])}
+
+    def _riassunto_modifica(self, d: dict) -> dict:
+        scelte = d.get("scelte") or [p["n"] for p in d["parti"]]
+        uscita = []
+        for p in d["parti"]:
+            if p["n"] in scelte:
+                nuova = {**p, "punti": list(p.get("punti") or []), "paragrafi": list(p.get("paragrafi") or [])}
+                segno = f"Cambiato in prova: {str(d.get('modifica') or '')[:80]}"
+                if nuova["paragrafi"]:
+                    nuova["paragrafi"][0] = f"{nuova['paragrafi'][0]} ({segno})"
+                else:
+                    nuova["punti"] = [*nuova["punti"], segno]
+                uscita.append(nuova)
+        return {"parti": uscita, "nota": None}
+
+    def _simulata_modifica(self, d: dict) -> dict:
+        scelte = d.get("scelte") or [x["n"] for x in d["domande"]]
+        uscita = []
+        for x in d["domande"]:
+            if x["n"] in scelte:
+                uscita.append({**x, "testo": f"{x['testo']} (Cambiata in prova: {str(d.get('modifica') or '')[:60]})",
+                               "fonti": list(d.get("fonti") or [])[:1]})
+        return {"domande": uscita, "togli": [], "nota": None}
 
     def _chiarimento(self, d: dict) -> dict:
         tutte = [f for b in d.get("brani") or [] for f in frasi(b["testo"])]

@@ -1395,6 +1395,199 @@
     return righeNuovo(Object.assign({}, o, { pronti: 1, lampo: 1 })).every((r) => r.spenta);
   }
 
+  // --- Modifica, Correggi a mano, Torna a prima (contratto §28, guida §44) ---------------------------
+
+  /** §44.2 La richiesta: da 1 a 600 caratteri; il contatore diventa ambra oltre i 550. */
+  const MASSIMO_RICHIESTA = 600;
+  const AVVISO_RICHIESTA_DA = 550;
+  /** Contratto §28.4: ogni testo corretto a mano al massimo 20.000 caratteri, il titolo 120. */
+  const MASSIMO_TESTO_A_MANO = 20000;
+  const MASSIMO_TITOLO_A_MANO = 120;
+
+  /** §44.2 Il segnaposto del campo e gli spunti, per tipo (il testo dello spunto è quello che entra nel campo). */
+  const MODIFICA_PER_TIPO = {
+    schema: { segnaposto: 'Per esempio: aggiungi le date delle crociate', spunti: ['Aggiungi le date', 'Più semplice', 'Più dettagli', 'Più corto'] },
+    riassunto: { segnaposto: 'Per esempio: più corto, solo le cose da sapere', spunti: ['Più corto', 'Più semplice', 'Più dettagli'] },
+    lezione: { segnaposto: 'Per esempio: spiega meglio la terza crociata', spunti: ['Spiega meglio', 'Più esempi', 'Più semplice'] },
+    simulata: { segnaposto: 'Per esempio: più domande aperte, meno crocette', spunti: ['Più difficile', 'Più facile', 'Più domande aperte', 'Meno crocette'] },
+  };
+
+  /** Una modifica che lavora ancora (in coda o in preparazione): intanto niente altre modifiche né scambi. */
+  function modificaAttiva(m) {
+    return !!m && (m.stato === 'in_coda' || m.stato === 'in_preparazione');
+  }
+
+  /**
+   * §44.2 Uno spunto entra nel campo: vuoto → la frase; con del testo → dopo un punto ("Più corto. Più semplice").
+   * Se non ci sta nei 600 caratteri non entra (ok: false), così nel campo non resta mai una frase a metà.
+   */
+  function aggiungiSpuntoModifica(testo, frase, massimo) {
+    const max = massimo || MASSIMO_RICHIESTA;
+    const ora = String(testo == null ? '' : testo);
+    const base = ora.replace(/\s+$/, '');
+    if (!base.trim()) return frase.length <= max ? { testo: frase, ok: true } : { testo: ora, ok: false };
+    const nuovo = base + (/[.!?…:;]$/.test(base) ? ' ' : '. ') + frase;
+    if (nuovo.length > max) return { testo: ora, ok: false };
+    return { testo: nuovo, ok: true };
+  }
+
+  /** §44.2 "0 / 600" sotto il campo, ambra oltre 550. */
+  function contatoreRichiesta(testo) {
+    const n = String(testo == null ? '' : testo).length;
+    return { testo: n + ' / ' + MASSIMO_RICHIESTA, avviso: n > AVVISO_RICHIESTA_DA };
+  }
+
+  /**
+   * Contratto §28.3 Le parti da scegliere. Se l'oggetto non le porta (un riassunto preso dall'elenco) si contano dal
+   * contenuto; vuota = l'oggetto adesso non si può modificare. Titolo vuoto → "Parte 3".
+   */
+  function partiModificabili(oggetto, tipo) {
+    const o = oggetto || {};
+    let lista = o.parti_modificabili;
+    if (!Array.isArray(lista)) {
+      if (tipo === 'riassunto') lista = ((o.contenuto && o.contenuto.parti) || []).map((p, i) => ({ n: i + 1, titolo: p && p.titolo }));
+      else if (tipo === 'schema') lista = ((o.contenuto && o.contenuto.sezioni) || []).map((s) => ({ n: s.n, titolo: s.titolo }));
+      else if (tipo === 'lezione') lista = (o.capitoli || []).map((c) => ({ n: c.n, titolo: c.titolo }));
+      else lista = (o.domande || []).map((d) => ({ n: d.n, titolo: d.testo }));
+    }
+    return lista.filter((p) => p && p.n != null).map((p) => ({ n: Number(p.n), titolo: String(p.titolo || '').trim() || 'Parte ' + p.n }));
+  }
+
+  /**
+   * §44.1 Modifica, Correggi a mano e Torna a prima sono spenti senza rete, con l'oggetto non pronto e mentre una
+   * modifica lavora; la frase dice perché (come le righe spente di §43.3). null = si può.
+   * o = { senzaRete, pronto, modifica, conParti } (conParti = false se non ci sono parti da cambiare).
+   */
+  function motivoSpentaModifica(o) {
+    const x = o || {};
+    if (x.senzaRete) return 'Serve la rete';
+    if (modificaAttiva(x.modifica)) return 'C\'è già una modifica in corso';
+    if (x.pronto === false || x.conParti === false) return 'Adesso non si può modificare';
+    return null;
+  }
+
+  /** §44.5 Il pulsante per la versione messa da parte: ruolo "prima" → Torna a prima, "dopo" → Rimetti la modifica. */
+  function pulsanteVersione(vdp) {
+    if (!vdp || (vdp.ruolo !== 'prima' && vdp.ruolo !== 'dopo')) return null;
+    if (vdp.ruolo === 'prima') {
+      return { ruolo: 'prima', testo: 'Torna a prima', domanda: 'Torno alla versione di prima?', frase: 'Quella di adesso resta da parte.' };
+    }
+    return { ruolo: 'dopo', testo: 'Rimetti la modifica', domanda: 'Rimetto la versione modificata?', frase: 'Quella di adesso resta da parte.' };
+  }
+
+  /** §44.3 L'avviso a modifica pronta: "Fatto: ho cambiato le parti 2 e 3", "… la parte 2". */
+  function fraseCambiate(cambiate) {
+    const n = Array.from(new Set((cambiate || []).map(Number).filter((x) => Number.isFinite(x)))).sort((a, b) => a - b);
+    if (!n.length) return 'Non ho cambiato niente.';
+    if (n.length === 1) return 'Fatto: ho cambiato la parte ' + n[0];
+    return 'Fatto: ho cambiato le parti ' + n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1];
+  }
+
+  /** §44.2 Il costo nel riepilogo: "circa 0,03 €", con "Tutto" "fino a 0,15 € (di solito meno)", in prova "Prova". */
+  function costoModifica(stima, prova) {
+    if (prova) return 'Prova';
+    if (!stima) return null;
+    return stima.fino_a ? 'fino a ' + euroCosto(stima.costo_eur) + ' (di solito meno)' : 'circa ' + euroCosto(stima.costo_eur);
+  }
+
+  /** §44.2 Le righe del riepilogo, dopo il costo. o = { tipo, stima, corretta } (corretta = verifica già corretta). */
+  function righeRiepilogoModifica(o) {
+    const x = o || {};
+    const righe = [];
+    if (x.stima && x.stima.minuti_preparazione != null) righe.push('Pronta in circa ' + plurale(Number(x.stima.minuti_preparazione) || 1, 'minuto', 'minuti'));
+    if (x.tipo === 'lezione') righe.push('Intanto la lezione si ascolta com\'è adesso.');
+    if (x.tipo === 'simulata' && x.corretta) righe.push('Diventa una prova nuova: il voto di adesso resta in Torna a prima.');
+    return righe;
+  }
+
+  const copiaJson = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
+  const pulito = (t) => String(t == null ? '' : t).trim();
+  /** "uno\n\n due \n" → ["uno", "due"]: nelle voci va a capo = voce nuova, le righe vuote si tolgono. */
+  function righeVoci(testo) {
+    return (Array.isArray(testo) ? testo : String(testo == null ? '' : testo).split('\n')).map(pulito).filter(Boolean);
+  }
+
+  /**
+   * §44.4 / contratto §28.4 Il contenuto dello schema da mandare dopo la correzione a mano: dal `corretto` si prendono
+   * SOLO i testi (titoli delle parti, valori dei campi, e nei blocchi titolo, testo, termine, voci, intestazione, righe,
+   * didascalia); tipi, ordine, numeri, foto, crediti e fonti restano quelli di `originale`. Un testo che nell'originale
+   * non c'era (titolo null) non si aggiunge. Le voci vuote si tolgono; i blocchi rimasti vuoti li toglie il server.
+   */
+  function contenutoSchemaCorretto(originale, corretto) {
+    const fuori = copiaJson(originale) || {};
+    const c = corretto || {};
+    (fuori.sezioni || []).forEach((s, i) => {
+      const cs = (c.sezioni || [])[i] || {};
+      if (typeof s.titolo === 'string' && typeof cs.titolo === 'string') s.titolo = pulito(cs.titolo);
+      (s.campi || []).forEach((k, j) => {
+        const ck = (cs.campi || [])[j];
+        if (k && ck && typeof k.valore === 'string' && typeof ck.valore === 'string') k.valore = pulito(ck.valore);
+      });
+      (s.blocchi || []).forEach((b, j) => {
+        const cb = (cs.blocchi || [])[j];
+        if (!b || !cb || cb.tipo !== b.tipo) return;
+        for (const k of ['titolo', 'testo', 'termine', 'didascalia']) {
+          if (typeof b[k] === 'string' && typeof cb[k] === 'string') b[k] = pulito(cb[k]);
+        }
+        if (Array.isArray(b.voci) && cb.voci != null) b.voci = righeVoci(cb.voci);
+        if (Array.isArray(b.intestazione) && Array.isArray(cb.intestazione)) {
+          b.intestazione = b.intestazione.map((v, k) => (typeof cb.intestazione[k] === 'string' ? pulito(cb.intestazione[k]) : v));
+        }
+        if (Array.isArray(b.righe) && Array.isArray(cb.righe)) {
+          b.righe = b.righe.map((r, ri) => (Array.isArray(r) ? r.map((v, ci) => {
+            const nuova = (cb.righe[ri] || [])[ci];
+            return typeof nuova === 'string' ? pulito(nuova) : v;
+          }) : r));
+        }
+      });
+    });
+    return fuori;
+  }
+
+  /**
+   * Contratto §28.4 Il riassunto corretto a mano: stesso numero di parti dell'originale; il titolo di una parte cambia
+   * solo se c'era; paragrafi e punti vuoti si tolgono.
+   */
+  function contenutoRiassuntoCorretto(originale, corretto) {
+    const fuori = copiaJson(originale) || {};
+    const c = corretto || {};
+    fuori.parti = (fuori.parti || []).map((p, i) => {
+      const cp = (c.parti || [])[i] || {};
+      const x = Object.assign({}, p);
+      if (typeof p.titolo === 'string' && typeof cp.titolo === 'string') x.titolo = pulito(cp.titolo);
+      x.paragrafi = Array.isArray(cp.paragrafi) ? cp.paragrafi.map(pulito).filter(Boolean) : (p.paragrafi || []);
+      x.punti = cp.punti != null ? righeVoci(cp.punti) : (p.punti || []);
+      return x;
+    });
+    return fuori;
+  }
+
+  /** §44.4 C'è qualcosa di cambiato rispetto a com'era? (per "Lasciare le correzioni?") */
+  function correzioniFatte(tipo, originale, titoloPrima, corretto, titoloOra) {
+    if (pulito(titoloPrima) !== pulito(titoloOra)) return true;
+    const ricostruito = tipo === 'riassunto' ? contenutoRiassuntoCorretto(originale, corretto) : contenutoSchemaCorretto(originale, corretto);
+    const base = tipo === 'riassunto' ? contenutoRiassuntoCorretto(originale, originale) : contenutoSchemaCorretto(originale, originale);
+    return JSON.stringify(ricostruito) !== JSON.stringify(base);
+  }
+
+  /**
+   * Il punto da cui ripartire in una lezione cambiata (contratto §28.1, lo stesso criterio del server): stesso punto del
+   * capitolo se quel capitolo non è cambiato, altrimenti l'inizio del capitolo. null se i capitoli non si corrispondono
+   * (allora vale il punto del server). `vecchi`/`nuovi` = capitoli; `cambiate` = numeri dei capitoli cambiati.
+   */
+  function puntoDopoModifica(vecchi, nuovi, cambiate, t) {
+    if (!Array.isArray(vecchi) || !Array.isArray(nuovi) || !vecchi.length || vecchi.length !== nuovi.length) return null;
+    const x = Math.max(0, Number(t) || 0);
+    const i = capitoloA(vecchi, x);
+    const v = vecchi[i];
+    const nu = nuovi.find((c) => c.n === v.n) || nuovi[i];
+    if (!nu) return null;
+    if ((cambiate || []).map(Number).includes(Number(nu.n))) return Number(nu.inizio_s) || 0;
+    const dentro = Math.max(0, x - (Number(v.inizio_s) || 0));
+    const fine = Math.max(Number(nu.inizio_s) || 0, (Number(nu.fine_s) || 0) - 0.5);
+    return Math.round(Math.min((Number(nu.inizio_s) || 0) + dentro, fine) * 10) / 10;
+  }
+
   return {
     GIORNI, MESI, DURATE, VELOCITA, COLORI, ORDINE_COLORI, NOMI_COLORI, coloreUsatoDa, ESTENSIONI, MASSIMO_BYTE, FAMIGLIE_MATERIALE, NOMI_TIPO_MATERIALE, NOMI_TIPO_BREVE, NOMI_TIPI_DOMANDA, FASI,
     TIPI_LEZIONE, SPUNTI, MASSIMO_INDICAZIONI,
@@ -1417,5 +1610,8 @@
     DURATE_SIMULATA, esitoSimulata, voto, statoRigaSimulata, testoTempo, riassuntoSimulata, contaRisposte, unisciRisposte, frasePunti, fraseOltreTempo, puntiDomanda, riepilogoData,
     FORME_RIASSUNTO, riassuntoDellaForma, statoFormaRiassunto, fraseParole, ultimoRiassunto,
     SCELTE_NUOVO, schemiPronti, righeNuovo, nuovoSpento,
+    MASSIMO_RICHIESTA, AVVISO_RICHIESTA_DA, MASSIMO_TESTO_A_MANO, MASSIMO_TITOLO_A_MANO, MODIFICA_PER_TIPO, modificaAttiva, aggiungiSpuntoModifica,
+    contatoreRichiesta, partiModificabili, motivoSpentaModifica, pulsanteVersione, fraseCambiate, costoModifica, righeRiepilogoModifica,
+    righeVoci, contenutoSchemaCorretto, contenutoRiassuntoCorretto, correzioniFatte, puntoDopoModifica,
   };
 });

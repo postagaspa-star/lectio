@@ -7,7 +7,7 @@ import sqlite3
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, Response
 
-from .. import chiarimenti, clock, lampo, pdf, riassunti, schema_ripasso, simulata
+from .. import chiarimenti, clock, lampo, modifiche, pdf, riassunti, schema_ripasso, simulata
 from ..auth import richiede_token
 from ..db import get_conn, transazione
 from ..errori import conflitto, non_trovato, non_valido, tetto
@@ -80,6 +80,7 @@ def _stima_riassunto(s: Servizi, r: sqlite3.Row) -> float:
 def _schema_completo(conn: sqlite3.Connection, s: Servizi, schema_id: int) -> dict:
     r = trova_schema(conn, schema_id)
     uscita = schema_ripasso.per_api(r, completo=True)
+    uscita.update(modifiche.campi_in_piu(conn, "schema", r))
     uscita["riassunti"] = None
     if r["stato"] == "pronto":
         uscita["riassunti"] = {"stima_eur": _stima_riassunto(s, r), "fatti": [
@@ -149,7 +150,10 @@ def riprova_schema(schema_id: int, conn: sqlite3.Connection = Depends(get_conn),
 @router.delete("/schemi/{schema_id}")
 def cancella_schema(schema_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     trova_schema(conn, schema_id)
+    for x in conn.execute("SELECT id FROM riassunti WHERE schema_id = ?", (schema_id,)).fetchall():
+        modifiche.togli_di(conn, s.settings.dati_dir, "riassunto", x["id"])
     conn.execute("DELETE FROM schemi WHERE id = ?", (schema_id,))
+    modifiche.togli_di(conn, s.settings.dati_dir, "schema", schema_id)
     schema_ripasso.cancella_file(s.settings.dati_dir, schema_id)
     return {"ok": True}
 
@@ -194,6 +198,22 @@ def togli_foto(schema_id: int, n: int, conn: sqlite3.Connection = Depends(get_co
 # --- riassunti ------------------------------------------------------------------------------
 
 
+def riassunto_api(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
+    """Il Riassunto con i campi delle modifiche (contratto 28.3)."""
+    uscita = riassunti.per_api(r)
+    uscita.update(modifiche.campi_in_piu(conn, "riassunto", r))
+    schema = conn.execute("SELECT cambiato_il FROM schemi WHERE id = ?", (r["schema_id"],)).fetchone()
+    uscita["schema_cambiato"] = bool(r["stato"] == "pronto" and schema is not None and schema["cambiato_il"]
+                                     and schema["cambiato_il"] != r["schema_del"])
+    return uscita
+
+
+def simulata_api(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
+    uscita = simulata.per_api(r)
+    uscita.update(modifiche.campi_in_piu(conn, "simulata", r))
+    return uscita
+
+
 def trova_riassunto(conn: sqlite3.Connection, riassunto_id: int) -> sqlite3.Row:
     r = conn.execute("SELECT * FROM riassunti WHERE id = ?", (riassunto_id,)).fetchone()
     if r is None:
@@ -208,7 +228,7 @@ def crea_riassunto(schema_id: int, corpo: RiassuntoIn, conn: sqlite3.Connection 
         raise conflitto("Questo schema non è ancora pronto.")
     esiste = conn.execute("SELECT * FROM riassunti WHERE schema_id = ? AND forma = ?", (schema_id, corpo.forma)).fetchone()
     if esiste is not None and esiste["stato"] != "errore":
-        return riassunti.per_api(esiste)
+        return riassunto_api(conn, esiste)
     st = _decidi(conn, s, _stima_riassunto(s, r), "Questo riassunto")
     if not st["consentita"]:
         raise tetto(st["motivo"])
@@ -220,18 +240,18 @@ def crea_riassunto(schema_id: int, corpo: RiassuntoIn, conn: sqlite3.Connection 
         ident = conn.execute("INSERT INTO riassunti (schema_id, materia_id, forma, stato, stima_eur, creato_il, in_coda_dal) VALUES (?, ?, ?, 'in_coda', ?, ?, ?)",
                              (schema_id, r["materia_id"], corpo.forma, st["costo_eur"], ora, ora)).lastrowid
     s.lavoro.sveglia("studio")
-    return riassunti.per_api(trova_riassunto(conn, ident))
+    return riassunto_api(conn, trova_riassunto(conn, ident))
 
 
 @router.get("/schemi/{schema_id}/riassunti")
 def elenco_riassunti(schema_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     trova_schema(conn, schema_id)
-    return [riassunti.per_api(r) for r in conn.execute("SELECT * FROM riassunti WHERE schema_id = ? ORDER BY id", (schema_id,))]
+    return [riassunto_api(conn, r) for r in conn.execute("SELECT * FROM riassunti WHERE schema_id = ? ORDER BY id", (schema_id,))]
 
 
 @router.get("/riassunti/{riassunto_id}")
 def un_riassunto(riassunto_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    return riassunti.per_api(trova_riassunto(conn, riassunto_id))
+    return riassunto_api(conn, trova_riassunto(conn, riassunto_id))
 
 
 @router.post("/riassunti/{riassunto_id}/riprova")
@@ -241,13 +261,14 @@ def riprova_riassunto(riassunto_id: int, conn: sqlite3.Connection = Depends(get_
         trova_riassunto(conn, riassunto_id)
         raise conflitto("Si può riprovare solo un riassunto che si è fermato per un errore.")
     s.lavoro.sveglia("studio")
-    return riassunti.per_api(trova_riassunto(conn, riassunto_id))
+    return riassunto_api(conn, trova_riassunto(conn, riassunto_id))
 
 
 @router.delete("/riassunti/{riassunto_id}")
-def cancella_riassunto(riassunto_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def cancella_riassunto(riassunto_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     trova_riassunto(conn, riassunto_id)
     conn.execute("DELETE FROM riassunti WHERE id = ?", (riassunto_id,))
+    modifiche.togli_di(conn, s.settings.dati_dir, "riassunto", riassunto_id)
     return {"ok": True}
 
 
@@ -353,7 +374,7 @@ def crea_simulata(corpo: SimulataIn, conn: sqlite3.Connection = Depends(get_conn
         " VALUES (?, ?, ?, ?, ?, ?, 'in_coda', ?, ?, ?)",
         (corpo.materia_id, corpo.evento_id, argomento, corpo.minuti, json.dumps(ristretti or []), corpo.indicazioni or "", st["costo_eur"], ora, ora))
     s.lavoro.sveglia("studio")
-    return simulata.per_api(trova_simulata(conn, cur.lastrowid))
+    return simulata_api(conn, trova_simulata(conn, cur.lastrowid))
 
 
 @router.get("/simulate")
@@ -367,7 +388,7 @@ def elenco_simulate(materia_id: int | None = None, conn: sqlite3.Connection = De
 
 @router.get("/simulate/{simulata_id}")
 def una_simulata(simulata_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    return simulata.per_api(trova_simulata(conn, simulata_id))
+    return simulata_api(conn, trova_simulata(conn, simulata_id))
 
 
 @router.patch("/simulate/{simulata_id}")
@@ -381,7 +402,7 @@ def salva_simulata(simulata_id: int, corpo: SimulataPatch, conn: sqlite3.Connect
             conn.execute("UPDATE simulate SET risposte = ? WHERE id = ?", (json.dumps(risposte, ensure_ascii=False), simulata_id))
         if corpo.iniziata and r["stato"] == "pronta":
             conn.execute("UPDATE simulate SET stato = 'in_corso', iniziata_il = ? WHERE id = ?", (clock.adesso(), simulata_id))
-    return simulata.per_api(trova_simulata(conn, simulata_id))
+    return simulata_api(conn, trova_simulata(conn, simulata_id))
 
 
 @router.post("/simulate/{simulata_id}/consegna")
@@ -392,7 +413,7 @@ def consegna(simulata_id: int, conn: sqlite3.Connection = Depends(get_conn), s: 
         trova_simulata(conn, simulata_id)
         raise conflitto("Questa verifica è già stata consegnata.")
     s.lavoro.sveglia("studio")
-    return simulata.per_api(trova_simulata(conn, simulata_id))
+    return simulata_api(conn, trova_simulata(conn, simulata_id))
 
 
 @router.post("/simulate/{simulata_id}/annulla")
@@ -402,7 +423,7 @@ def annulla_simulata(simulata_id: int, conn: sqlite3.Connection = Depends(get_co
         trova_simulata(conn, simulata_id)
         raise conflitto("Si può annullare solo una verifica in coda o in preparazione.")
     simulata.cancella_file(s.settings.dati_dir, simulata_id)
-    return simulata.per_api(trova_simulata(conn, simulata_id))
+    return simulata_api(conn, trova_simulata(conn, simulata_id))
 
 
 @router.post("/simulate/{simulata_id}/riprova")
@@ -414,13 +435,14 @@ def riprova_simulata(simulata_id: int, conn: sqlite3.Connection = Depends(get_co
     stato = "in_correzione" if r["consegnata_il"] else "in_coda"
     conn.execute("UPDATE simulate SET stato = ?, errore = NULL, in_coda_dal = ? WHERE id = ?", (stato, clock.adesso(), simulata_id))
     s.lavoro.sveglia("studio")
-    return simulata.per_api(trova_simulata(conn, simulata_id))
+    return simulata_api(conn, trova_simulata(conn, simulata_id))
 
 
 @router.delete("/simulate/{simulata_id}")
 def cancella_simulata(simulata_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     trova_simulata(conn, simulata_id)
     conn.execute("DELETE FROM simulate WHERE id = ?", (simulata_id,))
+    modifiche.togli_di(conn, s.settings.dati_dir, "simulata", simulata_id)
     simulata.cancella_file(s.settings.dati_dir, simulata_id)
     return {"ok": True}
 
