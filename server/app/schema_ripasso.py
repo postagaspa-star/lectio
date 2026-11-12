@@ -725,10 +725,15 @@ class PreparazioneSchema:
             return [] if isinstance(o.get("righe"), list) and o["righe"] else ['servono le "righe"']
         messaggi = prompt_studio.messaggi_schema_tabella(lettura, testo)
         dati = {"sezioni": [{"titolo": s["titolo"], "primo": next((b.get("testo") for b in s["blocchi"] if b.get("testo")), "")} for s in sezioni]}
-        grezzo = self._chiedi("schema_tabella", messaggi, modello, valida, TOKEN_TABELLA, "Schema · quadro d'insieme", dati)
-        riveduto = controllo.rivedi(self.ctx, grezzo, [], compito="schema_tabella", messaggi=messaggi, modello=modello, valida=valida,
-                                    max_token=TOKEN_TABELLA, cosa="Schema · quadro d'insieme", altro=testo, materia_id=self.riga["materia_id"],
-                                    prima=self.controlla, dati=dati, parlato=False, riferimento=self.riferimento)
+        try:
+            grezzo = self._chiedi("schema_tabella", messaggi, modello, valida, TOKEN_TABELLA, "Schema · quadro d'insieme", dati)
+            riveduto = controllo.rivedi(self.ctx, grezzo, [], compito="schema_tabella", messaggi=messaggi, modello=modello, valida=valida,
+                                        max_token=TOKEN_TABELLA, cosa="Schema · quadro d'insieme", altro=testo, materia_id=self.riga["materia_id"],
+                                        prima=self.controlla, dati=dati, parlato=False, riferimento=self.riferimento)
+        except RispostaNonUsabile:
+            # Il quadro è un di più: se non viene, lo schema esce lo stesso, senza (prima finiva tutto in errore).
+            log.warning("Schema %s: quadro d'insieme non riuscito, esce senza", self.id)
+            return None
         righe = [[_formula(c) for c in r] for r in riveduto.get("righe") or [] if isinstance(r, list)]
         if not righe:
             return None

@@ -456,6 +456,31 @@ def test_riassunto_che_salta_sezioni_si_fa_completare(client, auth, servizi, ser
 
 
 @pagamento
+def test_schema_quadro_dentro_una_chiave_in_piu(client, auth, servizi, server):
+    """12/11: Small 4 rispondeva {"tabella_riassunto": {..."righe"...}} anche dopo la correzione e lo schema finiva in errore."""
+    server.tabella = "involucro"
+    _, d = schema_pronto(client, auth, servizi)
+    quadro = d["contenuto"]["sezioni"][-1]
+    assert quadro["titolo"] == "Quadro d'insieme"
+    assert quadro["blocchi"][0]["righe"] == [["Augusto", "Il potere vero"]]
+
+
+@pagamento
+def test_schema_esce_anche_se_il_quadro_non_viene(client, auth, servizi, server):
+    server.tabella = "rotto"
+    _, d = schema_pronto(client, auth, servizi)
+    titoli = [s["titolo"] for s in d["contenuto"]["sezioni"]]
+    assert "Quadro d'insieme" not in titoli and titoli[:2] == ["Il principato", "Il senato"]
+
+
+def test_risposta_dentro_una_chiave_in_piu():
+    from app import ai
+    assert ai.dentro_involucro({"tabella_riassunto": {"righe": [["a"]]}}) == {"righe": [["a"]]}
+    assert ai.dentro_involucro({"righe": [["a"]]}) is None  # una lista, non un oggetto
+    assert ai.dentro_involucro({"a": {}, "b": {}}) is None and ai.dentro_involucro(None) is None
+
+
+@pagamento
 def test_schema_fermato_riprende_senza_ripagare(client, auth, servizi, server):
     m = materia_pronta(client, auth, servizi)
     s = crea_schema(client, auth, m["id"])

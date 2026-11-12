@@ -5,7 +5,9 @@
 2. La risposta deve essere un oggetto JSON che passa la validazione. Se no: UNA seconda
    richiesta che spiega cosa non va; se anche quella non va, errore chiaro.
 3. Una risposta tagliata perché troppo lunga non si corregge: la seconda richiesta è la stessa
-   di prima, con il doppio dello spazio."""
+   di prima, con il doppio dello spazio.
+4. Una risposta giusta chiusa dentro una chiave in più ({"tabella_riassunto": {...}}) si apre e si
+   usa: Small 4 lo fa e lo rifà anche quando gli si chiede di correggersi (12/11/2026, quadro d'insieme)."""
 
 import json
 import logging
@@ -33,6 +35,15 @@ class RispostaNonUsabile(Exception):
     def __init__(self, frase: str = FRASE_NON_USABILE):
         super().__init__(frase)
         self.frase = frase
+
+
+def dentro_involucro(oggetto: dict | None) -> dict | None:
+    """{"qualsiasi_nome": {...}} → {...}; None se la risposta non è fatta così."""
+    if isinstance(oggetto, dict) and len(oggetto) == 1:
+        (valore,) = oggetto.values()
+        if isinstance(valore, dict):
+            return valore
+    return None
 
 
 def estrai_json(testo: str) -> dict | None:
@@ -88,6 +99,10 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
         errori = ["non è un oggetto JSON"] if oggetto is None else valida(oggetto)
         if not errori:
             return oggetto
+        dentro = dentro_involucro(oggetto)
+        if dentro is not None and not valida(dentro):
+            log.info("%s: risposta dentro la chiave «%s», la apro e la uso", cosa, next(iter(oggetto)))
+            return dentro
         log.warning("%s: risposta non valida (tentativo %s): %s", cosa, tentativo, "; ".join(errori[:5]))
         if oggetto is None and getattr(risposta, "troncata", False) and max_token < TOKEN_USCITA_MASSIMI:
             log.warning("%s: risposta tagliata a %s token, la richiedo con più spazio", cosa, max_token)

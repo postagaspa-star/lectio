@@ -129,6 +129,8 @@ class ServerFinto:
                            "commento": "Giusto il senato. Manca chi governava al posto suo.",
                            "mancava": ["il ruolo di Seiano"]}
         self.ocr_pagine = None
+        # Il quadro d'insieme: "normale", "involucro" (dentro una chiave in più, come Small 4 il 12/11) o "rotto".
+        self.tabella = "normale"
         self.titolo_forzato = None
         self.ultimo_prompt = ""
         self.azure_quota_finita = False
@@ -271,6 +273,10 @@ class ServerFinto:
                        "carte": [{"domanda": "Chi tenne il potere vero?", "risposta": "Augusto."}]}
         elif "Riassumi in UNA tabella" in primo:
             oggetto = {"titolo": "Quadro d'insieme", "intestazione": ["Chi", "Cosa"], "righe": [["Augusto", "Il potere vero"]]}
+            if self.tabella == "involucro":
+                oggetto = {"tabella_riassunto": oggetto}
+            elif self.tabella == "rotto":
+                oggetto = {"tabella_riassunto": {"titolo": "Quadro d'insieme", "colonne": ["Chi"]}}
         elif "Scrivi il riassunto di questo schema" in primo:
             parte: dict = {"titolo": "Il potere", "paragrafi": [], "punti": []}
             if "Forma: PER PUNTI" in primo:
