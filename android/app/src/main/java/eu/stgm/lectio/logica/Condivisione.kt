@@ -36,12 +36,14 @@ data class Condiviso(
 object Condivisione {
     const val MASSIMO_BYTE = 20L * 1024 * 1024
 
-    /** I tipi dichiarati nel Manifest e chiesti al selettore di file. */
+    /** I tipi dichiarati nel Manifest e chiesti al selettore di file (anche gli zip). */
     val TIPI_SELETTORE = arrayOf(
         "text/plain", "text/markdown", "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/msword", "application/vnd.oasis.opendocument.text", "application/rtf", "text/rtf",
         "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif",
+        // Gli zip si aprono e si manda quello che Lectio legge (Archivi).
+        "application/zip", "application/x-zip-compressed",
     )
 
     private val DA_MIME = mapOf(

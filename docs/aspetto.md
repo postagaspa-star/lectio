@@ -188,8 +188,24 @@ una foto: **Che cos'è** (le due famiglie della sezione 5.1, partenza su **Appun
 (segnaposto "Lo scrive Lectio leggendo il file"), data → **Aggiungi**. Mentre il server legge il file: riga con
 segnaposto che pulsa; poi il titolo; se c'è un errore, la frase del server e **Riprova**.
 
-**Condividi da altre app (telefono):** Lectio compare in "Condividi" per testo, PDF, Word e immagini; si apre
+**Condividi da altre app (telefono):** Lectio compare in "Condividi" per testo, PDF, Word, immagini e zip; si apre
 direttamente il foglio con "In quale materia?" e "Che cos'è" su **Appunti**.
+
+**Cartelle e zip (1.3.3):** la riga **File** diventa **File o zip** e sotto c'è **Cartella del telefono** (PC:
+**Cartella del computer**; nella pagina della materia il riquadro dice "Trascina qui file, cartelle o zip" con
+**Scegli il file** e **Scegli la cartella**). Una cartella o uno zip si aprono subito, anche le sottocartelle e
+gli zip dentro gli zip (fino al terzo livello), e si mandano solo i file che Lectio legge, uno alla volta, al
+massimo 300 per volta. Gli avanzi (`__MACOSX`, file e cartelle nascosti, Thumbs.db, desktop.ini, `~$` di Word
+aperto) si saltano senza dirlo; gli altri file rimasti fuori si dicono in una riga per motivo: "Lascio fuori 2
+file che Lectio non sa leggere: video.mp4 e voti.xlsx." (motivi: non lo sa leggere, più grande di 20 MB, vuoto,
+protetto da password, non riesco ad aprirlo; sul PC anche HEIC). Sopra i nomi, in grassetto, "12 file da
+Storia.zip" o "12 file dalla cartella Storia"; con più di 6 file si vedono i primi cinque e "e altri N file".
+"Che cos'è", cartella e data valgono per tutti; niente titolo. Il pulsante dice **Aggiungi 12 file**, poi
+**Mando 3 di 12**. Un file che il server rifiuta (senza testo, illeggibile) resta fuori e si va avanti; alla fine
+"10 file aggiunti. Questi 2 file non sono entrati:" con l'elenco e **Chiudi**. Senza rete, col tetto del mese o
+col server che non risponde ci si ferma: "3 file sono già andati. c.pdf: …" con **Riprova**, che riparte dal
+file fermo senza rimandare quelli già andati. Lo zip non si carica tutto: sul PC si legge l'indice e ogni file si
+scompatta quando parte; sul telefono i file si copiano nella cache dell'app e si tolgono a foglio chiuso.
 
 ### 5.1 Un materiale: titolo e che cos'è (v1.4)
 

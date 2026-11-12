@@ -34,7 +34,9 @@ Besides the audio lessons, Lectio writes study material from the same documents:
 In each subject a single **New** button opens a choice between these: audio lesson, revision sheet, summary,
 mock test or quick review. The material of a subject can be grouped into folders (one level). When a new file
 is clearly about one folder, the server puts it there by itself after reading it, with plain word matching and
-no model, so it costs nothing; when it is not clear, the file stays outside and the student decides.
+no model, so it costs nothing; when it is not clear, the file stays outside and the student decides. A whole
+folder or a zip archive can be added at once: both apps open it on the device (subfolders and zips inside zips
+too), skip what the server cannot read and say which files were left out, then upload the rest one by one.
 
 Everything is written only from the student's documents. They are split into pieces on the server and searched
 with embeddings and keywords, with a fixed priority: book pages, then tests, then oral exams, then notes. The
@@ -55,8 +57,8 @@ estimated by the model.
   lesson will take to prepare with each voice.
 - **Android app** (`android/`): Kotlin and Jetpack Compose with a Media3 player that pauses at each question,
   works from the lock screen and headphones, and plays downloaded lessons offline.
-- **Windows app** (`pc/`): .NET 8 WinForms hosting a WebView2 interface, with drag and drop for files and
-  signed self-updates.
+- **Windows app** (`pc/`): .NET 8 WinForms hosting a WebView2 interface, with drag and drop for files,
+  folders and zip archives, and signed self-updates.
 - **Docs** (`docs/`): the API contract shared by the three parts, the design guide and the clickable
   prototype. The interface and the docs are in Italian because the app is used in an Italian school.
 

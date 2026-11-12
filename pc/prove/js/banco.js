@@ -12,7 +12,7 @@ const path = require('path');
 
 // LECTIO_UI: un'altra cartella dell'interfaccia (per esempio quella di una versione vecchia, per vedere che i test la bocciano).
 const UI = process.env.LECTIO_UI || path.join(__dirname, '..', '..', 'ui');
-const SCRIPT = ['logica.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'visita.js', 'avvio.js'];
+const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'visita.js', 'avvio.js'];
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 
@@ -102,6 +102,20 @@ async function pagina(s, opzioni) {
   const html = fs.readFileSync(path.join(UI, 'index.html'), 'utf8').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<meta http-equiv[^>]*>/, '');
   const dom = new jsdom.JSDOM(html, { url: 'https://lectio.locale/index.html' + (o.hash || ''), runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
+  // Quello che WebView2 ha già e jsdom 16 no (per aprire gli zip, archivi.js): si presta quello di Node.
+  w.TextDecoder = TextDecoder;
+  w.DecompressionStream = DecompressionStream;
+  if (!w.Blob.prototype.arrayBuffer) {
+    w.Blob.prototype.arrayBuffer = function () {
+      return new Promise((ok, no) => { const r = new w.FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsArrayBuffer(this); });
+    };
+  }
+  if (!w.Blob.prototype.stream) {
+    w.Blob.prototype.stream = function () {
+      const blob = this;
+      return new ReadableStream({ async start(c) { c.enqueue(new Uint8Array(await blob.arrayBuffer())); c.close(); } });
+    };
+  }
   // L'orologio della pagina è fermo al giorno dei dati d'esempio (27 ottobre), così i test non invecchiano.
   const D0 = w.Date;
   const sposta = Date.parse('2026-10-27T10:00:00+01:00') - D0.now();
@@ -128,7 +142,7 @@ async function pagina(s, opzioni) {
     let byte = null;
     if (typeof op.body === 'string') { try { corpo = JSON.parse(op.body); } catch (e) { corpo = op.body; } }
     else if (op.body) { byte = op.body.byteLength != null ? op.body.byteLength : null; }
-    s.log.push({ metodo, percorso, corpo, byte, t: Date.now() });
+    s.log.push({ metodo, percorso, corpo, byte, grezzo: byte != null ? Buffer.from(op.body) : null, t: Date.now() });
     await dorme(typeof s.ritardo === 'function' ? s.ritardo(metodo, percorso, corpo) : s.ritardo);
     if (vita.chiusa) return new Promise(() => {});
     let r = s.risposta ? s.risposta(metodo, percorso, corpo) : undefined;

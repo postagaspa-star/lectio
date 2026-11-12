@@ -302,9 +302,10 @@
     const scheda = h('section', { class: 'scheda scheda-prof ' + cm, 'data-visita': 'scheda-prof' }, A.segnaposto(3));
     const materiale = h('div', { class: 'elenco ' + cm }, h('div', { class: 'riga' }, h('div', { class: 'segnaposto riga-finta' })));
     const zona = h('div', { class: 'zona-trascina', 'data-zona': 'materia' },
-      icona('carica'), h('span', { class: 'titolo-zona' }, 'Trascina qui i file'),
+      icona('carica'), h('span', { class: 'titolo-zona' }, 'Trascina qui file, cartelle o zip'),
       h('div', { class: 'azioni' },
-        h('button', { type: 'button', class: 'pulsante tenue piccolo', onclick: () => scegliFile(m, '.pdf,.docx,.odt,.rtf,.txt,.md,.jpg,.jpeg,.png,.webp') }, 'Scegli il file'),
+        h('button', { type: 'button', class: 'pulsante tenue piccolo', onclick: () => scegliFile(m, ACCETTA_FILE) }, 'Scegli il file'),
+        h('button', { type: 'button', class: 'pulsante bianco', 'data-azione': 'scegli-cartella', onclick: () => scegliCartella(m) }, 'Scegli la cartella'),
         h('button', { type: 'button', class: 'pulsante bianco', onclick: () => A.vai('#gemini') }, 'Testo per Gemini')));
     const prossime = h('div', { class: 'elenco' });
     const ripasso = h('div', { class: 'elenco' });
@@ -693,6 +694,9 @@
 
   // ================================================================== Aggiungi materiale (§5) e file
 
+  /** I file che si possono scegliere: quelli che Lectio legge e gli zip (si aprono e si manda quello che c'è dentro). */
+  const ACCETTA_FILE = '.pdf,.docx,.odt,.rtf,.txt,.md,.jpg,.jpeg,.png,.webp,.zip';
+
   /** Sceglie i file dal computer. `cartellaId` = la cartella già scelta (Aggiungi aperto da una cartella, §42.6). */
   function scegliFile(m, accetta, tipo, cartellaId) {
     const input = h('input', { type: 'file', accept: accetta, multiple: true, class: 'sr' });
@@ -705,6 +709,21 @@
     input.click();
   }
   A.scegliFile = scegliFile;
+
+  /** Sceglie una cartella del computer: si mandano i file che Lectio legge, anche quelli nelle sottocartelle e negli zip. */
+  function scegliCartella(m, tipo, cartellaId) {
+    const input = h('input', { type: 'file', multiple: true, class: 'sr' });
+    input.webkitdirectory = true;
+    input.addEventListener('change', () => {
+      const file = Array.from(input.files || []);
+      input.remove();
+      if (file.length) A.flussoFile(file, { materia: m, tipo, cartellaId });
+      else A.avviso('La cartella è vuota.');
+    });
+    document.body.append(input);
+    input.click();
+  }
+  A.scegliCartella = scegliCartella;
 
   /**
    * Il foglio "Aggiungi a Storia" (§5): Testo per Gemini, Trascina qui, File, Appunti, Interrogazione orale, Foto.
@@ -719,9 +738,10 @@
           sotto ? h('span', { class: 'testi' }, h('span', null, titolo), h('span', { class: 'secondario' }, sotto)) : titolo);
         svuota(c,
           h('button', { type: 'button', class: 'riga-gemini', 'data-visita': 'gemini-riga', 'data-fuoco': true, onclick: () => { ctl2.chiudi(); A.vai('#gemini'); } }, icona('gemini'), h('span', null, 'Testo per Gemini'), icona('freccia')),
-          h('div', { class: 'zona-trascina compatta', 'data-visita': 'trascina-foglio' }, h('span', { class: 'titolo-zona' }, 'Trascina qui il file')),
+          h('div', { class: 'zona-trascina compatta', 'data-visita': 'trascina-foglio' }, h('span', { class: 'titolo-zona' }, 'Trascina qui file, cartelle o zip')),
           h('div', null,
-            riga('file', 'File', null, () => scegliFile(m, '.pdf,.docx,.odt,.rtf,.txt,.md', o.tipo, o.cartellaId), { 'data-riga': 'file' }),
+            riga('file', 'File o zip', null, () => scegliFile(m, '.pdf,.docx,.odt,.rtf,.txt,.md,.zip', o.tipo, o.cartellaId), { 'data-riga': 'file' }),
+            riga('cartella', 'Cartella del computer', null, () => scegliCartella(m, o.tipo, o.cartellaId), { 'data-riga': 'cartella-pc' }),
             riga('appunti', 'Appunti', null, () => scritto(ctl2, m, 'appunti', o.cartellaId), { 'data-riga': 'appunti' }),
             riga('interrogazione', 'Interrogazione orale', null, () => scritto(ctl2, m, 'interrogazione', o.cartellaId), { 'data-riga': 'orale' }),
             riga('foto', 'Foto', 'circa 0,4 cent a foto', () => scegliFile(m, '.jpg,.jpeg,.png,.webp', o.tipo, o.cartellaId), { 'data-riga': 'foto' })));
@@ -797,17 +817,6 @@
     setTimeout(() => campi[0].focus(), 30);
   }
 
-  /** I byte di un file scelto o trascinato (ArrayBuffer: arriva intero al programma). */
-  function leggiByte(f) {
-    if (typeof f.arrayBuffer === 'function') return f.arrayBuffer();
-    return new Promise((ok, no) => {
-      const r = new FileReader();
-      r.onload = () => ok(r.result);
-      r.onerror = () => no(r.error);
-      r.readAsArrayBuffer(f);
-    });
-  }
-
   /** I file trascinati: nel foglio aperto, nella materia aperta, o in Per Gemini (si chiede la materia). */
   A.suFileTrascinati = function (file) {
     const sopra = S.velo[S.velo.length - 1];
@@ -819,17 +828,31 @@
     A.flussoFile(file, { tipo: 'verifica' });
   };
 
+  /** Un errore che riguarda solo quel file (illeggibile, troppo grande, senza testo): con più file si va avanti. */
+  const soloDelFile = (r) => !r.rete && [400, 413, 415, 422].includes(r.stato);
+
   /**
    * Dopo la scelta dei file: in quale materia (se non si sa), Che cos'è (§16.4: due famiglie, si parte da Appunti),
    * titolo facoltativo (se resta vuoto lo scrive Lectio), data → Aggiungi. I file vanno al programma come byte e da lì
-   * al server.
+   * al server, uno alla volta. Cartelle e zip si aprono prima (archivi.js): si mandano i file che Lectio legge, gli
+   * altri restano fuori e il foglio dice quali.
    */
-  A.flussoFile = function (file, opzioni) {
+  A.flussoFile = async function (elementi, opzioni) {
     const o = opzioni || {};
-    const problemi = file.map((f) => L.controllaFile(f.name, f.size)).filter(Boolean);
-    const buoni = file.filter((f) => !L.controllaFile(f.name, f.size));
-    if (!buoni.length) { A.avviso(problemi[0]); return null; }
-    const st = { materia: o.materia || null, tipo: o.tipo || 'appunti', cartellaId: o.cartellaId == null ? null : o.cartellaId, invio: false };
+    let es;
+    try {
+      es = await window.LectioArchivi.espandi(Array.from(elementi || []));
+    } catch (e) {
+      A.avviso('Non riesco ad aprire questi file dal computer.');
+      return null;
+    }
+    const buoni = es.buoni;
+    if (!buoni.length) { A.avviso(window.LectioArchivi.fraseNiente(es)); return null; }
+    const avvisi = window.LectioArchivi.frasiSaltati(es.saltati);
+    if (es.troppi) avvisi.push('Sono più di ' + window.LectioArchivi.MASSIMO_FILE + ' file: mando i primi ' + window.LectioArchivi.MASSIMO_FILE + ', gli altri aggiungili dopo.');
+    const tanti = buoni.length > 1;
+    // prossimo: il primo file non ancora mandato (Riprova riparte da lì, senza rimandare quelli già andati).
+    const st = { materia: o.materia || null, tipo: o.tipo || 'appunti', cartellaId: o.cartellaId == null ? null : o.cartellaId, invio: false, prossimo: 0, andati: 0, fuori: [], finito: false };
     const ctl = A.apriFoglio({
       titolo: st.materia ? 'Aggiungi a ' + st.materia.nome : 'Manda il file a Lectio',
       corpo: (c, ctl2) => {
@@ -838,7 +861,7 @@
         const tipi = A.cheCosE(st.tipo, (t) => { st.tipo = t; });
         // §42.6: sotto "Che cos'è" la CARTELLA; con più file vale per tutti.
         const cartella = sceltaCartellaCarica(st, () => st.materia);
-        const titolo = buoni.length === 1 ? h('input', { class: 'campo', id: 'carica-titolo', maxlength: '120', value: '', placeholder: foto ? 'Lo scrive Lectio leggendo la foto' : 'Lo scrive Lectio leggendo il file' }) : null;
+        const titolo = !tanti ? h('input', { class: 'campo', id: 'carica-titolo', maxlength: '120', value: '', placeholder: foto ? 'Lo scrive Lectio leggendo la foto' : 'Lo scrive Lectio leggendo il file' }) : null;
         const data = h('input', { class: 'campo', type: 'date', value: L.iso() });
         const esito = h('div');
         const aggiungi = h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'aggiungi-file' });
@@ -847,54 +870,91 @@
             type: 'button', class: 'pillola scelta', role: 'radio', 'aria-pressed': st.materia && st.materia.id === m.id ? 'true' : 'false', 'aria-checked': st.materia && st.materia.id === m.id ? 'true' : 'false',
             onclick: () => { st.materia = m; ctl2.titolo('Aggiungi a ' + m.nome); dis(); },
           }, m.nome)));
-          aggiungi.textContent = st.invio ? 'Mando il file…' : buoni.length > 1 ? 'Aggiungi ' + buoni.length + ' file' : 'Aggiungi';
-          aggiungi.disabled = !st.materia || st.invio || S.senzaRete;
+          const restano = buoni.length - st.prossimo;
+          if (st.finito) aggiungi.textContent = 'Chiudi';
+          else if (st.invio) aggiungi.textContent = tanti ? 'Mando ' + (st.prossimo + 1) + ' di ' + buoni.length + '…' : 'Mando il file…';
+          else if (st.prossimo > 0 && restano > 0) aggiungi.textContent = restano === 1 ? 'Manda l\'ultimo file' : 'Manda gli altri ' + restano + ' file';
+          else aggiungi.textContent = tanti ? 'Aggiungi ' + buoni.length + ' file' : 'Aggiungi';
+          aggiungi.disabled = !st.finito && (!st.materia || st.invio || S.senzaRete);
           cartella.aggiorna();
         }
-        aggiungi.addEventListener('click', async () => {
-          if (!st.materia) return;
+        function dopo() {
+          if ((S.rotta.vista === 'materia' || S.rotta.vista === 'cartella') && S.rotta.id === st.materia.id && S.aggiornaPagina) S.aggiornaPagina();
+          else if (S.rotta.vista !== 'materia') A.vai('#materia/' + st.materia.id);
+        }
+        // Riprova chiama manda() direttamente: dopo un errore di rete il pulsante grande resta spento finché la rete non torna.
+        async function manda() {
+          if (st.finito) { ctl2.chiudi(); dopo(); return; }
+          if (!st.materia || st.invio) return;
           st.invio = true;
           dis();
           svuota(esito);
-          let andati = 0;
-          for (const f of buoni) {
+          // §16.3: niente titolo se Andrea non l'ha scritto: lo scrive Lectio leggendo il file.
+          const scritto = titolo ? L.pulisciTitolo(titolo.value) : '';
+          let fermo = null;
+          while (st.prossimo < buoni.length) {
+            const f = buoni[st.prossimo];
+            dis();
             let byte;
-            try { byte = await leggiByte(f); } catch (e) { byte = null; }
-            if (!byte) { svuota(esito, A.messaggio('errore', 'Non riesco a leggere "' + f.name + '" dal computer.')); break; }
-            // §16.3: niente titolo se Andrea non l'ha scritto: lo scrive Lectio leggendo il file.
-            const scritto = titolo ? L.pulisciTitolo(titolo.value) : '';
+            try { byte = await f.leggi(); } catch (e) { byte = null; }
+            if (!byte) {
+              if (!tanti) { fermo = 'Non riesco a leggere "' + f.name + '" dal computer.'; break; }
+              st.fuori.push(f.name + ': non riesco a leggerlo dal computer');
+              st.prossimo++;
+              continue;
+            }
             const r = await A.api.carica(byte, { materia_id: st.materia.id, tipo: st.tipo, titolo: scritto || undefined, data: data.value || '', nome: f.name, cartella_id: st.cartellaId == null ? undefined : st.cartellaId });
             if (!r.ok) {
-              svuota(esito, A.messaggio('errore', (buoni.length > 1 ? f.name + ': ' : '') + r.errore, [h('button', { type: 'button', class: 'pulsante bianco', onclick: () => aggiungi.click() }, 'Riprova')]));
+              // Con più file un file che il server non legge resta fuori e si va avanti; tutto il resto (rete, tetto
+              // del mese, server) ferma: Riprova riparte da questo file.
+              if (tanti && soloDelFile(r)) { st.fuori.push(f.name + ': ' + r.errore); st.prossimo++; continue; }
+              fermo = (tanti ? f.name + ': ' : '') + r.errore;
               break;
             }
-            andati++;
+            st.andati++;
+            st.prossimo++;
           }
           st.invio = false;
-          dis();
-          if (andati === buoni.length) {
-            ctl2.chiudi();
-            A.avviso(andati > 1 ? andati + ' file aggiunti a ' + st.materia.nome + '.' : 'Aggiunto a ' + st.materia.nome + '. Lo sto leggendo.');
-            if ((S.rotta.vista === 'materia' || S.rotta.vista === 'cartella') && S.rotta.id === st.materia.id && S.aggiornaPagina) S.aggiornaPagina();
-            else if (S.rotta.vista !== 'materia') A.vai('#materia/' + st.materia.id);
+          if (fermo) {
+            const fatti = st.andati ? (st.andati === 1 ? '1 file è già andato. ' : st.andati + ' file sono già andati. ') : '';
+            svuota(esito, A.messaggio('errore', fatti + fermo, [h('button', { type: 'button', class: 'pulsante bianco', onclick: () => manda() }, 'Riprova')]));
+            dis();
+            return;
           }
-        });
+          if (!st.fuori.length) {
+            dis();
+            ctl2.chiudi();
+            A.avviso(st.andati > 1 ? st.andati + ' file aggiunti a ' + st.materia.nome + '.' : 'Aggiunto a ' + st.materia.nome + '. Lo sto leggendo.');
+            dopo();
+            return;
+          }
+          // Qualche file non è entrato: si dice quali, gli altri sono già nella materia.
+          st.finito = true;
+          const quanti = st.fuori.length === 1 ? 'Questo file non è entrato:' : 'Questi ' + st.fuori.length + ' file non sono entrati:';
+          const elenco = st.fuori.slice(0, 6).map((x) => h('li', null, x));
+          if (st.fuori.length > 6) elenco.push(h('li', null, 'e altri ' + (st.fuori.length - 6)));
+          svuota(esito, h('div', { class: 'messaggio avviso', role: 'status', 'data-esito': 'fuori' },
+            h('div', null, h('span', null, (st.andati ? (st.andati === 1 ? '1 file aggiunto. ' : st.andati + ' file aggiunti. ') : '') + quanti), h('ul', { class: 'elenco-fuori' }, elenco))));
+          dis();
+        }
+        aggiungi.addEventListener('click', manda);
         svuota(c,
-          h('div', { class: 'secondario' }, buoni.map((f) => f.name).join(', ')),
-          problemi.length ? A.messaggio('avviso', problemi[0]) : null,
+          tanti ? h('div', { class: 'forte', 'data-campo': 'quanti-file' }, window.LectioArchivi.descrizione(es)) : null,
+          h('div', { class: 'secondario', 'data-campo': 'nomi-file' }, window.LectioArchivi.elencoNomi(buoni.map((f) => f.name), 6)),
+          avvisi.length ? A.messaggio('avviso', avvisi.join(' ')) : null,
           st.materia ? null : h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'In quale materia?'), (S.materie || []).length ? materie : h('span', { class: 'secondario' }, 'Prima aggiungi una materia.')),
           h('div', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Che cos\'è'), tipi),
           cartella.el,
           titolo ? h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Titolo'), titolo) : null,
           h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, 'Data'), data),
-          foto ? h('span', { class: 'moltotenue' }, 'Le foto si leggono a pagamento: circa 0,4 cent a foto.') : null,
+          foto ? h('span', { class: 'moltotenue' }, foto > 1 ? 'Le foto si leggono a pagamento: circa 0,4 cent a foto, ' + L.euroCosto(foto * 0.004) + ' per ' + foto + ' foto.' : 'Le foto si leggono a pagamento: circa 0,4 cent a foto.') : null,
           S.senzaRete ? A.messaggio('avviso', 'Senza rete i file non arrivano al server di casa.') : null,
           esito, aggiungi);
         dis();
       },
     });
     ctl.accettaFile = true;
-    ctl.riceviFile = (altri) => { ctl.chiudi(true); A.flussoFile(altri, o); };
+    ctl.riceviFile = (altri) => { if (st.invio) return; ctl.chiudi(true); A.flussoFile(altri, o); };
     return ctl;
   };
 

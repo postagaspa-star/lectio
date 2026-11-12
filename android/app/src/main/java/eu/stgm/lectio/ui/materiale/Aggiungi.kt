@@ -52,12 +52,14 @@ import eu.stgm.lectio.dati.JsonLectio
 import eu.stgm.lectio.dati.Materia
 import eu.stgm.lectio.dati.MaterialeScritto
 import eu.stgm.lectio.dati.Sorgente
+import eu.stgm.lectio.logica.Archivi
 import eu.stgm.lectio.logica.Condivisione
 import eu.stgm.lectio.logica.Costi
 import eu.stgm.lectio.logica.Formati
 import eu.stgm.lectio.logica.TipoMateriale
 import eu.stgm.lectio.rete.Esito
 import eu.stgm.lectio.rete.FileDaCaricare
+import eu.stgm.lectio.rete.daRitentare
 import eu.stgm.lectio.rete.messaggio
 import eu.stgm.lectio.ui.Campo
 import eu.stgm.lectio.ui.CampoConEtichetta
@@ -109,6 +111,10 @@ data class RichiestaAggiunta(
      * Lectio la sceglie dopo averlo letto). Dalla pagina di una cartella parte già quella.
      */
     val cartellaId: Long? = null,
+    /** Aprendo cartelle e zip: "12 file da Storia.zip" (null = si vedono solo i nomi). */
+    val descrizione: String? = null,
+    /** Aprendo cartelle e zip: le frasi per i file rimasti fuori ("Lascio fuori 1 file che Lectio non sa leggere: …"). */
+    val avvisi: List<String> = emptyList(),
 )
 
 /**
@@ -140,6 +146,12 @@ data class StatoAggiunta(
     val richiesta: RichiestaAggiunta = RichiestaAggiunta(),
     val campi: CampiAggiunta = CampiAggiunta(),
     val inCorso: Boolean = false,
+    /** Sta aprendo uno zip o una cartella. */
+    val apro: Boolean = false,
+    /** Durante l'invio di più file: quello che sta partendo (1, 2, …). */
+    val mandoIl: Int = 0,
+    /** Quanti file sono andati nell'ultimo invio (per "4 file aggiunti"). */
+    val mandati: Int = 0,
     /** Le frasi dei file non andati (gli altri sono già partiti). */
     val errori: List<String> = emptyList(),
     val fatto: Boolean = false,
@@ -185,11 +197,14 @@ class AggiuntaViewModel(
     }
 
     fun apri(r: RichiestaAggiunta) {
+        // Un foglio nuovo: i file tirati fuori dagli zip di prima non servono più.
+        preparatore?.pulisciArchivi()
         // Un testo di Gemini condiviso parte già come verifica o interrogazione.
         val tipo = Condivisione.tipoDaGemini(r.testo) ?: r.tipo
         _stato.value = StatoAggiunta(aperto = true, richiesta = r.copy(tipo = tipo), campi = CampiAggiunta(data = dataIniziale(r.passo)))
         ricorda()
         caricaMaterie()
+        apriZip()
         rilevaTipoDaiFile()
     }
 
@@ -199,8 +214,41 @@ class AggiuntaViewModel(
     /** File e foto scelti: si aggiungono e, se uno è un testo di Gemini, "Che cos'è" lo dice. */
     fun scelti(passo: PassoAggiunta, file: List<FileScelto>, aggiungi: Boolean) {
         val r = _stato.value.richiesta
-        cambia(r.copy(passo = passo, file = if (aggiungi) r.file + file else file, tipo = tipoPerFile(r)))
+        cambia(r.copy(
+            passo = passo, file = if (aggiungi) r.file + file else file, tipo = tipoPerFile(r),
+            descrizione = if (aggiungi) r.descrizione else null, avvisi = if (aggiungi) r.avvisi else emptyList(),
+        ))
+        apriZip()
         rilevaTipoDaiFile()
+    }
+
+    /** Gli zip tra i file scelti o condivisi si aprono: al loro posto i file che Lectio legge. */
+    private fun apriZip() {
+        val p = preparatore ?: return
+        val file = _stato.value.richiesta.file
+        if (file.none { Archivi.eZip(it.mime, it.nome) }) return
+        _stato.update { it.copy(apro = true) }
+        viewModelScope.launch {
+            val aperti = p.espandi(file)
+            aggiorna { s ->
+                if (s.richiesta.file != file) return@aggiorna s.copy(apro = false)
+                s.copy(apro = false, richiesta = s.richiesta.copy(file = aperti.file, descrizione = aperti.descrizione, avvisi = s.richiesta.avvisi + aperti.avvisi))
+            }
+            rilevaTipoDaiFile()
+        }
+    }
+
+    /** "Cartella del telefono": tutti i file che Lectio legge, anche nelle sottocartelle e negli zip. */
+    fun cartellaTelefono(albero: String) {
+        val p = preparatore ?: return
+        val r = _stato.value.richiesta
+        cambia(r.copy(passo = PassoAggiunta.FILE, file = emptyList(), tipo = tipoPerFile(r), descrizione = null, avvisi = emptyList()))
+        _stato.update { it.copy(apro = true) }
+        viewModelScope.launch {
+            val aperti = p.cartella(Uri.parse(albero))
+            aggiorna { s -> s.copy(apro = false, richiesta = s.richiesta.copy(file = aperti.file, descrizione = aperti.descrizione, avvisi = aperti.avvisi)) }
+            rilevaTipoDaiFile()
+        }
     }
 
     /** Legge l'inizio dei file di testo: la riga MATERIA/TIPO di Gemini dice se è una verifica. */
@@ -249,7 +297,10 @@ class AggiuntaViewModel(
         }
     }
 
-    fun chiudi() = aggiorna { StatoAggiunta() }
+    fun chiudi() {
+        aggiorna { StatoAggiunta() }
+        preparatore?.pulisciArchivi()
+    }
 
     fun cambia(r: RichiestaAggiunta) {
         val primaMateria = _stato.value.richiesta.materiaId
@@ -267,22 +318,34 @@ class AggiuntaViewModel(
 
     fun campi(cambia: (CampiAggiunta) -> CampiAggiunta) = aggiorna { it.copy(campi = cambia(it.campi)) }
 
-    /** Manda file, foto o testo condiviso. Quelli andati si tolgono dall'elenco. */
+    /**
+     * Manda file, foto o testo condiviso, uno alla volta. Quelli andati si tolgono dall'elenco. Un file che il server
+     * non legge resta nell'elenco con la sua frase e si va avanti; senza rete, col tetto del mese o col server che non
+     * risponde ci si ferma: "Aggiungi" riparte dai file rimasti.
+     */
     fun inviaFile() {
         val r = _stato.value.richiesta
         val titolo = _stato.value.campi.titolo.takeIf { it.isNotBlank() }
         val data = _stato.value.campi.data
         val materiaId = r.materiaId ?: return
-        _stato.update { it.copy(inCorso = true, errori = emptyList()) }
+        _stato.update { it.copy(inCorso = true, errori = emptyList(), mandoIl = 0) }
         viewModelScope.launch {
             val errori = mutableListOf<String>()
             val rimasti = mutableListOf<FileScelto>()
+            var fermo = false
+            var andati = 0
             if (r.testo != null) {
                 val f = preparatore?.testo(r.testo, r.oggetto) ?: FileDaCaricare(java.io.File("esempio.txt"), Condivisione.nomeTesto(r.oggetto), "text/plain")
                 val e = sorgente.caricaFile(materiaId, f, r.tipo.codice, titolo, data, r.cartellaId)
-                if (e !is Esito.Ok) errori += e.messaggio ?: "Non è partito."
+                if (e !is Esito.Ok) errori += e.messaggio ?: "Non è partito." else andati++
             }
+            val tanti = r.file.size > 1
             r.file.forEachIndexed { i, scelto ->
+                if (fermo) {
+                    rimasti += scelto
+                    return@forEachIndexed
+                }
+                if (tanti) _stato.update { it.copy(mandoIl = i + 1) }
                 val pronto = if (preparatore == null) {
                     FilePronto.Pronto(FileDaCaricare(java.io.File(scelto.nome ?: "file"), scelto.nome ?: "file", scelto.mime ?: "application/octet-stream"))
                 } else {
@@ -296,24 +359,46 @@ class AggiuntaViewModel(
                     is FilePronto.Pronto -> {
                         // Con più foto insieme la cartella vale per tutte (aspetto.md §42.6).
                         val e = sorgente.caricaFile(materiaId, pronto.file, r.tipo.codice, if (r.file.size == 1) titolo else null, data, r.cartellaId)
-                        if (e !is Esito.Ok) {
-                            errori += "${scelto.nome ?: "File"}: ${e.messaggio}"
-                            rimasti += scelto
+                        when {
+                            e is Esito.Ok -> andati++
+                            siFerma(e) -> {
+                                fermo = true
+                                rimasti += scelto
+                                val gia = when (andati) {
+                                    0 -> ""
+                                    1 -> "1 file è già andato. "
+                                    else -> "$andati file sono già andati. "
+                                }
+                                errori += gia + (if (tanti) "${scelto.nome ?: "File"}: " else "") + e.messaggio
+                            }
+                            else -> {
+                                rimasti += scelto
+                                errori += "${scelto.nome ?: "File"}: ${e.messaggio}"
+                            }
                         }
                     }
                 }
             }
             preparatore?.pulisci()
+            if (errori.isEmpty()) preparatore?.pulisciArchivi()
             aggiorna {
                 it.copy(
                     inCorso = false,
+                    mandoIl = 0,
+                    mandati = andati,
                     errori = errori,
                     fatto = errori.isEmpty(),
-                    richiesta = it.richiesta.copy(file = rimasti, testo = if (errori.isEmpty()) null else it.richiesta.testo),
+                    richiesta = it.richiesta.copy(
+                        file = rimasti, testo = if (errori.isEmpty()) null else it.richiesta.testo,
+                        descrizione = if (rimasti.size > 1) "${rimasti.size} file da mandare" else null, avvisi = emptyList(),
+                    ),
                 )
             }
         }
     }
+
+    /** Senza rete, server che non risponde, tetto del mese, abbinamento perso: inutile provare i file dopo. */
+    private fun siFerma(e: Esito<*>): Boolean = e.daRitentare || (e is Esito.Errore && e.stato in setOf(401, 402, 403, 404, 409, 429))
 
     /** Appunti o interrogazione orale scritti nell'app (JSON, contratto §6). */
     fun inviaTesto(tipo: TipoMateriale, titolo: String?, testo: String) {
@@ -364,6 +449,9 @@ fun FoglioAggiungi(
             vm.scelti(PassoAggiunta.FILE, uris.map { preparatore.leggi(it) }, aggiungi = false)
         }
     }
+    val sceltaCartella = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.cartellaTelefono(uri.toString())
+    }
     val sceltaFoto = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
         if (uris.isNotEmpty() && preparatore != null) {
             vm.scelti(PassoAggiunta.FOTO, uris.map { preparatore.leggi(it) }, aggiungi = true)
@@ -406,7 +494,9 @@ fun FoglioAggiungi(
                     Icon(Icone.Avanti, contentDescription = null, tint = c.accentoTesto, modifier = Modifier.size(18.dp))
                 }
                 Column {
-                    RigaScelta(Icone.File, "File", null) { sceltaFile.launch(Condivisione.TIPI_SELETTORE) }
+                    RigaScelta(Icone.File, "File o zip", null) { sceltaFile.launch(Condivisione.TIPI_SELETTORE) }
+                    Riga()
+                    RigaScelta(Icone.Cartella, "Cartella del telefono", null) { sceltaCartella.launch(null) }
                     Riga()
                     RigaScelta(Icone.Appunti, "Appunti", null) { vm.cambia(r.copy(passo = PassoAggiunta.APPUNTI, tipo = TipoMateriale.APPUNTI)) }
                     Riga()
@@ -479,10 +569,21 @@ private fun SceltaTipo(scelto: TipoMateriale, onScegli: (TipoMateriale) -> Unit)
 @Composable
 private fun ModuloFile(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Boolean) {
     val r = s.richiesta
+    val c = L.colori
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (s.apro) Text("Apro i file…", style = L.testi.secondario, color = c.tenue)
+        r.descrizione?.let { Text(it, style = L.testi.forte, color = c.testo) }
         if (r.testo != null) RigaFile(Icone.Testo, Condivisione.nomeTesto(r.oggetto), null)
-        r.file.forEach { f ->
+        // Da una cartella o da uno zip possono essere decine: i primi cinque e quanti altri.
+        val visti = if (r.file.size > 6) r.file.take(5) else r.file
+        visti.forEach { f ->
             RigaFile(if (f.genere?.immagine == true) Icone.Foto else Icone.File, f.nome ?: "File", if (f.genere == null) Condivisione.NON_LEGGIBILE else null)
+        }
+        if (r.file.size > 6) Text("e altri ${r.file.size - 5} file", style = L.testi.secondario, color = c.tenue)
+        r.avvisi.forEach { RigaAvviso(it) }
+        val foto = r.file.count { it.genere?.immagine == true }
+        if (r.passo == PassoAggiunta.FILE && foto > 0) {
+            RigaAvviso("Costo: circa ${Formati.cent(Costi.costoFoto(foto))} per $foto foto, per leggerle.")
         }
     }
     SceltaTipo(r.tipo) { vm.cambia(r.copy(tipo = it)) }
@@ -499,9 +600,15 @@ private fun ModuloFile(s: StatoAggiunta, vm: AggiuntaViewModel, senzaRete: Boole
     s.errori.forEach { RigaErrore(it) }
     val pronti = r.materiaId != null && (r.file.any { it.genere != null } || r.testo != null)
     PulsantePieno(
-        if (s.inCorso) "Invio in corso" else "Aggiungi",
+        when {
+            s.apro -> "Apro i file…"
+            s.inCorso && s.mandoIl > 0 -> "Mando ${s.mandoIl} di ${r.file.size}"
+            s.inCorso -> "Invio in corso"
+            r.file.size > 1 -> "Aggiungi ${r.file.size} file"
+            else -> "Aggiungi"
+        },
         { vm.inviaFile() },
-        abilitato = pronti && !s.inCorso && !senzaRete,
+        abilitato = pronti && !s.inCorso && !s.apro && !senzaRete,
     )
 }
 

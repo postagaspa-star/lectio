@@ -614,7 +614,9 @@
     e.preventDefault();
     S.trascina = 0;
     accendi(false);
-    const file = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+    // File e cartelle intere (le cartelle si aprono dopo, in archivi.js): vanno presi adesso, durante l'evento.
+    const file = window.LectioArchivi ? window.LectioArchivi.daTrascinati(e.dataTransfer)
+      : e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
     if (!file.length) return;
     if (!paginaConFile()) {
       avviso('Trascina i file nella pagina di una materia o in Per Gemini.');

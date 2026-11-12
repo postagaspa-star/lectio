@@ -60,7 +60,7 @@ test('materia: prima Cosa chiede il prof | Prossime e Da ripassare, poi il binar
   assert.ok(mat.children[0].querySelector('[data-azione="aggiungi-materiale"]'));
   assert.ok(mat.children[0].querySelector('[data-cartella="1"]'));
   assert.ok(mat.children[1].querySelector('.zona-trascina[data-zona="materia"]'));
-  assert.match(mat.children[1].textContent, /Trascina qui i file/);
+  assert.match(mat.children[1].textContent, /Trascina qui file, cartelle o zip/);
   // Sotto i 900 px una colonna sola, e la zona non ha più lo spazio del titolo sopra.
   const css = fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'stile.css'), 'utf8');
   const stretta = /@media \(max-width: 899px\) \{([^}]*\}[^}]*\})/.exec(css);

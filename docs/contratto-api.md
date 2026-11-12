@@ -101,6 +101,11 @@ montata `/apk`).
   200.000 caratteri letti. PDF con testo: letto gratis; PDF scansionato o immagine: OCR Mistral a pagamento
   (stima prima: se sfora il tetto → 402). Titolo predefinito: dal file (per i testi di Gemini, la riga
   `MATERIA/PROF/DATA/TIPO` se c'è).
+  Cartelle e zip (app 1.3.3): il server non li riceve mai. Le app aprono la cartella o lo zip (anche le
+  sottocartelle e gli zip dentro gli zip), lasciano fuori i file che il server non legge e mandano gli altri qui, uno
+  per richiesta, con lo stesso `tipo`, `cartella_id` e `data` e senza `titolo`. Così il limite dei 20 MB vale per
+  ogni file e non per lo zip intero. Un 400/413/422 su un file: quel file resta fuori e si va avanti; rete, 402 e
+  5xx fermano l'invio, che riparte dal file fermo.
 - `GET /api/materie/{id}/materiale` → `[Materiale]` (più recenti prima).
 - `GET /api/materiale/{id}` → `Materiale` + `"testo"` (quello che il server ha letto).
 - `DELETE /api/materiale/{id}`.

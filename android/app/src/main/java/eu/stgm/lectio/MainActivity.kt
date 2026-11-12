@@ -491,6 +491,7 @@ private fun App(
                     onChiudi = { aggiunta.chiudi() },
                     onGemini = { if (!visita.attiva) { aggiunta.chiudi(); vai(Navigazione(Scheda.GEMINI)) } },
                     onFatto = { materiaId ->
+                        val quanti = aggiunta.stato.value.mandati
                         aggiunta.chiudi()
                         giroAggiunte++
                         val cima = nav.inCima
@@ -498,7 +499,7 @@ private fun App(
                         if (!(cima is Pagina.Cartella && cima.materiaId == materiaId)) {
                             vai(Navigazione(nav.scheda, nav.pagine.filterNot { it is Pagina.Materia || it is Pagina.Cartella } + Pagina.Materia(materiaId)))
                         }
-                        ambito.launch { messaggi.showSnackbar("Aggiunto: il server lo sta leggendo") }
+                        ambito.launch { messaggi.showSnackbar(if (quanti > 1) "$quanti file aggiunti: il server li sta leggendo" else "Aggiunto: il server lo sta leggendo") }
                     },
                     senzaRete = offline,
                 )

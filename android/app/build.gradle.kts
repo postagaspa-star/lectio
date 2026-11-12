@@ -34,8 +34,8 @@ android {
         targetSdk = 35
         // Nuova versione = nuovo versionCode, altrimenti l'aggiornamento
         // automatico (GET /api/versione) non la propone.
-        versionCode = 7
-        versionName = "1.3.2"
+        versionCode = 8
+        versionName = "1.3.3"
     }
 
     signingConfigs {
