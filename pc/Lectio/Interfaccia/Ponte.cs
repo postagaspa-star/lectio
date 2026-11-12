@@ -293,6 +293,7 @@ public sealed class Ponte
             "scarica-aggiornamento" => ("POST", () => Task.FromResult(motore.AvviaPreparazione()
                 ? new JsonObject { ["ok"] = true }
                 : new JsonObject { ["errore"] = motore.Aggiornatore.Disponibile == null ? "Non c'è una versione nuova da scaricare." : "Lo scaricamento è già in corso.", ["codice"] = "non_disponibile" })),
+            "controlla-aggiornamento" => ("POST", () => motore.ControllaAggiornamentoAsync()),
             "aggiorna-e-riavvia" => ("POST", () =>
             {
                 if (motore.Pronta == null || AggiornaAdesso == null)

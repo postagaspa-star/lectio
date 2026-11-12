@@ -1251,16 +1251,62 @@
       return r.ok;
     }, 'Tema');
 
-    // Aggiornamenti
-    const agg = mot.aggiornamento || {};
-    let rigaAgg;
-    // Si scarica e si installa da sola (alla chiusura); qui si vede a che punto è, e si può anticipare.
-    if (agg.pronta) rigaAgg = voce('È pronta la versione ' + agg.pronta, 'Si installa da sola quando chiudi Lectio.',
-      h('button', { type: 'button', class: 'pulsante tenue', onclick: async () => { const r = await A.api.post('/locale/aggiorna-e-riavvia', {}); if (!r.ok) A.avviso(r.errore); } }, 'Aggiorna adesso'));
-    else if (agg.in_corso) rigaAgg = voce('Arriva la versione ' + (agg.disponibile || 'nuova'), 'La sto scaricando e controllando.');
-    else if (agg.disponibile) rigaAgg = voce('È uscita la versione ' + agg.disponibile, agg.errore || null,
-      h('button', { type: 'button', class: 'pulsante tenue', onclick: async () => { const r = await A.api.post('/locale/scarica-aggiornamento', {}); if (r.ok) { A.avviso('La scarico: poi si installa da sola.'); A.disegna(); } else A.avviso(r.errore); } }, agg.errore ? 'Riprova' : 'Scarica adesso'));
-    else rigaAgg = voce('Versione ' + (mot.versione || '1.0.0'), agg.attivo ? 'Si aggiorna da sola' : 'È l\'ultima');
+    // Aggiornamenti. Si scaricano e si installano da soli (alla chiusura); qui si vede a che punto sono, si controlla
+    // subito (da solo Lectio guarda 20 secondi dopo l'avvio e poi ogni 12 ore) e si può anticipare l'installazione.
+    let seguo = false;
+    let rigaAgg = null;
+    function rigaAggiornamenti() {
+      const m = S.motore || {};
+      const agg = m.aggiornamento || {};
+      if (agg.pronta) return voce('È pronta la versione ' + agg.pronta, 'Si installa da sola quando chiudi Lectio.',
+        h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'aggiorna-adesso', onclick: async () => { const r = await A.api.post('/locale/aggiorna-e-riavvia', {}); if (!r.ok) A.avviso(r.errore); } }, 'Aggiorna adesso'));
+      if (agg.in_corso) {
+        segui();
+        return voce('Arriva la versione ' + (agg.disponibile || 'nuova'), 'La sto scaricando e controllando.');
+      }
+      if (agg.disponibile) return voce('È uscita la versione ' + agg.disponibile, agg.errore || null,
+        h('button', { type: 'button', class: 'pulsante tenue', onclick: async () => { const r = await A.api.post('/locale/scarica-aggiornamento', {}); if (r.ok) { A.avviso('La scarico: poi si installa da sola.'); await A.aggiornaMotore(); ridisegnaAgg(); } else A.avviso(r.errore); } }, agg.errore ? 'Riprova' : 'Scarica adesso'));
+      return voce('Versione ' + (m.versione || '1.0.0'), agg.attivo ? 'Si aggiorna da sola' : 'È l\'ultima',
+        agg.attivo ? h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'controlla-aggiornamenti', onclick: (e) => controlla(e.currentTarget) }, 'Controlla') : null);
+    }
+    function ridisegnaAgg() {
+      if (!vivo() || !rigaAgg || !rigaAgg.isConnected) return;
+      const nuova = rigaAggiornamenti();
+      rigaAgg.replaceWith(nuova);
+      rigaAgg = nuova;
+    }
+    async function controlla(pulsante) {
+      pulsante.disabled = true;
+      pulsante.textContent = 'Controllo…';
+      const r = await A.api.post('/locale/controlla-aggiornamento', {});
+      if (!vivo()) return;
+      if (!r.ok) {
+        A.avviso(r.errore);
+        pulsante.disabled = false;
+        pulsante.textContent = 'Controlla';
+        return;
+      }
+      if (S.motore && r.dati && r.dati.aggiornamento) S.motore.aggiornamento = r.dati.aggiornamento;
+      const agg = (S.motore || {}).aggiornamento || {};
+      if (!agg.disponibile && !agg.pronta) A.avviso('Hai già l\'ultima versione.');
+      else if (agg.in_corso) A.avviso('È uscita la versione ' + agg.disponibile + ': la scarico.');
+      ridisegnaAgg();
+    }
+    // Mentre si scarica, ogni secondo e mezzo si guarda a che punto è; quando è pronta lo si dice.
+    function segui() {
+      if (seguo) return;
+      seguo = true;
+      setTimeout(async () => {
+        seguo = false;
+        if (!vivo() || !rigaAgg || !rigaAgg.isConnected) return;
+        await A.aggiornaMotore();
+        const agg = (S.motore || {}).aggiornamento || {};
+        if (agg.pronta) A.avviso('La versione ' + agg.pronta + ' è pronta: premi Aggiorna adesso.');
+        else if (!agg.in_corso && agg.errore) A.avviso(agg.errore);
+        ridisegnaAgg();
+      }, 1500);
+    }
+    rigaAgg = rigaAggiornamenti();
 
     const nScaricate = (mot.scaricate || []).length;
     svuota(pag,

@@ -93,6 +93,12 @@ public sealed class Aggiornatore
     /// <summary>L'ultima versione nuova vista (null se siamo già all'ultima).</summary>
     public VersioneNuova? Disponibile { get; private set; }
 
+    /// <summary>
+    /// Com'è andato l'ultimo <see cref="ControllaAsync"/>: true se il server ha risposto (con o senza versione nuova),
+    /// false se non ha risposto. Serve a "Controlla" per non dire "Hai già l'ultima versione" quando non lo sa.
+    /// </summary>
+    public bool? UltimoControlloOk { get; private set; }
+
     public static bool ÈPiùNuova(InfoVersione? v, int codiceMio) => v?.Pc != null && v.Pc.Codice > codiceMio;
 
     public static string IndirizzoDelloZip(string server) => server.TrimEnd('/') + "/scarica/" + FileZip;
@@ -103,8 +109,13 @@ public sealed class Aggiornatore
     public async Task<VersioneNuova?> ControllaAsync(string server, CancellationToken annulla = default)
     {
         var r = await client.InviaAsync("GET", server, "api/versione", null, null, annulla: annulla).ConfigureAwait(false);
-        if (!r.Ok) return null;
+        if (!r.Ok)
+        {
+            UltimoControlloOk = false;
+            return null;
+        }
         var info = Json.Leggi<InfoVersione>(r.Corpo);
+        UltimoControlloOk = info != null;
         if (!ÈPiùNuova(info, codiceMio))
         {
             Disponibile = null;

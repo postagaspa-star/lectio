@@ -242,4 +242,65 @@ public class AggiornamentoTest
         Assert.Contains("versione.json", script);
         Assert.Contains("Versione.cs", script);
     }
+
+    // --- "Controlla" nelle Impostazioni (1.3.5): subito, senza aspettare il giro delle 12 ore ---------------------
+
+    private static Func<HandlerFinto.Richiesta, (int, string)> ServerCon(string? versione, int stato = 200) => r =>
+        r.Percorso.StartsWith("/api/versione", StringComparison.Ordinal)
+            ? (stato, versione == null ? "{\"server\":\"1.3.6\"}" : "{\"server\":\"1.3.6\",\"pc\":{\"codice\":99,\"nome\":\"" + versione + "\",\"sha256\":\"" + new string('a', 64) + "\",\"byte\":10}}")
+            : (200, "{\"ok\":true}");
+
+    [Fact]
+    public async Task Controlla_trova_la_versione_nuova_e_comincia_subito_a_scaricarla()
+    {
+        using var b = new Banco(ServerCon("9.9.9")) { };
+        b.Motore.AggiornamentiAttivi = true;
+        var r = await b.Motore.ControllaAggiornamentoAsync();
+        Assert.Null(r["errore"]);
+        Assert.Equal("9.9.9", r["aggiornamento"]!["disponibile"]!.GetValue<string>());
+        // Lo scaricamento parte da solo (qui l'impronta è finta, quindi non arriva a "pronta").
+        for (int i = 0; i < 100 && !b.Finto.Di("GET", "/scarica/").Any(); i++) await Task.Delay(20);
+        Assert.NotEmpty(b.Finto.Di("GET", "/scarica/"));
+        Assert.Single(b.Finto.Di("GET", "/api/versione"));
+    }
+
+    [Fact]
+    public async Task Controlla_senza_versioni_nuove_risponde_ok_e_non_scarica_niente()
+    {
+        using var b = new Banco(ServerCon(null));
+        b.Motore.AggiornamentiAttivi = true;
+        var r = await b.Motore.ControllaAggiornamentoAsync();
+        Assert.Null(r["errore"]);
+        Assert.Null(r["aggiornamento"]!["disponibile"]);
+        Assert.False(r["aggiornamento"]!["in_corso"]!.GetValue<bool>());
+        Assert.Empty(b.Finto.Di("GET", "/scarica/"));
+    }
+
+    [Fact]
+    public async Task Controlla_con_il_server_che_non_risponde_non_dice_che_e_tutto_aggiornato()
+    {
+        using var b = new Banco(ServerCon(null, stato: 503));
+        b.Motore.AggiornamentiAttivi = true;
+        var r = await b.Motore.ControllaAggiornamentoAsync();
+        Assert.Equal("rete", r["codice"]!.GetValue<string>());
+        Assert.Contains("non risponde", r["errore"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Controlla_senza_aggiornamenti_o_senza_abbinamento_si_ferma_prima()
+    {
+        using (var b = new Banco(ServerCon("9.9.9")))
+        {
+            var r = await b.Motore.ControllaAggiornamentoAsync(); // AggiornamentiAttivi spento (prove, sviluppo)
+            Assert.Equal("non_disponibile", r["codice"]!.GetValue<string>());
+            Assert.Empty(b.Finto.Ricevute);
+        }
+        using (var b = new Banco(ServerCon("9.9.9"), abbinato: false))
+        {
+            b.Motore.AggiornamentiAttivi = true;
+            var r = await b.Motore.ControllaAggiornamentoAsync();
+            Assert.Equal("non_abbinato", r["codice"]!.GetValue<string>());
+            Assert.Empty(b.Finto.Ricevute);
+        }
+    }
 }

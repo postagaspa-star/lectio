@@ -500,9 +500,6 @@ public sealed class Motore : IDisposable
     {
         Configurazione c;
         lock (stato) c = config;
-        var nuova = Aggiornatore.Disponibile;
-        var preparata = ultimaPreparazione;
-        var pronta = Pronta;
         var scaricate = Audio.Elenco();
         return new JsonObject
         {
@@ -524,14 +521,23 @@ public sealed class Motore : IDisposable
             ["diagnosi"] = Diagnosi,
             ["scaricate"] = new JsonArray(scaricate.Select(v => (JsonNode)JsonValue.Create(v.Id)).ToArray()),
             ["byte_scaricate"] = scaricate.Sum(v => v.Byte),
-            ["aggiornamento"] = new JsonObject
-            {
-                ["attivo"] = AggiornamentiAttivi,
-                ["disponibile"] = nuova?.Nome,
-                ["in_corso"] = Volatile.Read(ref preparazioneInCorso) == 1,
-                ["pronta"] = pronta?.Nome,
-                ["errore"] = preparata?.Ok == false && pronta == null ? preparata.Errore : null,
-            },
+            ["aggiornamento"] = StatoAggiornamento(),
+        };
+    }
+
+    /// <summary>A che punto è la versione nuova: c'è, si sta scaricando, è pronta da installare, non è riuscita.</summary>
+    public JsonObject StatoAggiornamento()
+    {
+        var nuova = Aggiornatore.Disponibile;
+        var preparata = ultimaPreparazione;
+        var pronta = Pronta;
+        return new JsonObject
+        {
+            ["attivo"] = AggiornamentiAttivi,
+            ["disponibile"] = nuova?.Nome,
+            ["in_corso"] = Volatile.Read(ref preparazioneInCorso) == 1,
+            ["pronta"] = pronta?.Nome,
+            ["errore"] = preparata?.Ok == false && pronta == null ? preparata.Errore : null,
         };
     }
 
@@ -1024,6 +1030,29 @@ public sealed class Motore : IDisposable
             PreparazioneFinita?.Invoke(esito);
         });
         return true;
+    }
+
+    /// <summary>
+    /// "Controlla" nelle Impostazioni: chiede subito al server se c'è una versione nuova, senza aspettare il giro (che
+    /// guarda 20 secondi dopo l'avvio e poi ogni 12 ore). Se c'è, la scarica e la prepara come fa il giro; la pagina
+    /// segue lo scaricamento e alla fine mostra "Aggiorna adesso".
+    /// </summary>
+    public async Task<JsonObject> ControllaAggiornamentoAsync(CancellationToken annulla = default)
+    {
+        if (!AggiornamentiAttivi) return Errore("Questa copia di Lectio non si aggiorna da sola.", "non_disponibile");
+        var (server, _) = Credenziali();
+        if (server == null) return Errore(Frasi.NonCollegato, "non_abbinato");
+        var (base_, _) = await CollegamentoAsync(annulla).ConfigureAwait(false);
+        // Come il giro: lo zip non ha bisogno del token, se la casa non si verifica si prova lo stesso (lo protegge la firma).
+        await Aggiornatore.ControllaAsync(base_ ?? server, annulla).ConfigureAwait(false);
+        if (Aggiornatore.UltimoControlloOk != true)
+        {
+            return Errore("Non riesco a controllare: il server di casa non risponde. Riprova tra poco.", "rete");
+        }
+        var nuova = Aggiornatore.Disponibile;
+        var gia = Aggiornatore.Pronta(CartellaAggiornamento, Versione.Codice, orologio(), ancheSeFallita: true);
+        if (nuova != null && (gia?.Codice ?? 0) < nuova.Codice) AvviaPreparazione();
+        return new JsonObject { ["ok"] = true, ["aggiornamento"] = StatoAggiornamento() };
     }
 
     /// <summary>Al primo controllo dopo l'avvio: via quello che resta dell'aggiornamento di prima (in sottofondo, mai bloccante).</summary>

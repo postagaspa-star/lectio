@@ -890,6 +890,62 @@ test('Impostazioni: Domande predefinite, Risposte scritte, tetto; ogni cambio va
   assert.equal(p.d.documentElement.getAttribute('data-tema'), 'scuro');
 });
 
+test('Impostazioni: "Controlla" trova la versione nuova, segue lo scaricamento e offre Aggiorna adesso', opz, async () => {
+  const p = await apri();
+  p.s.stato.aggiornamento = { attivo: true };
+  p.s.risposta = (m, percorso) => {
+    if (percorso === '/locale/controlla-aggiornamento') {
+      p.s.stato.aggiornamento = { attivo: true, disponibile: '1.3.5', in_corso: true, pronta: null, errore: null };
+      // Lo scaricamento finisce dopo un po': la pagina deve accorgersene da sola.
+      setTimeout(() => { p.s.stato.aggiornamento = { attivo: true, disponibile: '1.3.5', in_corso: false, pronta: '1.3.5', errore: null }; }, 400);
+      return [200, { ok: true, aggiornamento: Object.assign({}, p.s.stato.aggiornamento) }];
+    }
+    if (percorso === '/locale/aggiorna-e-riavvia') return [200, { ok: true }];
+    return undefined;
+  };
+  p.A.vai('#impostazioni');
+  const controlla = await p.aspetta(() => p.q('[data-azione="controlla-aggiornamenti"]'));
+  assert.ok(p.testo().includes('Versione 1.0.0') && p.testo().includes('Si aggiorna da sola'));
+  p.clic(controlla);
+  await p.aspetta(() => p.testo().includes('Arriva la versione 1.3.5'));
+  assert.match(p.q('.avviso-breve').textContent, /È uscita la versione 1\.3\.5: la scarico/);
+  const aggiorna = await p.aspetta(() => p.q('[data-azione="aggiorna-adesso"]'), 6000);
+  assert.ok(p.testo().includes('È pronta la versione 1.3.5'));
+  await p.aspetta(() => /pronta: premi Aggiorna adesso/.test((p.q('.avviso-breve') || {}).textContent || ''));
+  assert.equal(p.s.chiamate('POST', '/locale/controlla-aggiornamento').length, 1);
+  assert.ok(p.s.chiamate('GET', '/locale/stato').length >= 2, 'segue lo scaricamento chiedendo lo stato');
+  p.clic(aggiorna);
+  await p.aspetta(() => p.s.chiamate('POST', '/locale/aggiorna-e-riavvia').length === 1);
+});
+
+test('Impostazioni: "Controlla" senza versioni nuove lo dice; se il server non risponde lo dice e si può riprovare', opz, async () => {
+  const p = await apri();
+  p.s.stato.aggiornamento = { attivo: true };
+  let rete = true;
+  p.s.risposta = (m, percorso) => {
+    if (percorso !== '/locale/controlla-aggiornamento') return undefined;
+    if (rete) return [422, { errore: 'Non riesco a controllare: il server di casa non risponde. Riprova tra poco.', codice: 'rete' }];
+    return [200, { ok: true, aggiornamento: { attivo: true, disponibile: null, in_corso: false, pronta: null, errore: null } }];
+  };
+  p.A.vai('#impostazioni');
+  const controlla = await p.aspetta(() => p.q('[data-azione="controlla-aggiornamenti"]'));
+  p.clic(controlla);
+  await p.aspetta(() => /non risponde/.test((p.q('.avviso-breve') || {}).textContent || ''));
+  const ancora = await p.aspetta(() => { const b = p.q('[data-azione="controlla-aggiornamenti"]'); return b && !b.disabled && b.textContent === 'Controlla' ? b : null; });
+  rete = false;
+  p.clic(ancora);
+  await p.aspetta(() => /Hai già l'ultima versione/.test((p.q('.avviso-breve') || {}).textContent || ''));
+  assert.ok(p.testo().includes('Versione 1.0.0'));
+  assert.equal(p.s.chiamate('POST', '/locale/controlla-aggiornamento').length, 2);
+});
+
+test('Impostazioni: con gli aggiornamenti spenti (prove, sviluppo) il pulsante Controlla non compare', opz, async () => {
+  const p = await apri();
+  p.A.vai('#impostazioni');
+  await p.aspetta(() => p.testo().includes('Versione 1.0.0'));
+  assert.equal(p.q('[data-azione="controlla-aggiornamenti"]'), null);
+});
+
 // --- Visita guidata ------------------------------------------------------------------------------------
 
 test('visita guidata: avanza solo con l\'azione giusta, in modalità esempio, senza nessuna chiamata al server', opz, async () => {
