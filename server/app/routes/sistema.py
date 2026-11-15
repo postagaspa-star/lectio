@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 
 from .. import abbina, clock, db
 from ..auth import Dispositivo, dispositivo_del_token, richiede_token, token_da_header
-from ..config import VERSIONE
+from ..config import VERSIONE, di_openai
 from ..db import get_conn
 from ..errori import ErroreApi, non_trovato
 from ..schemi import AbbinaIn
@@ -125,7 +125,7 @@ def salute(
         espressiva = ({"stato": "prova", "fornitore": "espeak"} if voce_prova_ok
                       else {"stato": "non_disponibile", "fornitore": "mistral"})
     else:
-        testo = {"stato": "pronto", "fornitore": "mistral"}
+        testo = {"stato": "pronto", "fornitore": "openai" if di_openai(st.modello_scrittura) else "mistral"}
         espressiva = {"stato": "pronta", "fornitore": "mistral"}
     if nas is not None:
         gratis = {"stato": "pronta" if nas_ok else "non_disponibile", "fornitore": "nas"}

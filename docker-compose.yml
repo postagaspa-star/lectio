@@ -12,7 +12,7 @@
 #                        tentativi sbagliati.
 #
 # Le chiavi stanno in due file separati, mai nel repo, e si scrivono con nas/imposta-chiave.sh:
-#   server/.env     -> LECTIO_MISTRAL_KEY, LECTIO_AZURE_KEY, LECTIO_AZURE_REGIONE (le vede solo lectio)
+#   server/.env     -> LECTIO_MISTRAL_KEY, LECTIO_OPENAI_KEY, LECTIO_AZURE_KEY, LECTIO_AZURE_REGIONE (le vede solo lectio)
 #   tailscale/.env  -> TS_AUTHKEY (la vede solo lectio-tailscale)
 # Così il container di Tailscale non ha le chiavi a pagamento, e Lectio non ha quella di Tailscale.
 # Prima volta: "touch server/.env tailscale/.env" (anche vuoti: senza chiavi Lectio parte in

@@ -72,7 +72,7 @@ class PrezzoSconosciuto(ErroreFornitore):
     def __init__(self, modello: str):
         # La frase va a schermo: niente nomi tecnici. Il nome del modello finisce nel log.
         log.warning("prezzo mancante in prezzi.json per il modello %s: chiamate a pagamento ferme", modello)
-        super().__init__("Sul server manca il prezzo di un modello di Mistral: finché non c'è, Lectio non fa "
+        super().__init__("Sul server manca il prezzo di un modello: finché non c'è, Lectio non fa "
                          "chiamate a pagamento. Va aggiunto nel file dei prezzi del server.")
         self.modello = modello
 
@@ -133,16 +133,24 @@ class Prezzi:
                (self.testo, settings.modello_scrittura, "per la scrittura"),
                (self.ocr, settings.modello_ocr, "per leggere le foto"),
                (self.voce, settings.modello_voce, "per la voce espressiva")]
+        if getattr(settings, "openai_key", None):
+            usi.append((self.testo, settings.modello_riserva, "di riserva"))
         return [uso for listino, modello, uso in usi if modello not in listino]
 
-    def costo_testo(self, modello: str, token_entrata: int, token_uscita: int, token_cache: int = 0) -> float:
-        """`token_cache`: quanti dei token d'entrata Mistral ha preso dalla cache (si pagano il 10%, provato il 12/11/2026
-        su Medium 3.5 e Small 4: la cache c'è da sola, una chiave uguale la rende più probabile)."""
+    def costo_testo(self, modello: str, token_entrata: int, token_uscita: int, token_cache: int = 0,
+                    token_cache_scritti: int = 0) -> float:
+        """`token_cache`: quanti dei token d'entrata il fornitore ha preso dalla cache (si pagano il 10%, provato il
+        12/11/2026 su Medium 3.5 e Small 4: la cache c'è da sola, una chiave uguale la rende più probabile).
+        `token_cache_scritti`: quanti token d'entrata OpenAI ha messo in cache (dai GPT-5.6 in poi si pagano 1,25 volte
+        l'entrata normale, al posto del prezzo normale)."""
         p = self._voce_listino(self.testo, modello)
-        cache = max(0, min(int(token_cache or 0), int(token_entrata)))
+        entrata = max(0, int(token_entrata))
+        cache = max(0, min(int(token_cache or 0), entrata))
+        scritti = max(0, min(int(token_cache_scritti or 0), entrata - cache))
         prezzo_cache = p.get("cache_per_milione", p["entrata_per_milione"] * 0.1)
-        dollari = ((token_entrata - cache) / 1e6 * p["entrata_per_milione"] + cache / 1e6 * prezzo_cache
-                   + token_uscita / 1e6 * p["uscita_per_milione"])
+        prezzo_scritti = p.get("cache_scrittura_per_milione", p["entrata_per_milione"])
+        dollari = ((entrata - cache - scritti) / 1e6 * p["entrata_per_milione"] + cache / 1e6 * prezzo_cache
+                   + scritti / 1e6 * prezzo_scritti + token_uscita / 1e6 * p["uscita_per_milione"])
         return dollari * self.cambio
 
     def costo_ocr(self, modello: str, pagine: int) -> float:

@@ -134,7 +134,11 @@ def jpeg_di_prova() -> bytes:
 class ServerFinto:
     def __init__(self):
         self.chiamate: list[tuple[str, dict | str]] = []
-        self.guasti: dict[str, list[int]] = {}  # percorso → codici da restituire, uno per chiamata
+        self.ospiti: list[str] = []  # a chi è andata ogni chiamata (api.openai.com, api.mistral.ai…), come `chiamate`
+        # percorso (oppure ospite + percorso, per esempio "api.openai.com/v1/chat/completions") → codici da restituire,
+        # uno per chiamata
+        self.guasti: dict[str, list[int]] = {}
+        self.rotte_per_ospite: dict[str, int] = {}  # ospite → quante risposte di chat non valide dare
         self.richieste_modifica: list[str] = []  # i messaggi "Lo studente vuole cambiare…" arrivati
         self.chat_rotta = 0  # quante risposte di chat non valide dare prima di quelle buone
         self.chat_forzata = None  # un testo fisso per la prossima chat
@@ -174,11 +178,16 @@ class ServerFinto:
         except ValueError:
             dati = corpo
         self.chiamate.append((percorso, dati))
-        coda = self.guasti.get(percorso)
+        ospite = richiesta.url.host
+        self.ospiti.append(ospite)
+        coda = self.guasti.get(f"{ospite}{percorso}") or self.guasti.get(percorso)
         if coda:
             codice = coda.pop(0)
             return httpx.Response(codice, json={"message": "guasto finto"})
         if percorso == "/v1/chat/completions":
+            if self.rotte_per_ospite.get(ospite, 0) > 0:
+                self.rotte_per_ospite[ospite] -= 1
+                return self._risposta_chat("Non è JSON", dati)
             return self._chat(dati)
         if percorso == "/v1/embeddings":
             if self.vettori_rotti:

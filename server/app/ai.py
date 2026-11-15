@@ -7,7 +7,10 @@
 3. Una risposta tagliata perché troppo lunga non si corregge: la seconda richiesta è la stessa
    di prima, con il doppio dello spazio.
 4. Una risposta giusta chiusa dentro una chiave in più ({"tabella_riassunto": {...}}) si apre e si
-   usa: Small 4 lo fa e lo rifà anche quando gli si chiede di correggersi (12/11/2026, quadro d'insieme)."""
+   usa: Small 4 lo fa e lo rifà anche quando gli si chiede di correggersi (12/11/2026, quadro d'insieme).
+5. La riserva (1.3.9): se chi scrive per primo (OpenAI) non va, cioè errore definitivo, errori temporanei anche
+   dopo i ritenti, oppure due risposte non usabili, si rifà tutto con il prossimo della catena (DeepSeek su
+   Mistral). Ogni fornitore ha le sue righe di spesa, con il suo prezzo; quelle della riserva lo dicono nel nome."""
 
 import json
 import logging
@@ -15,6 +18,7 @@ import re
 
 from . import misure, prompt
 from .config import RAGIONAMENTO
+from .rete import ErroreFornitore
 
 log = logging.getLogger("uvicorn.error")
 
@@ -75,6 +79,23 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
                 riferimento: str | None = None) -> dict:
     """`valida(oggetto) -> list[str]` restituisce gli errori (lista vuota = va bene).
     Se si passa `costi`, ci finisce il costo vero di ogni chiamata fatta."""
+    catena = fornitore.catena(modello) if hasattr(fornitore, "catena") else [(fornitore, modello)]
+    for n, (chi, quale) in enumerate(catena):
+        try:
+            return _chiedi_a(cassa=cassa, fornitore=chi, compito=compito, messaggi=messaggi, modello=quale,
+                             valida=valida, max_token=max_token, cosa=cosa if n == 0 else f"{cosa} (riserva)",
+                             dati=dati, lezione_id=lezione_id, materia_id=materia_id, materiale_id=materiale_id,
+                             prima_di_ogni_chiamata=prima_di_ogni_chiamata, costi=costi, riferimento=riferimento)
+        except (ErroreFornitore, RispostaNonUsabile) as e:
+            if n == len(catena) - 1:
+                raise
+            log.warning("%s: %s (%s) non è riuscito: %s. Passo alla riserva %s", cosa, chi.nome, quale,
+                        getattr(e, "frase", e), catena[n + 1][1])
+    raise AssertionError("catena vuota")
+
+
+def _chiedi_a(*, cassa, fornitore, compito: str, messaggi: list[dict], modello: str, valida, max_token: int,
+              cosa: str, dati, lezione_id, materia_id, materiale_id, prima_di_ogni_chiamata, costi, riferimento) -> dict:
     for tentativo in (1, 2):
         stima, token_stimati = 0.0, 0
         # Il ragionamento conta nei token di uscita: entra nel massimo chiesto e nella stima per il tetto.
@@ -89,7 +110,8 @@ def chiedi_json(*, cassa, fornitore, compito: str, messaggi: list[dict], modello
         def registra(ricevuta, risposta):
             if fornitore.a_pagamento:
                 cache = int(getattr(risposta, "token_cache", 0) or 0)
-                costo = cassa.prezzi.costo_testo(modello, risposta.token_entrata, risposta.token_uscita, cache)
+                scritti = int(getattr(risposta, "token_cache_scritti", 0) or 0)
+                costo = cassa.prezzi.costo_testo(modello, risposta.token_entrata, risposta.token_uscita, cache, scritti)
                 ricevuta.registra(risposta.token_entrata + risposta.token_uscita, "token", costo, cache=cache)
                 if costi is not None:
                     costi.append(costo)

@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.3.8"
+VERSIONE = "1.3.9"
 
 CARTELLA_APP = Path(__file__).resolve().parent
 VERSIONI_PATH_DEFAULT = str(CARTELLA_APP / "versioni.json")
@@ -15,13 +15,18 @@ APK_DIR_DEFAULT = str(CARTELLA_APP.parent / "apk")
 DATI_DIR_DEFAULT = str(CARTELLA_APP.parent / "dati")
 
 MISTRAL_URL = "https://api.mistral.ai/v1"
+OPENAI_URL = "https://api.openai.com/v1"
 
-MODELLO_PIANO_DEFAULT = "mistral-small-latest"
-MODELLO_SCRITTURA_DEFAULT = "mistral-medium-latest"
-# Schemi (1.3.3): il piano lo fa il modello di scrittura, le parti le scrive questo. Provato l'11/11/2026
-# sugli stessi 4 documenti: tutto Medium ~0,09 €, tutto Small 4 0,02 € ma parti ripetute e una da 88 parole,
-# piano Medium + parti Small 4 0,025 € con parti ordinate e fedeli alle fonti.
-MODELLO_PARTI_DEFAULT = "mistral-small-latest"
+# 1.3.9 (scelta di Andrea del 15/11/2026): tutti i testi (scrittura e lavori leggeri) li scrive gpt-6-luna di OpenAI,
+# con DeepSeek V4.1 Flash ospitato da Mistral come riserva quando OpenAI non risponde o non va. Senza la chiave OpenAI
+# scrive direttamente la riserva. Prima: Medium 3.5 per la scrittura (si spegne il 30/04/2027) e Small 4 per il resto.
+# Lo schema resta diviso in tre (piano, scrittura, parti) per poter dare a ciascuno un modello diverso dal file .env.
+MODELLO_TESTO_DEFAULT = "gpt-6-luna"
+MODELLO_PIANO_DEFAULT = MODELLO_TESTO_DEFAULT
+MODELLO_SCRITTURA_DEFAULT = MODELLO_TESTO_DEFAULT
+MODELLO_PARTI_DEFAULT = MODELLO_TESTO_DEFAULT
+# La riserva gira su Mistral ("anteprima pubblica": può cambiare). Provata il 15/11/2026: JSON giusto, non ragiona.
+MODELLO_RISERVA_DEFAULT = "deepseek-v4-1-flash-1017"
 MODELLO_OCR_DEFAULT = "mistral-ocr-3"
 MODELLO_VOCE_DEFAULT = "voxtral-mini-tts-3-0"
 VOCE_MISTRAL_DEFAULT = "voice_482"  # Lorenzo, l'unica voce italiana preimpostata
@@ -29,7 +34,13 @@ VOCE_MISTRAL_DEFAULT = "voice_482"  # Lorenzo, l'unica voce italiana preimpostat
 # Modelli che ragionano prima di rispondere (provato l'11/11/2026: Large 4 sì e non si spegne, solo
 # low/medium/high; Medium 3.5 e Small 4 no). Il ragionamento si paga come uscita e occupa max_tokens:
 # si chiede il livello basso e si lascia spazio in più (ai.py), se no la risposta arriva tagliata.
-RAGIONAMENTO = {"mistral-large-4": "low"}
+# gpt-6-luna di base ragiona a "medium": "low" basta per seguire le regole e costa poco (0,50 $ per milione).
+RAGIONAMENTO = {"mistral-large-4": "low", "gpt-6-luna": "low"}
+
+
+def di_openai(modello: str | None) -> bool:
+    """I modelli che si chiedono a OpenAI (tutti gli altri a Mistral)."""
+    return bool(modello) and modello.startswith(("gpt-", "o1", "o3", "o4"))
 
 # Abbinamento (contratto, sezione 2), come Sol: dietro Tailscale tutte le richieste
 # arrivano dallo stesso indirizzo, quindi il limite dei tentativi è uno per tutto il server.
@@ -70,6 +81,9 @@ class Settings:
     voci_url: str | None = None
     # Chi scrive le parti degli schemi (il piano resta a modello_scrittura).
     modello_parti: str = MODELLO_PARTI_DEFAULT
+    # OpenAI (1.3.9): senza chiave i testi li scrive la riserva su Mistral.
+    openai_key: str | None = None
+    modello_riserva: str = MODELLO_RISERVA_DEFAULT
 
     @property
     def modalita_prova(self) -> bool:
@@ -91,6 +105,15 @@ def _vuoto_a_none(valore: str | None) -> str | None:
 def carica_settings() -> Settings:
     e = os.environ.get
     dati_dir = e("LECTIO_DATI") or DATI_DIR_DEFAULT
+    openai_key = _vuoto_a_none(e("LECTIO_OPENAI_KEY"))
+    riserva = _vuoto_a_none(e("LECTIO_MODELLO_RISERVA")) or MODELLO_RISERVA_DEFAULT
+
+    def chi_scrive(nome: str, predefinito: str) -> str:
+        """Il modello scelto, oppure la riserva se è di OpenAI e la chiave OpenAI non c'è: così anche le stime
+        dei costi usano il prezzo di chi scriverà davvero."""
+        scelto = _vuoto_a_none(e(nome)) or predefinito
+        return riserva if di_openai(scelto) and not openai_key else scelto
+
     return Settings(
         db_path=e("LECTIO_DB") or str(Path(dati_dir) / "lectio.db"),
         dati_dir=dati_dir,
@@ -101,8 +124,8 @@ def carica_settings() -> Settings:
         mistral_key=_vuoto_a_none(e("LECTIO_MISTRAL_KEY")),
         azure_key=_vuoto_a_none(e("LECTIO_AZURE_KEY")),
         azure_regione=_vuoto_a_none(e("LECTIO_AZURE_REGIONE")),
-        modello_piano=_vuoto_a_none(e("LECTIO_MODELLO_PIANO")) or MODELLO_PIANO_DEFAULT,
-        modello_scrittura=_vuoto_a_none(e("LECTIO_MODELLO_SCRITTURA")) or MODELLO_SCRITTURA_DEFAULT,
+        modello_piano=chi_scrive("LECTIO_MODELLO_PIANO", MODELLO_PIANO_DEFAULT),
+        modello_scrittura=chi_scrive("LECTIO_MODELLO_SCRITTURA", MODELLO_SCRITTURA_DEFAULT),
         modello_ocr=_vuoto_a_none(e("LECTIO_MODELLO_OCR")) or MODELLO_OCR_DEFAULT,
         modello_voce=_vuoto_a_none(e("LECTIO_MODELLO_VOCE")) or MODELLO_VOCE_DEFAULT,
         voce_mistral=_vuoto_a_none(e("LECTIO_VOCE_MISTRAL")) or VOCE_MISTRAL_DEFAULT,
@@ -110,7 +133,9 @@ def carica_settings() -> Settings:
         tailscale_host=_vuoto_a_none(e("LECTIO_TAILSCALE_HOST")) or "lectio-tailscale",
         indirizzo_fuori_casa=(_vuoto_a_none(e("LECTIO_INDIRIZZO_FUORI_CASA")) or "").rstrip("/") or None,
         voci_url=(_vuoto_a_none(e("LECTIO_VOCI_URL")) or "").rstrip("/") or None,
-        modello_parti=_vuoto_a_none(e("LECTIO_MODELLO_PARTI")) or MODELLO_PARTI_DEFAULT,
+        modello_parti=chi_scrive("LECTIO_MODELLO_PARTI", MODELLO_PARTI_DEFAULT),
+        openai_key=openai_key,
+        modello_riserva=riserva,
     )
 
 
@@ -121,9 +146,10 @@ def riassunto_config(s: Settings) -> str:
         return "impostata" if v else "assente"
 
     return (
-        f"db={s.db_path} dati={s.dati_dir} mistral={stato(s.mistral_key)} azure={stato(s.azure_key)}"
-        f" regione={s.azure_regione or 'assente'} prova={'si' if s.modalita_prova else 'no'}"
-        f" piano={s.modello_piano} scrittura={s.modello_scrittura} parti={s.modello_parti} ocr={s.modello_ocr}"
+        f"db={s.db_path} dati={s.dati_dir} mistral={stato(s.mistral_key)} openai={stato(s.openai_key)}"
+        f" azure={stato(s.azure_key)} regione={s.azure_regione or 'assente'} prova={'si' if s.modalita_prova else 'no'}"
+        f" piano={s.modello_piano} scrittura={s.modello_scrittura} parti={s.modello_parti}"
+        f" riserva={s.modello_riserva} ocr={s.modello_ocr}"
         f" voce={s.modello_voce}"
         f" sottofondo={'acceso' if s.sottofondo else 'spento'} voci_nas={s.voci_url or 'assenti'}"
     )

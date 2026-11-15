@@ -15,6 +15,7 @@ ORA_INIZIALE = datetime(2026, 10, 27, 9, 0, 0, tzinfo=timezone.utc)
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "pagamento: server con chiavi (finte) e fornitori finti a pagamento")
+    config.addinivalue_line("markers", "openai: anche la chiave OpenAI (finta), con i modelli predefiniti")
 
 
 class Orologio:
@@ -72,6 +73,15 @@ def app(request, ambiente, orologio, server, monkeypatch):
         monkeypatch.setenv("LECTIO_MISTRAL_KEY", "chiave-finta-mistral")
         monkeypatch.setenv("LECTIO_AZURE_KEY", "chiave-finta-azure")
         monkeypatch.setenv("LECTIO_AZURE_REGIONE", "westeurope")
+        # Le prove scritte fino alla 1.3.8 contano su Small 4 e Medium 3.5 (nomi nelle richieste, stime dei costi):
+        # restano su quei modelli, scelti dal file .env come si può fare sul NAS. Il percorso di oggi (gpt-6-luna con
+        # la riserva DeepSeek su Mistral) ha le sue prove in test_openai.py, con il marcatore "openai".
+        if not request.node.get_closest_marker("openai"):
+            monkeypatch.setenv("LECTIO_MODELLO_PIANO", "mistral-small-latest")
+            monkeypatch.setenv("LECTIO_MODELLO_SCRITTURA", "mistral-medium-latest")
+            monkeypatch.setenv("LECTIO_MODELLO_PARTI", "mistral-small-latest")
+    if request.node.get_closest_marker("openai"):
+        monkeypatch.setenv("LECTIO_OPENAI_KEY", "chiave-finta-openai")
     from app.main import create_app
 
     applicazione = create_app()

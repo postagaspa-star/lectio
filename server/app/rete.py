@@ -1,4 +1,4 @@
-"""Chiamate ai fornitori esterni (Mistral, Azure): un tentativo alla volta, e frasi d'errore.
+"""Chiamate ai fornitori esterni (Mistral, OpenAI, Azure): un tentativo alla volta, e frasi d'errore.
 
 Ogni funzione dei fornitori fa UN solo tentativo; i ritenti li decide la Cassa (spesa.py),
 che prima di ogni tentativo ricontrolla il tetto. Per decidere serve sapere se il
@@ -55,6 +55,9 @@ def controlla(r: httpx.Response, nome: str) -> httpx.Response:
         return r
     dettaglio = r.text[:300] if r.text else ""
     log.warning("%s ha risposto %s: %s", nome, r.status_code, dettaglio)
+    if r.status_code == 429 and "insufficient_quota" in dettaglio:
+        # OpenAI risponde 429 anche quando il credito è finito: ritentare non serve.
+        raise ErroreFornitore(f"Il credito di {nome} è finito: ricaricalo sul sito di {nome}, poi tocca Riprova.")
     if r.status_code in (408, 409, 425, 429, 503):
         raise NonElaborata(nome, str(r.status_code))
     if r.status_code >= 500:

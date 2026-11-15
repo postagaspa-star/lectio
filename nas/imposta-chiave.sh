@@ -2,11 +2,12 @@
 # Inserisce una chiave nel file giusto di Lectio sul NAS e fa ripartire il container che la usa.
 # Si lancia dal PC, nel Prompt dei comandi:
 #   ssh -t "<utente>"@<ip-del-nas> "bash /volume1/docker/Lectio-NAS/imposta-chiave.sh"
+# Con un nome dopo lo script (mistral, openai, azure, regione, tailscale) chiede subito quella chiave.
 # La chiave si incolla a un prompt che non la mostra: non finisce nella cronologia dei comandi,
 # non passa da nessun programma di chat e non viene mai stampata.
 #
 # Due file separati:
-#   server/.env     -> le chiavi di Lectio (Mistral, Azure): le vede solo il container lectio
+#   server/.env     -> le chiavi di Lectio (Mistral, OpenAI, Azure): le vede solo il container lectio
 #   tailscale/.env  -> la chiave di Tailscale: la vede solo il container lectio-tailscale
 set -e
 CARTELLA="${LECTIO_CARTELLA:-/volume1/docker/Lectio-NAS}"
@@ -27,18 +28,29 @@ if grep -q '^TS_AUTHKEY=' "$FILE_LECTIO"; then
   echo "Ho spostato la chiave di Tailscale nel suo file (tailscale/.env)."
 fi
 
-echo "Quale chiave vuoi inserire?"
-echo "  1) Mistral (testo delle lezioni, voce espressiva, lettura delle foto)"
-echo "  2) Azure: chiave della voce gratis"
-echo "  3) Azure: regione (per esempio westeurope)"
-echo "  4) Tailscale: chiave di accesso"
-read -r -p "Numero: " N
+case "${1:-}" in
+  mistral) N=1 ;;
+  azure) N=2 ;;
+  regione) N=3 ;;
+  tailscale) N=4 ;;
+  openai) N=5 ;;
+  "")
+    echo "Quale chiave vuoi inserire?"
+    echo "  1) Mistral (voce espressiva, lettura delle foto, testo di riserva)"
+    echo "  2) Azure: chiave della voce gratis"
+    echo "  3) Azure: regione (per esempio westeurope)"
+    echo "  4) Tailscale: chiave di accesso"
+    echo "  5) OpenAI (testo di lezioni, riassunti, schemi e verifiche)"
+    read -r -p "Numero: " N ;;
+  *) N=0 ;;
+esac
 case "$N" in
   1) NOME=LECTIO_MISTRAL_KEY; FILE="$FILE_LECTIO" ;;
   2) NOME=LECTIO_AZURE_KEY; FILE="$FILE_LECTIO" ;;
   3) NOME=LECTIO_AZURE_REGIONE; FILE="$FILE_LECTIO" ;;
   4) NOME=TS_AUTHKEY; FILE="$FILE_TAILSCALE" ;;
-  *) echo "Numero non valido: non ho cambiato niente."; exit 1 ;;
+  5) NOME=LECTIO_OPENAI_KEY; FILE="$FILE_LECTIO"; echo "Chiave di OpenAI per Lectio." ;;
+  *) echo "Scelta non valida: non ho cambiato niente."; exit 1 ;;
 esac
 
 read -r -s -p "Incolla il valore (non si vede mentre lo incolli) e premi Invio: " VALORE

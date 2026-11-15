@@ -235,7 +235,7 @@ def test_4_modello_senza_prezzo(ambiente, orologio, server, monkeypatch, app):
         r = c.post("/api/lezioni", json={"materia_id": m["id"], "argomento": "Augusto",
                                          "voce": "azure:it-IT-IsabellaNeural"}, headers=auth)
         assert r.status_code == 503 and r.json()["codice"] == "fornitore_non_disponibile"
-        assert r.json()["errore"].startswith("Sul server manca il prezzo di un modello di Mistral")
+        assert r.json()["errore"].startswith("Sul server manca il prezzo di un modello:")
         mancano = c.get("/api/salute", headers=auth).json()["mancano"]
         assert "il prezzo del modello per la scrittura" in mancano
         assert "il prezzo del modello per la voce espressiva" in mancano

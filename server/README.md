@@ -51,14 +51,16 @@ la voce di prova non parte. Nel container ci sono entrambi.
 
 | Variabile | A cosa serve |
 |---|---|
-| `LECTIO_MISTRAL_KEY` | testo, voce espressiva, lettura delle foto. Senza: modalità prova |
+| `LECTIO_MISTRAL_KEY` | voce espressiva, lettura delle foto, ricerca nei documenti, testo di riserva. Senza: modalità prova |
+| `LECTIO_OPENAI_KEY` | i testi con `gpt-6-luna` (dalla 1.3.9). Senza: li scrive la riserva su Mistral |
+| `LECTIO_MODELLO_RISERVA` | chi scrive quando OpenAI non va o non c'è la chiave (base `deepseek-v4-1-flash-1017`, su Mistral) |
 | `LECTIO_AZURE_KEY`, `LECTIO_AZURE_REGIONE` | voce gratis (piano F0, 500.000 caratteri al mese). Senza: niente voce gratis |
 | `TS_AUTHKEY` | Tailscale Funnel (indirizzo https pubblico): sta in `tailscale/.env`, non qui |
 | `LECTIO_INDIRIZZO_FUORI_CASA` | facoltativa: l'indirizzo https per usare Lectio fuori casa (per esempio `https://lectio.<rete>.ts.net`); il server lo passa alle app in `/api/salute` (con token) e all'abbinamento come `indirizzo_fuori_casa` |
 | `LECTIO_TAILSCALE_HOST` | nome del container di Tailscale (base `lectio-tailscale`): le richieste che arrivano da lui sono "da internet" |
-| `LECTIO_MODELLO_PIANO` | piano, scheda, scelta degli appunti, correttore, "Non ho capito" dalla 1.3.4 (base `mistral-small-latest`) |
-| `LECTIO_MODELLO_SCRITTURA` | scrittura di lezioni, riassunti e verifiche simulate, piano degli schemi (base `mistral-medium-latest`, Medium 3.5) |
-| `LECTIO_MODELLO_PARTI` | parti, aggiunte e quadro finale degli schemi (base `mistral-small-latest`, Small 4; dalla 1.3.3) |
+| `LECTIO_MODELLO_PIANO` | piano, scheda, scelta degli appunti, correttore, "Non ho capito" (base `gpt-6-luna`; fino alla 1.3.8 `mistral-small-latest`) |
+| `LECTIO_MODELLO_SCRITTURA` | scrittura di lezioni, riassunti e verifiche simulate, piano degli schemi (base `gpt-6-luna`; fino alla 1.3.8 `mistral-medium-latest`) |
+| `LECTIO_MODELLO_PARTI` | parti, aggiunte e quadro finale degli schemi (base `gpt-6-luna`; fino alla 1.3.8 `mistral-small-latest`) |
 | `LECTIO_MODELLO_OCR` | lettura di foto e PDF scansionati (base `mistral-ocr-3`) |
 | `LECTIO_MODELLO_VOCE`, `LECTIO_VOCE_MISTRAL` | voce espressiva (base `voxtral-mini-tts-3-0`, `voice_482` = Lorenzo) |
 | `LECTIO_DATI`, `LECTIO_DB`, `LECTIO_APK_DIR` | cartelle (nel container `/data`, `/data/lectio.db`, `/apk`) |

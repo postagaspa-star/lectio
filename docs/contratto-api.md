@@ -214,7 +214,16 @@ stima dei token di entrata/uscita × prezzi. Prezzi e cambio in `server/app/prez
 5. **Montaggio** (ffmpeg): unisce i pezzi, mette 0,6 s tra paragrafi, 1,2 s tra capitoli, 2,5 s dopo ogni
    domanda, normalizza il volume, MP3 mono 64 kbps 24 kHz; calcola tempi di capitoli e domande dalle durate vere.
 
-Modelli predefiniti (cambiabili in `.env`): piano e scheda `mistral-small-latest`, scrittura
+**Dalla 1.3.9 (scelta di Andrea del 15/11/2026)** tutti i testi, scrittura e lavori leggeri, li scrive `gpt-6-luna` di
+OpenAI (0,10/0,50 $ per milione, ragionamento `low`; `LECTIO_OPENAI_KEY`), con la riserva `deepseek-v4-1-flash-1017`
+ospitata da Mistral (0,30/1,20 $, "anteprima pubblica", non ragiona; `LECTIO_MODELLO_RISERVA`). Il motivo: Medium 3.5
+si spegne il 30/04/2027 e luna costa circa quindici volte meno. La riserva entra quando OpenAI rifiuta la richiesta
+(chiave, credito finito, errore), quando è occupato anche dopo i 3 ritenti o quando dà due risposte non usabili: si
+rifà la stessa richiesta con DeepSeek, e le righe di spesa lo dicono ("(riserva)", fornitore `mistral`). Senza la
+chiave OpenAI scrive direttamente la riserva (anche le stime usano il suo prezzo). OCR, voce e ricerca nei documenti
+restano su Mistral. La storia di prima, per chi riprende i modelli Mistral dal file `.env`:
+
+Modelli predefiniti fino alla 1.3.8: piano e scheda `mistral-small-latest`, scrittura
 `mistral-medium-latest` (ora Medium 3.5: 1,50/7,50 $ per milione, contati giusti dalla 1.3.2; `mistral-large-4` costa
 meno a token ma ragiona sempre prima di rispondere, provato l'11/11/2026: il ragionamento si paga e taglia le risposte,
 il server gli chiede il livello basso e gli lascia spazio, ma non conviene). Negli schemi (dalla 1.3.3) la scrittura
@@ -287,11 +296,13 @@ Se una parte non si legge scrivi [illeggibile], non indovinare.
 
 ## 14. Chiavi e ambiente (`server/.env`, mai nel repo)
 
-`LECTIO_MISTRAL_KEY`, `LECTIO_AZURE_KEY`, `LECTIO_AZURE_REGIONE` (es. `westeurope`), `TS_AUTHKEY`;
-facoltativi: `LECTIO_MODELLO_PIANO`, `LECTIO_MODELLO_SCRITTURA`, `LECTIO_MODELLO_OCR`, `LECTIO_MODELLO_VOCE`,
-`LECTIO_VOCE_MISTRAL` (predefinito `voice_482`). Le scrive Andrea con
-`ssh -t "<utente>"@<ip-del-nas> "bash /volume1/docker/Lectio-NAS/imposta-chiave.sh"` (domanda nascosta,
-riavvio da solo). Senza Mistral → modalità prova. Senza Azure → niente voce gratis (la voce espressiva resta).
+`LECTIO_MISTRAL_KEY`, `LECTIO_OPENAI_KEY` (1.3.9), `LECTIO_AZURE_KEY`, `LECTIO_AZURE_REGIONE` (es. `westeurope`),
+`TS_AUTHKEY`; facoltativi: `LECTIO_MODELLO_PIANO`, `LECTIO_MODELLO_SCRITTURA`, `LECTIO_MODELLO_PARTI`,
+`LECTIO_MODELLO_RISERVA`, `LECTIO_MODELLO_OCR`, `LECTIO_MODELLO_VOCE`, `LECTIO_VOCE_MISTRAL` (predefinito `voice_482`).
+Le scrive Andrea con `ssh -t "<utente>"@<ip-del-nas> "bash /volume1/docker/Lectio-NAS/imposta-chiave.sh"` (domanda
+nascosta, riavvio da solo; con `openai` dopo il nome dello script chiede subito quella). Senza Mistral → modalità prova.
+Senza OpenAI → i testi li scrive la riserva su Mistral. Senza Azure → niente voce gratis (la voce espressiva resta).
+In `/api/salute` `testo.fornitore` è `openai` quando scrive luna, `mistral` quando scrive Mistral.
 
 ## 15. Novità della v1.1 (richieste di Andrea del 27/10)
 

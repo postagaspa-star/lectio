@@ -18,7 +18,7 @@ from .memoria import VettoriFinti, VettoriMistral
 from .origine import Origine
 from .ocr import OcrFinto, OcrMistral
 from .spesa import Cassa, Prezzi
-from .testo_ai import TestoMistral
+from .testo_ai import Scrittori, TestoMistral, TestoOpenAI
 from .voci import Catalogo, VoceAzure, VoceMistral, VoceNas, VoceProva
 
 
@@ -43,7 +43,9 @@ def crea_servizi(settings: Settings, transport: httpx.BaseTransport | None = Non
     prezzi = Prezzi.carica(settings.prezzi_path)
     cassa = Cassa(settings.db_path, prezzi, dormi=dormi)
     if settings.mistral_key:
-        testo = TestoMistral(settings.mistral_key, transport=transport)
+        # I testi: OpenAI se c'è la chiave, con la riserva su Mistral (1.3.9). Senza Mistral tutto resta in prova.
+        openai = TestoOpenAI(settings.openai_key, transport=transport) if settings.openai_key else None
+        testo = Scrittori(TestoMistral(settings.mistral_key, transport=transport), openai, settings.modello_riserva)
         vettori, foto = VettoriMistral(settings.mistral_key, transport=transport), Commons(transport=transport)
         ocr = OcrMistral(settings.mistral_key, transport=transport)
         voce_mistral = VoceMistral(settings.mistral_key, settings.modello_voce, settings.voce_mistral,
