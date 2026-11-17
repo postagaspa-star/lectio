@@ -529,30 +529,33 @@ test('un materiale: la cartella si manda solo se è cambiata, e null (fuori) si 
 
 // --- Il pulsante Nuovo e "Cosa vuoi fare?" (1.3.0, guida §43) ------------------------------------------------
 
-test('Cosa vuoi fare?: cinque righe nell\'ordine giusto, con nome, frase e icona', () => {
+test('Cosa vuoi fare?: sei righe nell\'ordine giusto, con nome, frase e icona (§45.1: Mappa dopo Riassunto)', () => {
   const r = L.righeNuovo({ lampo: 5, pronti: 2, senzaRete: false });
-  assert.deepEqual(r.map((x) => x.scelta), ['lezione', 'schema', 'riassunto', 'simulata', 'lampo']);
-  assert.deepEqual(r.map((x) => x.nome), ['Lezione da ascoltare', 'Schema', 'Riassunto', 'Verifica simulata', 'Ripasso lampo']);
+  assert.deepEqual(r.map((x) => x.scelta), ['lezione', 'schema', 'riassunto', 'mappa', 'simulata', 'lampo']);
+  assert.deepEqual(r.map((x) => x.nome), ['Lezione da ascoltare', 'Schema', 'Riassunto', 'Mappa', 'Verifica simulata', 'Ripasso lampo']);
   assert.deepEqual(r.map((x) => x.frase), [
     'Te la spiego a voce, con le domande lungo la strada',
     'Da leggere: i punti chiave, con le immagini',
     'Da uno schema già pronto: per punti o discorsivo',
+    'Da uno schema già pronto: le date o i concetti',
     'Come quella del prof, poi la correggo',
     '5 schede · circa 2 min',
   ]);
-  assert.deepEqual(r.map((x) => x.icona), ['lezioni', 'testo', 'riassunto', 'verifica', 'lampo']);
+  assert.deepEqual(r.map((x) => x.icona), ['lezioni', 'testo', 'riassunto', 'mappa', 'verifica', 'lampo']);
   assert.ok(r.every((x) => !x.spenta));
-  assert.equal(L.righeNuovo({ lampo: 1, pronti: 1 })[4].frase, '1 scheda · circa 1 min');
+  assert.equal(L.righeNuovo({ lampo: 1, pronti: 1 })[5].frase, '1 scheda · circa 1 min');
   for (const x of r) assert.doesNotMatch(x.nome + x.frase, /!/);
 });
 
 test('Cosa vuoi fare?: righe spente con il perché nella frase', () => {
   const vuote = L.righeNuovo({ lampo: 0, pronti: 0, senzaRete: false });
-  assert.deepEqual(vuote.filter((x) => x.spenta).map((x) => [x.scelta, x.frase]), [['riassunto', 'Prima serve uno schema pronto'], ['lampo', 'Niente per oggi']]);
-  // Non si sa ancora quanti schemi ci sono: Riassunto aspetta spento, con la sua frase.
-  const attesa = L.righeNuovo({ lampo: 3, pronti: null })[2];
-  assert.equal(attesa.spenta, true);
-  assert.equal(attesa.frase, 'Da uno schema già pronto: per punti o discorsivo');
+  assert.deepEqual(vuote.filter((x) => x.spenta).map((x) => [x.scelta, x.frase]), [['riassunto', 'Prima serve uno schema pronto'], ['mappa', 'Prima serve uno schema pronto'], ['lampo', 'Niente per oggi']]);
+  // Non si sa ancora quanti schemi ci sono: Riassunto e Mappa aspettano spenti, con la loro frase.
+  const attesa = L.righeNuovo({ lampo: 3, pronti: null });
+  assert.equal(attesa[2].spenta, true);
+  assert.equal(attesa[2].frase, 'Da uno schema già pronto: per punti o discorsivo');
+  assert.equal(attesa[3].spenta, true);
+  assert.equal(attesa[3].frase, 'Da uno schema già pronto: le date o i concetti');
   // Senza rete sul PC (nessuna scheda salvata, §35.5) tutto spento, anche il Ripasso lampo.
   const giu = L.righeNuovo({ lampo: 5, pronti: 2, senzaRete: true });
   assert.ok(giu.every((x) => x.spenta && x.frase === 'Serve la rete'));

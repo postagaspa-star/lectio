@@ -104,7 +104,7 @@
   window.lectioApri = function (frammento) {
     if (!S.dom.scorre) return;
     const f = String(frammento || '');
-    if (/^(oggi|materie|lezioni|gemini|impostazioni)$/.test(f) || /^lezione\/\d+$/.test(f) || /^materia\/\d+(\/(schemi|simulate))?$/.test(f) || /^(schema|simulata|riassunto)\/\d+$/.test(f)) A.vai('#' + f);
+    if (/^(oggi|materie|lezioni|gemini|impostazioni)$/.test(f) || /^lezione\/\d+$/.test(f) || /^materia\/\d+(\/(schemi|simulate))?$/.test(f) || /^(schema|simulata|riassunto|mappa)\/\d+$/.test(f)) A.vai('#' + f);
   };
 
   /** Novità dal server (lezione pronta, file letto…): la pagina aggiorna quello che mostra. */
@@ -115,7 +115,7 @@
     // §44.3 Una modifica finita o fermata: la pagina che la segue richiede subito e dà lei l'avviso ("Fatto: …").
     const modifiche = voci.some((v) => v.tipo === 'modifica_pronta' || v.tipo === 'modifica_errore');
     const seguita = modifiche && A.novitaModifica ? A.novitaModifica() : false;
-    const pronta = voci.find((v) => ['lezione_pronta', 'schema_pronto', 'riassunto_pronto', 'simulata_pronta', 'simulata_corretta'].includes(v.tipo))
+    const pronta = voci.find((v) => ['lezione_pronta', 'schema_pronto', 'riassunto_pronto', 'mappa_pronta', 'simulata_pronta', 'simulata_corretta'].includes(v.tipo))
       || (seguita ? null : voci.find((v) => v.tipo === 'modifica_pronta'));
     if (pronta && document.hasFocus()) A.avviso(pronta.testo || 'È pronto.');
     A.aggiornaMotore();
@@ -176,6 +176,7 @@
       else await new Promise((fatto) => { window.addEventListener('hashchange', () => setTimeout(fatto, 0), { once: true }); location.replace(hash); });
       if (sel) await aspetta(sel);
     };
+    const attendi = (ms) => new Promise((r) => setTimeout(r, ms));
     switch (scena) {
       case 'materie': await vai('#materie', '.scheda-materia'); break;
       case 'materia':
@@ -368,6 +369,52 @@
         break;
       }
       case 'riassunto-vecchio': await vai('#riassunto/5', '[data-vecchio]'); break;
+      // §45 Le mappe: la scelta, i concetti (albero e raggiera), la spiegazione, le date, la prova, Correggi, il PDF.
+      case 'mappa-scelta': await vai('#schema/3', '.sch-parte'); document.querySelector('[data-azione="mappa"]').click(); await aspetta('[data-tipo-mappa]'); break;
+      case 'mappa-concetti': await vai('#mappa/7', '.mp-nodo'); await attendi(350); break;
+      case 'mappa-raggiera': await vai('#mappa/7', '.mp-nodo'); document.querySelector('[data-forma-mappa="raggiera"]').click(); await aspetta('[data-forma="raggiera"] .mp-nodo'); await attendi(350); break;
+      case 'mappa-spiegazione':
+        await vai('#mappa/7', '.mp-nodo');
+        await attendi(100);
+        document.querySelector('.mp-nodo[data-id="3"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await aspetta('[data-mappa-pannello].aperto');
+        await attendi(350);
+        break;
+      case 'mappa-date': await vai('#mappa/8', '.mp-data'); await attendi(350); break;
+      case 'mappa-date-fila': await vai('#mappa/8', '.mp-data'); document.querySelector('[data-forma-mappa="fila"]').click(); await aspetta('[data-forma="fila"] .mp-data'); await attendi(350); break;
+      case 'mappa-prova': case 'mappa-prova-date': {
+        await vai(scena === 'mappa-prova' ? '#mappa/7' : '#mappa/8', '.mp-scheda');
+        document.querySelector('[data-azione="mettiti-alla-prova"]').click();
+        await aspetta('[data-prova="si"]');
+        await attendi(100);
+        const n = document.querySelector('.mp-nodo.coperto, .mp-data.con-nascosti');
+        if (n) n.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await attendi(350);
+        break;
+      }
+      case 'mappa-correggi':
+        await vai('#mappa/7', '.mp-nodo');
+        document.querySelector('[data-azione="puntini"]').click();
+        await aspetta('[data-azione="correggi-a-mano"]');
+        document.querySelector('[data-azione="correggi-a-mano"]').click();
+        await aspetta('[data-barra="correggi"]');
+        await attendi(100);
+        break;
+      case 'mappa-modifica':
+        await vai('#mappa/8', '.mp-data');
+        document.querySelector('.sch-testa [data-azione="modifica"]').click();
+        await aspetta('[data-campo="richiesta"]');
+        break;
+      // Il foglio del PDF come lo stampa il programma (con --print-to-pdf si vede la stampa vera).
+      case 'mappa-stampa': case 'mappa-stampa-date': {
+        const id = scena === 'mappa-stampa' ? 7 : 8;
+        await vai('#mappa/' + id, '.mp-scheda');
+        const r = await A.api.get('/server/api/mappe/' + id);
+        const forma = document.querySelector('.mp-scheda').getAttribute('data-forma');
+        document.body.append(A.fogliStampaMappa({ mappa: r.dati, materia: A.materiaDi(1), forma, prova: null }));
+        document.documentElement.classList.add('stampa-mappa');
+        break;
+      }
       case 'lettore-modifica': {
         A.T.modifica = 1e9;
         server.stato.modifiche.push({ id: 52, tipo: 'lezione', oggetto_id: 12, materia_id: 1, richiesta: 'Spiega meglio Seiano', parti: [2], stato: 'in_coda', fase: null, fatto: 0, totale: 1, frase: null, errore: null, nota: null, cambiate: [], stima_eur: 0.05, creata_il: new Date().toISOString(), pronta_il: null });

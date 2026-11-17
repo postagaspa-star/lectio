@@ -263,6 +263,7 @@ class Cassa:
             caratteri += max(0, int(r["stima_caratteri"]) - int(r["usati"]))
         for tabella, parola, stati in (("schemi", "schema", "'in_coda', 'in_preparazione'"),
                                        ("riassunti", "riassunto", "'in_coda', 'in_preparazione'"),
+                                       ("mappe", "mappa", "'in_coda', 'in_preparazione'"),
                                        ("modifiche", "modifica", "'in_coda', 'in_preparazione'"),
                                        ("simulate", "simulata", "'in_coda', 'in_preparazione', 'in_correzione'")):
             for r in conn.execute(
@@ -503,6 +504,12 @@ class Cassa:
         letti = int((min(caratteri, 90_000) + 3000) / t)
         scritti = min(6000, int(caratteri / t * 0.8) + 600)
         return (self.prezzi.costo_testo(modello_scrittura, letti, scritti) + self.prezzi.costo_testo(modello_piano, letti, 400)) * 1.5
+
+    def stima_mappa(self, caratteri: int, modello_piano: str, modello_scrittura: str) -> float:
+        """La mappa, le date da sistemare o la riscrittura (una delle due, di solito nessuna) e il controllo dei fatti."""
+        t = misure.CARATTERI_PER_TOKEN
+        letti = int((min(caratteri, 90_000) + 4000) / t)
+        return (self.prezzi.costo_testo(modello_scrittura, letti, 3500) + self.prezzi.costo_testo(modello_piano, letti, 400)) * 1.5
 
     def decisione(self, conn: sqlite3.Connection, costo: float, *, prova: bool, modello_ocr: str, modello_piano: str,
                   quale: str) -> dict:

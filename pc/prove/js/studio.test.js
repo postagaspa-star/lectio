@@ -478,7 +478,7 @@ test('dopo l\'aggiornamento parte una volta la visita delle cose nuove, e si ric
   const p = await B.pagina(s, { tempi: TEMPI });
   await p.aspetta(() => p.A.S.visita, 5000);
   assert.equal(p.A.S.visita.modo, 'novita');
-  assert.equal(p.A.S.visita.passi.length, 17);
+  assert.equal(p.A.S.visita.passi.length, 19);
   await p.aspetta(() => p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   p.clic(p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   await p.aspetta(() => s.chiamate('POST', '/locale/tutorial-novita-visto').length === 1);
@@ -493,7 +493,7 @@ test('la visita delle cose nuove trova il suo bersaglio a ogni passo', opz, asyn
   await p.A.avviaVisita(false, 'novita');
   await p.aspetta(() => p.A.S.visita && !p.A.S.visita.preparando);
   const passi = p.A.S.visita.passi;
-  assert.equal(passi.length, 17);
+  assert.equal(passi.length, 19);
   for (let i = 0; i < passi.length - 1; i++) {
     await p.A.visitaVai(i);
     const trovato = await p.aspetta(() => passi[i].bersaglio.some((b) => p.q(b)), 3000).catch(() => false);
@@ -502,19 +502,30 @@ test('la visita delle cose nuove trova il suo bersaglio a ogni passo', opz, asyn
   assert.equal(s.log.filter((x) => x.metodo !== 'GET' && x.percorso.startsWith('/server/')).length, 0, 'la visita non manda niente al server');
 });
 
-test('chi aveva già visto le novità vede una volta solo il passo nuovo (Modifica)', opz, async () => {
+test('chi aveva già visto le novità vede una volta solo i passi nuovi (Mappa)', opz, async () => {
   const s = B.server({});
   s.stato.tutorial_novita_visto = true;
   s.stato.novita_nuove = true;
+  s.stato.novita_viste = 2;
   const p = await B.pagina(s, { tempi: TEMPI });
   await p.aspetta(() => p.A.S.visita && !p.A.S.visita.preparando, 5000);
   assert.equal(p.A.S.visita.modo, 'ultime');
-  assert.equal(p.A.S.visita.passi.map((x) => x.titolo || 'fine').join(' | '), 'Modifica | fine');
-  assert.ok(await p.aspetta(() => p.q('[data-visita="modifica"]'), 3000));
+  assert.equal(p.A.S.visita.passi.map((x) => x.titolo || 'fine').join(' | '), 'Mappa | Mettiti alla prova | fine');
+  assert.ok(await p.aspetta(() => p.q('[data-visita="pillola-mappa"]'), 3000));
   p.clic(p.pulsante('Salta') || p.q('[data-azione="salta-visita"]'));
   await p.aspetta(() => s.chiamate('POST', '/locale/tutorial-novita-visto').length === 1);
   assert.equal(s.chiamate('POST', '/locale/tutorial-visto').length, 0);
   assert.ok(await p.aspetta(() => p.A.S.motore.novita_nuove === false));
+});
+
+test('chi si era fermato prima di Modifica vede Modifica e Mappa', opz, async () => {
+  const s = B.server({});
+  s.stato.tutorial_novita_visto = true;
+  s.stato.novita_nuove = true;
+  s.stato.novita_viste = 0;
+  const p = await B.pagina(s, { tempi: TEMPI });
+  await p.aspetta(() => p.A.S.visita && !p.A.S.visita.preparando, 5000);
+  assert.equal(p.A.S.visita.passi.map((x) => x.titolo || 'fine').join(' | '), 'Modifica | Mappa | Mettiti alla prova | fine');
 });
 
 test('chi ha già visto le novità non rivede niente', opz, async () => {

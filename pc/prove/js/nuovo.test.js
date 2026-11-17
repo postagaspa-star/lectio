@@ -1,5 +1,5 @@
 // I test del pulsante Nuovo e dell'ordine della pagina della materia (1.3.0, docs/aspetto.md §43) sulle pagine vere in
-// jsdom, col server finto di esempio.js: l'ordine delle sezioni, "Cosa vuoi fare?" con le sue cinque righe, le righe
+// jsdom, col server finto di esempio.js: l'ordine delle sezioni, "Cosa vuoi fare?" con le sue sei righe, le righe
 // spente, il passo 2 di Riassunto (e il salto con un solo schema), il Ripasso lampo, la finestra che si chiude quando
 // si apre la cosa scelta, la rete che cade. Dati solo finti.
 'use strict';
@@ -71,15 +71,15 @@ test('materia: prima Cosa chiede il prof | Prossime e Da ripassare, poi il binar
 
 // --- Il pulsante e la finestra (§43.2, §43.3) -----------------------------------------------------------
 
-test('Nuovo apre "Cosa vuoi fare?": titolo, pillola della materia, X, cinque righe con piastrella e freccia', opz, async () => {
+test('Nuovo apre "Cosa vuoi fare?": titolo, pillola della materia, X, sei righe con piastrella e freccia', opz, async () => {
   const p = await apriMateria(1);
   const f = await apriScelta(p);
   assert.equal(f.querySelector('h2').textContent, 'Cosa vuoi fare?');
   assert.equal(f.querySelector('.pillola-materia').textContent, 'Storia');
   assert.ok(f.querySelector('[data-azione="chiudi-nuovo"]'));
   assert.ok(f.classList.contains('stretta'), 'finestra larga 560');
-  assert.deepEqual(p.tutti('.finestra-nuovo [data-scelta]').map((b) => b.getAttribute('data-scelta')), ['lezione', 'schema', 'riassunto', 'simulata', 'lampo']);
-  assert.deepEqual(p.tutti('.finestra-nuovo [data-scelta] .n').map((x) => x.textContent), ['Lezione da ascoltare', 'Schema', 'Riassunto', 'Verifica simulata', 'Ripasso lampo']);
+  assert.deepEqual(p.tutti('.finestra-nuovo [data-scelta]').map((b) => b.getAttribute('data-scelta')), ['lezione', 'schema', 'riassunto', 'mappa', 'simulata', 'lampo']);
+  assert.deepEqual(p.tutti('.finestra-nuovo [data-scelta] .n').map((x) => x.textContent), ['Lezione da ascoltare', 'Schema', 'Riassunto', 'Mappa', 'Verifica simulata', 'Ripasso lampo']);
   assert.equal(frase(p, 'lezione'), 'Te la spiego a voce, con le domande lungo la strada');
   assert.equal(frase(p, 'riassunto'), 'Da uno schema già pronto: per punti o discorsivo');
   assert.equal(frase(p, 'lampo'), '5 schede · circa 2 min');

@@ -162,6 +162,7 @@ class ServerFinto:
         self.chiarimento = None
         self.simulata = None
         self.riassunti_corti = 0  # quanti riassunti dare con una parte sola, anche se lo schema ha più sezioni
+        self.mappa = None  # la risposta del modello per le mappe (None = quella solita)
         self.vettori_rotti = False
 
     def conta(self, pezzo: str) -> int:
@@ -321,6 +322,28 @@ class ServerFinto:
                 self.riassunti_corti -= 1
                 quante = 1
             oggetto = {"titolo": "Augusto in breve", "parti": [dict(parte, titolo=f"{parte['titolo']} {i}") for i in range(1, quante + 1)]}
+        elif "Fai la LINEA DEL TEMPO" in primo:
+            # La prima volta c'è anche una data che nello schema non c'è (1789): la correzione la toglie.
+            corretta = any("Queste date non le trovo" in (m["content"] if isinstance(m["content"], str) else "") for m in dati["messages"])
+            eventi = [{"data": "27 a.C.", "anno": 27, "ac": True, "fine": None, "circa": False, "mese": None,
+                       "cosa": "Ottaviano diventa Augusto", "spiegazione": "Il senato gli dà il titolo.", "sezione": 1},
+                      {"data": "1492", "anno": 1492, "ac": False, "fine": None, "circa": False, "mese": 10,
+                       "cosa": "Colombo arriva in America", "spiegazione": "Arriva con tre navi.", "sezione": 2},
+                      {"data": "XV secolo", "anno": 1500, "ac": False, "fine": None, "circa": False, "mese": None,
+                       "cosa": "Cresce il commercio", "spiegazione": "", "sezione": 2}]
+            if not corretta:
+                eventi.append({"data": "1789", "anno": 1789, "ac": False, "fine": None, "circa": False, "mese": None,
+                               "cosa": "Rivoluzione francese", "spiegazione": "", "sezione": 2})
+            oggetto = self.mappa or {"titolo": "Le date dell'impero", "eventi": eventi}
+        elif "Fai la mappa dei CONCETTI" in primo:
+            oggetto = self.mappa or {
+                "titolo": "Il potere di Augusto", "domanda": "Come governò Augusto?", "forma": "albero",
+                "concetti": [{"id": 1, "testo": "Augusto", "genitore": None, "verbo": None, "spiegazione": "Il primo imperatore.", "sezione": 1},
+                             {"id": 2, "testo": "Potere vero", "genitore": 1, "verbo": "tiene", "spiegazione": "Comanda l'esercito.", "sezione": 1},
+                             {"id": 3, "testo": "Senato", "genitore": 1, "verbo": "lascia in piedi", "spiegazione": "Si riunisce ancora.", "sezione": 2},
+                             {"id": 4, "testo": "Facciata", "genitore": 3, "verbo": "resta di", "spiegazione": "", "sezione": 2},
+                             {"id": 5, "testo": "Legioni", "genitore": 2, "verbo": "passa per", "spiegazione": "", "sezione": 1}],
+                "collegamenti": [{"da": 5, "a": 3, "verbo": "pesano più del", "spiegazione": ""}]}
         elif "Lo studente non ha capito il passaggio" in primo:
             oggetto = self.chiarimento or {"trovato": True, "risposta": "Vuol dire che comandava Augusto.", "fonti": ids[:1], "cosa_manca": None}
         elif "Prepara una verifica di prova da" in primo:

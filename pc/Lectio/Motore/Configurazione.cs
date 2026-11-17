@@ -46,12 +46,12 @@ public sealed class Configurazione
 
     /// <summary>
     /// L'ultimo giro di novità visto (0 = solo il primo, prima che esistessero i giri). Chi ha già visto la visita delle
-    /// cose nuove rivede solo i passi di un giro più recente (1.3.6: Modifica). <see cref="GiroNovita"/> è quello attuale.
+    /// cose nuove rivede solo i passi dei giri più recenti (1.3.6: Modifica; 1.3.7: Mappa). <see cref="GiroNovita"/> è quello attuale.
     /// </summary>
     public int NovitaViste { get; set; }
 
     /// <summary>Il giro di novità di questa versione: va alzato insieme a <c>giro</c> dei passi nuovi in visita.js.</summary>
-    public const int GiroNovita = 2;
+    public const int GiroNovita = 3;
 
     /// <summary>Tema scelto nelle impostazioni: "chiaro", "scuro" oppure null (come Windows).</summary>
     public string? Tema { get; set; }

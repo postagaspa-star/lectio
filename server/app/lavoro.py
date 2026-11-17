@@ -16,7 +16,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import ai, cartelle, db, lettura, memoria, modifiche, prompt, riassunti, schema_ripasso, simulata, titoli
+from . import ai, cartelle, db, lettura, mappe, memoria, modifiche, prompt, riassunti, schema_ripasso, simulata, titoli
 from . import scheda as schede
 from .ai import RispostaNonUsabile
 from .audio import ErroreMontaggio
@@ -142,10 +142,12 @@ class Lavoro:
     # ------------------------------------------------------------------ schemi e verifiche simulate
 
     def passo_studio(self) -> str:
-        """Una cosa alla volta: prima le correzioni (si sta aspettando il voto), poi i riassunti (bastano pochi secondi),
-        poi in ordine di arrivo."""
+        """Una cosa alla volta: prima le correzioni (si sta aspettando il voto), poi riassunti e mappe (bastano pochi
+        secondi), poi in ordine di arrivo."""
         with db.aperta(self.db_path) as conn, db.transazione(conn):
             riassunto = conn.execute("SELECT id FROM riassunti WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
+            # Le mappe (contratto 29) come i riassunti: una richiesta o due, fanno presto.
+            mappa = None if riassunto else conn.execute("SELECT id FROM mappe WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
             da_correggere = conn.execute(
                 "SELECT id FROM simulate WHERE stato = 'in_correzione' ORDER BY consegnata_il, id LIMIT 1").fetchone()
             schema = conn.execute("SELECT id, in_coda_dal FROM schemi WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
@@ -153,17 +155,19 @@ class Lavoro:
             # Le modifiche (contratto 28) dopo correzioni e riassunti: riscrivono poche parti, fanno presto.
             modifica = conn.execute("SELECT id FROM modifiche WHERE tipo <> 'lezione' AND stato = 'in_coda' ORDER BY in_coda_dal, id"
                                     " LIMIT 1").fetchone()
-            if da_correggere is None and riassunto is None and schema is None and prova is None and modifica is None:
+            if da_correggere is None and riassunto is None and mappa is None and schema is None and prova is None and modifica is None:
                 return VUOTO
             if da_correggere is not None:
-                riassunto = None
-            if da_correggere is not None or riassunto is not None:
+                riassunto = mappa = None
+            if da_correggere is not None or riassunto is not None or mappa is not None:
                 modifica = None
             if riassunto is not None:
                 conn.execute("UPDATE riassunti SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (riassunto["id"],))
+            if mappa is not None:
+                conn.execute("UPDATE mappe SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (mappa["id"],))
             if modifica is not None:
                 conn.execute("UPDATE modifiche SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (modifica["id"],))
-            libero = da_correggere is None and riassunto is None and modifica is None
+            libero = da_correggere is None and riassunto is None and mappa is None and modifica is None
             prima_schema = libero and schema is not None and (prova is None or schema["in_coda_dal"] <= prova["in_coda_dal"])
             if prima_schema:
                 conn.execute("UPDATE schemi SET stato = 'in_preparazione', errore = NULL WHERE id = ?", (schema["id"],))
@@ -175,6 +179,8 @@ class Lavoro:
             self._esegui_studio("simulata", da_correggere["id"], lambda: simulata.correggi(self.ctx, da_correggere["id"]))
         elif riassunto is not None:
             self._esegui_studio("riassunto", riassunto["id"], lambda: riassunti.PreparazioneRiassunto(self.ctx, riassunto["id"]).esegui())
+        elif mappa is not None:
+            self._esegui_studio("mappa", mappa["id"], lambda: mappe.PreparazioneMappa(self.ctx, mappa["id"]).esegui())
         elif prima_schema:
             self._esegui_studio("schema", schema["id"], lambda: schema_ripasso.PreparazioneSchema(self.ctx, schema["id"]).esegui())
         else:
@@ -191,7 +197,7 @@ class Lavoro:
             if frase is None:
                 log.exception("%s %s: errore inatteso", tipo, ident)
                 frase = "Lectio ha avuto un problema interno. Tocca Riprova."
-            {"schema": schema_ripasso, "simulata": simulata, "riassunto": riassunti}[tipo].in_errore(self.db_path, ident, frase)
+            {"schema": schema_ripasso, "simulata": simulata, "riassunto": riassunti, "mappa": mappe}[tipo].in_errore(self.db_path, ident, frase)
 
     # ------------------------------------------------------------------ materiale e schede
 

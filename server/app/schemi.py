@@ -241,6 +241,10 @@ class RiassuntoIn(Corpo):
     forma: Literal["punti", "discorsivo", "misto"]
 
 
+class MappaIn(Corpo):
+    tipo: Literal["date", "concetti"]
+
+
 class LampoIn(Corpo):
     esito: Literal["sapevo", "quasi", "non_sapevo"]
 
@@ -274,7 +278,7 @@ class SimulataPatch(Corpo):
 # --- modifiche dopo (contratto 28) ---------------------------------------------------------------------------
 
 class ModificaIn(Corpo):
-    tipo: Literal["lezione", "schema", "riassunto", "simulata"]
+    tipo: Literal["lezione", "schema", "riassunto", "simulata", "mappa"]
     id: StrictInt
     richiesta: str = Field(min_length=1, max_length=4000)
     parti: list[StrictInt] = Field(default_factory=list, max_length=200)
@@ -294,5 +298,10 @@ class TestoSchemaIn(Corpo):
 
 
 class TestoRiassuntoIn(Corpo):
+    titolo: str = Field(default="", max_length=120)
+    contenuto: dict
+
+
+class TestoMappaIn(Corpo):
     titolo: str = Field(default="", max_length=120)
     contenuto: dict

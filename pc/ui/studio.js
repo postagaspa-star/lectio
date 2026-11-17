@@ -195,13 +195,13 @@
   // --- Il pulsante Nuovo: "Cosa vuoi fare?" (§43) ---------------------------------------------------------------
 
   /**
-   * La finestra "Cosa vuoi fare?" della materia: cinque righe una sotto l'altra. Riassunto ha il passo 2 nella stessa
+   * La finestra "Cosa vuoi fare?" della materia: sei righe una sotto l'altra. Riassunto e Mappa hanno il passo 2 nella stessa
    * finestra ("Da quale schema?"), saltato se lo schema pronto è uno solo. La finestra si chiude da sola quando si
    * apre quello che si è scelto. `o.schemi` = gli schemi della materia se la pagina li ha già, altrimenti si chiedono.
    */
   A.apriNuovo = function (m, opzioni) {
     const o = opzioni || {};
-    const st = { passo: 'scelta', schemi: Array.isArray(o.schemi) ? o.schemi : null };
+    const st = { passo: 'scelta', per: 'riassunto', schemi: Array.isArray(o.schemi) ? o.schemi : null };
     const corpo = h('div', { class: 'corpo bianco' });
     const ctl = A.apriFinestra({ stretta: true, etichetta: 'Cosa vuoi fare?', classe: 'finestra-nuovo ' + A.classeMateria(m.colore), disegna: (f) => svuota(f, corpo) });
     ctl.tipo = 'cosa-fare';
@@ -214,13 +214,15 @@
     function apriSchemaConRiassunto(id) {
       ctl.chiudi(true);
       // §43.3: la lettura dello schema si apre con "Che riassunto vuoi?" già aperto (schemi.js lo legge e lo spegne).
-      S.riassuntoDaAprire = id;
+      // §45.1: con Mappa, allo stesso modo, con "Che mappa vuoi?".
+      if (st.per === 'mappa') S.mappaDaAprire = id; else S.riassuntoDaAprire = id;
       A.vai('#schema/' + id);
     }
 
     function scegli(k) {
       if (ctl.chiuso) return;
-      if (k === 'riassunto') {
+      if (k === 'riassunto' || k === 'mappa') {
+        st.per = k;
         const pronti = L.schemiPronti(st.schemi);
         if (pronti.length === 1) { apriSchemaConRiassunto(pronti[0].id); return; }
         st.passo = 'schema';

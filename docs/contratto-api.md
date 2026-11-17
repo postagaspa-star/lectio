@@ -1,4 +1,4 @@
-# Lectio — contratto delle API (v1.7)
+# Lectio — contratto delle API (v1.8)
 
 Fonte di verità tra server, app Android e programma PC. Si cambia QUI prima che nel codice.
 Le novità della v1.1 (risposte scritte alle domande, materiale solo nella materia) sono nella sezione 15 e
@@ -691,7 +691,7 @@ scrive cosa vuole), a mano (schemi e riassunti, gratis) e tornando alla versione
 
 ### 28.1 Modifica con l'AI
 
-`tipo`: `lezione` | `schema` | `riassunto` | `simulata`. `id` = l'id della lezione, dello schema, del riassunto o della
+`tipo`: `lezione` | `schema` | `riassunto` | `simulata` | `mappa` (29). `id` = l'id della lezione, dello schema, del riassunto o della
 verifica. `parti`: i numeri delle parti da cambiare (vedi `parti_modificabili` in 28.3); lista vuota = "Tutto": Lectio
 sceglie da solo quali parti toccano la richiesta. `richiesta`: 1-600 caratteri.
 
@@ -740,7 +740,8 @@ aspettano in coda con le lezioni, le altre con gli schemi.
 
 Prima di ogni cambiamento (modifica con l'AI, correzione a mano) il server mette da parte la versione di adesso.
 `POST /api/lezioni/{id}/scambia-versione`, `POST /api/schemi/{id}/scambia-versione`,
-`POST /api/riassunti/{id}/scambia-versione`, `POST /api/simulate/{id}/scambia-versione` → l'oggetto. Rimette la versione
+`POST /api/riassunti/{id}/scambia-versione`, `POST /api/simulate/{id}/scambia-versione`,
+`POST /api/mappe/{id}/scambia-versione` → l'oggetto. Rimette la versione
 messa da parte e mette da parte quella di adesso: toccando di nuovo si torna alla versione modificata. 409 se non c'è una
 versione da parte o se c'è una modifica in coda o in preparazione. Si tengono le ultime 3 versioni (le lezioni 1, per lo
 spazio dell'audio).
@@ -770,3 +771,104 @@ lo dicono e offrono Rifai).
   preparazione; 422 se la forma non torna (`campo: "contenuto"`).
 Prima di salvare il server mette da parte la versione di adesso (`perche: "a_mano"`), quindi "Torna a prima" funziona
 anche qui.
+
+## 29. Mappe (v1.8, richiesta di Andrea del 17/11)
+
+Da uno schema `pronto` il server prepara una **mappa**: `tipo` `date` (la linea del tempo, solo le date e a cosa si
+riferiscono) oppure `concetti` (i concetti fondamentali con le frecce). Una mappa per tipo e per schema. La fonte è solo
+lo schema (già controllato sui documenti); il disegno (albero, raggiera, linea del tempo) lo fanno le app. Il programma
+PC le mostra dalla 1.3.7; il telefono per ora no. Aspetto: `docs/aspetto.md` §45.
+
+### 29.1 Indirizzi
+
+- `POST /api/schemi/{id}/mappe` `{"tipo": "date" | "concetti"}` → 201 `Mappa` in `in_coda`. Se quella mappa c'è già
+  (non in errore) torna quella, senza costi. Se era in errore riparte. 409 se lo schema non è `pronto`; 409 con il
+  messaggio "In questo schema ci sono troppo poche date per una linea del tempo: prova la mappa dei concetti." se si
+  chiede `date` e `mappe.date_possibili` è `false`; 402 se il tetto non basta (come le lezioni).
+- `GET /api/schemi/{id}/mappe` → `[Mappa]` di quello schema. `GET /api/mappe/{id}` → `Mappa`.
+- `POST /api/mappe/{id}/riprova` (solo `errore`; 409 altrimenti) → `Mappa`. `DELETE /api/mappe/{id}` → `{"ok": true}`.
+- Modifica con l'AI: `POST /api/modifiche` con `"tipo": "mappa"` (28.1). La mappa è una parte sola (`parti_modificabili`
+  ha un elemento): si riscrive intera, dallo schema e dalla mappa di adesso, poi gli stessi controlli della prima volta.
+- `POST /api/mappe/{id}/scambia-versione` (28.2) e `PUT /api/mappe/{id}/testo` (29.5).
+
+### 29.2 La Mappa
+
+```json
+{"id": 7, "schema_id": 3, "materia_id": 1, "tipo": "concetti", "titolo": "Mappa: L'età giulio-claudia",
+ "stato": "pronta", "frase": null, "errore": null, "nota": null, "stima_eur": 0.01,
+ "creato_il": "…", "pronto_il": "…", "elementi": 16, "contenuto": {…},
+ "schema_cambiato": false, "firma": "…",
+ "modifica": null, "versione_da_parte": null, "parti_modificabili": [{"n": 1, "titolo": "…", "inizio": "…"}]}
+```
+
+`stato`: `in_coda` | `in_preparazione` | `pronta` | `errore`. Si chiede ogni 3 s finché è in lavorazione; `frase` dice
+cosa sta facendo ("Cerco le date", "Disegno la mappa"). `elementi` = quanti concetti o quante date. `nota`: un avviso da
+mostrare sopra la mappa, o `null` (oggi solo in modalità prova: "Mappa di prova: …"; quello che una Modifica non ha
+potuto fare sta nella `nota` della `Modifica`, 28.1). `schema_cambiato`: lo schema è stato
+cambiato dopo la mappa (le app offrono Rifalla). `firma`: la riga che il PC stampa in bianco in fondo al PDF (25).
+`modifica`, `versione_da_parte`, `parti_modificabili`: come 28.3. `contenuto` è `null` finché non è pronta.
+
+### 29.3 Il contenuto
+
+**Concetti** (al massimo 25 concetti, 5 collegamenti):
+
+```json
+{"domanda": "Come passa il potere da un imperatore all'altro?", "forma": "albero",
+ "concetti": [
+   {"id": 1, "testo": "Dinastia giulio-claudia", "genitore": null, "verbo": null, "spiegazione": "…", "sezione": 1},
+   {"id": 2, "testo": "Augusto", "genitore": 1, "verbo": "comincia con", "spiegazione": "…", "sezione": 2}],
+ "collegamenti": [{"da": 10, "a": 5, "verbo": "mettono sul trono", "spiegazione": "…"}]}
+```
+
+Un albero solo: il concetto con `genitore: null` è la radice; gli `id` vanno da 1 in ordine dall'alto (in larghezza).
+`verbo` è la frase sulla freccia dal genitore ("Augusto *comincia con*…" si legge dal genitore al figlio).
+`collegamenti` sono frecce trasversali tra rami diversi (mai una che c'è già nell'albero). `forma`: `albero` |
+`raggiera` (quella consigliata dal modello; l'utente può cambiarla). `sezione`: il numero della sezione dello schema da
+cui viene (per "Apri nello schema"), o `null`. `domanda`: la domanda focale, o `null`.
+
+**Date** (da 3 a 40 date, in ordine di tempo):
+
+```json
+{"eventi": [
+  {"id": 1, "data": "27 a.C.", "anno": 27, "ac": true, "fine": null, "fine_ac": null, "x": -26, "x_fine": null,
+   "circa": false, "mese": null, "cosa": "Ottaviano diventa Augusto", "spiegazione": "…", "sezione": 2},
+  {"id": 5, "data": "41-54", "anno": 41, "ac": false, "fine": 54, "fine_ac": false, "x": 41, "x_fine": 54, "…": "…"}]}
+```
+
+`data` è come la scrive lo schema ("XV secolo", "circa 1450", "12 ottobre 1492"). `anno`/`ac` e `fine`/`fine_ac` sono gli
+anni controllati (un periodo ha `fine`); un secolo diventa il periodo dei suoi cento anni. `x` e `x_fine` sono gli anni
+**astronomici** (1 a.C. = 0, 27 a.C. = -26, l'anno zero non esiste), più la frazione del mese se c'è: sono loro che
+dicono dove va la data sulla linea. `circa`: la data è incerta (pallino tratteggiato). Ogni data è stata cercata nello
+schema: quelle che lì non ci sono si tolgono.
+
+Lo schema completo (`GET /api/schemi/{id}`) ha in più `"mappe": {"stima_eur": 0.01, "date_possibili": true,
+"fatte": [{"id": 7, "tipo": "concetti", "stato": "pronta"}]}` (`null` se lo schema non è pronto). `date_possibili`:
+nello schema ci sono almeno 3 date (se no la linea del tempo non si propone).
+
+### 29.4 Come lavora il server
+
+Una chiamata al modello di scrittura con lo schema numerato (al massimo 90.000 caratteri) chiede i pezzi; poi, senza AI,
+si controllano le date nel testo dello schema (numeri, secoli in romani o in lettere, a.C.): una data che non c'è si fa
+correggere una volta, poi si toglie. Poi il solito controllo dei fatti (17.1) su ogni legame letto come frase ("Peste
+nera *provoca* Calo della popolazione") e su ogni spiegazione, con una riscrittura possibile; quello che resta fuori
+dallo schema si toglie. Se restano meno di 4 concetti o meno di 3 date la mappa va in `errore`. Costa circa 1 centesimo
+(`stima_eur`), aspetta in coda con schemi e riassunti. Novità (sezione 11): `mappa_pronta` ("La mappa dei concetti di
+Storia è pronta", "La linea del tempo di Storia è pronta") e `mappa_errore` ("La mappa di Storia si è fermata: tocca
+Riprova"), con `materia_id`.
+
+### 29.5 Correzione a mano (gratis)
+
+`PUT /api/mappe/{id}/testo` `{"titolo": "…", "contenuto": {…}}` → `Mappa`. Il `contenuto` ha la forma ricevuta: contano
+solo i testi, chi sta sotto a chi e l'ordine restano quelli del server. Stessi elementi nello stesso ordine (se no 422).
+- Concetti: `concetti[].testo` (al massimo 80; vuoto = resta quello di prima), `concetti[].verbo` (40),
+  `concetti[].spiegazione` (600), `collegamenti[].verbo` (40) e `.spiegazione` (600), `domanda` (160).
+- Date: `eventi[].data` (40), `eventi[].cosa` (120; vuoto = la data si toglie), `eventi[].spiegazione` (600). Una data
+  riscritta con un anno diverso ("41-54", "XV secolo", "12 ottobre 1492") si sposta sulla linea: il server ricalcola
+  `anno`, `fine`, `mese`, `x`, `x_fine` e riordina.
+- Titolo al massimo 120. 409 se non è `pronta` o c'è una modifica in coda o in preparazione; 422 se la forma non torna
+  (`campo: "contenuto"`). Prima di salvare il server mette da parte la versione di adesso (28.2).
+
+### 29.6 Il PDF
+
+Il PDF della mappa lo fa il programma PC (WebView2, stampa in PDF), non il server: A4 orizzontale, sempre in chiaro,
+con la `firma` in fondo. Non costa niente.

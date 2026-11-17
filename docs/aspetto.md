@@ -1427,3 +1427,147 @@ riassunto." e pulsante testo **Rifallo** (come Rifai di 41.3, con la sua conferm
 Nella modalità esempio lo schema di esempio ha `versione_da_parte` e la modifica funziona finta (2 s in preparazione,
 poi pronta con la parte 2 cambiata). Visita guidata: un passo nuovo sulla pillola **Modifica** dello schema: "Qui
 chiedi di cambiare qualcosa senza rifare tutto. Se non ti piace, Torna a prima è nel menu."
+
+## 45. Mappe: le date e i concetti (v1.3.7 PC, richiesta di Andrea del 17/11)
+
+Da uno schema pronto Lectio disegna una **mappa**: la **linea del tempo** con solo le date e a cosa si riferiscono,
+oppure la **mappa dei concetti** fondamentali con cerchi e frecce. Campi e indirizzi: `docs/contratto-api.md` §29.
+Solo PC per ora. Scelte di Andrea: si parte da uno schema pronto; i concetti si vedono **ad albero o a raggiera** (si
+passa dall'uno all'altro, "per certi argomenti uno schema ad albero non funziona"); un clic su un pezzo dà la
+spiegazione, poi Mettiti alla prova, Scarica PDF, Modifica e Correggi a mano.
+
+### 45.0 Perché è fatta così (dalla ricerca del 17/11)
+
+1. **Una mappa vera ha frasi sulle frecce.** Nella mappa concettuale di Novak ogni freccia porta un verbo e due
+   concetti con il loro verbo si leggono come una frase ("Tiberio *lascia Roma a* Seiano"); sono queste frasi che fanno
+   capire, non i cerchi da soli. Si parte da una **domanda focale** e da 10-20 concetti (al massimo 25), dal generale
+   al particolare; pochi collegamenti trasversali (al massimo 5), tratteggiati.
+2. **Fatta dall'AI si guarda, poi si ricostruisce.** Le ricerche sul recupero dalla memoria (Karpicke 2011) dicono che
+   leggere una mappa pronta aiuta poco: aiuta provare a ricordarla. Per questo c'è **Mettiti alla prova** (45.6): si
+   nascondono circa un terzo dei pezzi e si scoprono con un clic, come le schede del Ripasso lampo.
+3. **Solo quello che c'è nello schema.** Le date si controllano una per una (numeri presenti nello schema, secoli in
+   romani o in lettere, a.C. come anno astronomico: l'anno zero non esiste); i concetti passano dal controllo dei fatti
+   come i riassunti. Quello che non torna si toglie.
+4. **Il tempo è uno spazio.** Sulla linea del tempo le distanze contano ("In scala"); quando le date sono lontanissime
+   (dalla preistoria a oggi) la scala schiaccerebbe tutto e si consiglia "In fila" (tutte alla stessa distanza, come le
+   linee del tempo dei libri di scuola). I periodi ("37-41") sono **fasce**, le date incerte ("circa") un pallino
+   tratteggiato.
+5. **Mappe per chi fa fatica a leggere.** Le linee guida per i DSA consigliano mappe con poche parole per nodo, colori
+   coerenti e la possibilità di stamparle e completarle a mano: PDF chiaro, una pagina A4 orizzontale, e la versione
+   "da completare" con i buchi.
+6. **Si legge prima di tutto.** All'apertura la mappa si vede intera solo se il testo resta leggibile; se no si parte
+   leggibili dalla radice (zoom 0,74) e si trascina. Lo zoom sta nella tela, a sinistra; a destra si apre la spiegazione.
+7. **Disegno nostro, niente librerie.** dagre, elkjs, cytoscape, d3-force e React Flow fanno grafi generici e pesano;
+   un albero e una raggiera di 25 concetti e una linea del tempo di 40 date si dispongono con poche righe
+   (`ui/disegno-mappe.js`, provate in `prove/js/mappe.test.js`), con la CSP di sempre.
+
+Fonti: Novak e Cañas, *The Theory Underlying Concept Maps* (cmap.ihmc.us/docs/theory-of-concept-maps.php); Cult of
+Pedagogy, *Concept maps*; The Learning Scientists, blog 6/4/2017; Karpicke e Blunt 2011 (purdue.edu/newsroom, Science);
+Schroeder e altri 2017, meta-analisi sulle mappe concettuali (clearinghouse.edu.tum.de); Educational Psychology Review
+2023 (doi 10.1007/s10648-023-09801-w); Università dell'Insubria, *Vademecum Mappe concettuali*; Unimore, strumenti
+compensativi; Agenda Digitale, *Mappe concettuali e AI*; studenti.it e sapere.virgilio.it su come si fa una mappa a
+scuola; Brehmer e altri, *Timelines Revisited* (timelinesrevisited.github.io); Knight Lab TimelineJS; Tiki-Toki;
+Eclectic Light, *Marking time: making good timelines*; geopop.it sull'anno zero; skuola.net sulle età storiche;
+NotebookLM (support.google.com/notebooklm/answer/16212283) e la recensione critica di LSA Michigan; Stanford SCALE,
+rassegna sui modelli linguistici che fanno mappe concettuali; React Flow, dagre, elkjs, d3-force, labella.js (layout).
+
+### 45.1 Dove si entra
+
+- **Schema** (33.2): nella testata, dopo Riassunto, pillola **Mappa** (icona `mappa`). In fondo alla lettura, dopo la
+  scheda Riassunto, una scheda **Mappa** con "Fai una mappa" o "Apri la mappa" (l'ultima fatta).
+- **Cosa vuoi fare?** (43.3): riga **Mappa** dopo Riassunto, "Da uno schema già pronto: le date o i concetti". Ha il
+  passo 2 "Da quale schema?" come Riassunto; scelto lo schema, la lettura si apre con "Che mappa vuoi?".
+- Pillole della testata dello schema: padding 12, distanza 8, così con Riassunto e Mappa stanno su una riga a 1280.
+
+### 45.2 "Che mappa vuoi?"
+
+Foglio come "Che riassunto vuoi?" (41.2). Due righe alte 88: miniatura 56 (una linea con tre pallini / un piccolo
+albero), nome 17/700, frase 14/500 tenue, a destra il prezzo ("0,01 €", "Prova") o lo stato ("Pronta", "La sto
+disegnando", "Si è fermata").
+- **Le date** — "Una linea del tempo: quando e che cosa".
+- **I concetti** — "Cerchi e frecce con le idee principali".
+Se nello schema ci sono meno di 3 date (`mappe.date_possibili: false`) la riga Le date è spenta con "Poche date in
+questo schema". Un clic: se la mappa c'è già si apre, se no si chiede (402 = avviso del tetto sotto le righe) e si apre
+la pagina, che aspetta.
+
+### 45.3 La pagina
+
+Larga fino a 1280 (`.pagina.mp-pagina-larga`). Dall'alto:
+1. Testata come il riassunto: indietro allo schema, pillola materia, Prova (in prova), **Modifica**, **Scarica PDF**
+   (pillola con icona `scarica`; mentre lavora "Preparo il PDF…"), puntini (Rifai, Correggi a mano, Torna a prima /
+   Rimetti la modifica, Elimina).
+2. Titolo 30/800; sotto 14 tenue "16 concetti · Come passa il potere…" (con la domanda) oppure "9 date · dal 27 a.C.
+   al 68". Se lo schema è cambiato: "Lo schema è cambiato dopo questa mappa." con **Rifalla**. Se c'è una `nota`, il
+   riquadro "Non ho trovato tutto" come il riassunto.
+3. Una riga sola: segmenti **Le date | I concetti** (280, alti 36, scelto in accento tenue), segmenti della forma
+   (**Albero | A raggiera** oppure **In scala | In fila**, 240, la scelta si ricorda per ogni mappa), a destra
+   **Mettiti alla prova** (o la barra della prova).
+4. La **tela**: Superficie, raggio 22, alta `100vh - 236` (minimo 460), fondo a puntini (riga, 22 px). Rotella = zoom
+   intorno al puntatore (da 0,25 a 3), trascinare = spostare (5 px prima di partire), tastiera + − 0 e frecce. In
+   basso a sinistra la pillola dello zoom (− + Adatta) su Superficie con ombra.
+Il tipo che non c'è ancora mostra "Falla · 0,01 €" al posto della tela; in lavoro "Cerco le date" / "Disegno la mappa"
+con i segnaposto; in errore il messaggio con Riprova ed Elimina.
+
+### 45.4 La mappa dei concetti
+
+- **Concetti**: rettangoli arrotondati (una riga = pillola, più righe raggio 18), testo centrato, al massimo 3 righe.
+  Radice 17/800, fondo materia tenue, bordo materia pieno 2,5, testo materia; primo giro 15/700, bordo materia 2;
+  gli altri 14/600, bordo `--bordo` 1,5. Misure col carattere vero (canvas) dopo che Figtree è caricato.
+- **Frecce** grigie 1,6 con la punta; il **verbo** a metà in una pillolina (12/700 tenue su Superficie). Collegamenti
+  trasversali tratteggiati nel colore della materia, curvi, col verbo in colore materia.
+- **Albero**: dall'alto in basso, 104 px tra i livelli (spazio per il verbo), 28 tra fratelli, il genitore in mezzo ai
+  figli. **Raggiera**: radice al centro, ogni ramo una fetta grande quanto le sue foglie, il primo ramo in alto; i giri
+  lontani quanto serve nella direzione di ogni concetto. Se il modello non dice la forma: raggiera da 6 figli della
+  radice in su.
+- **Clic** su un concetto: lui, i vicini e le loro frecce restano accesi, il resto va al 30%; a destra entra il
+  **pannello** (320, raggio 18, ombra della finestra, 260 ms da destra): "CONCETTO" (o "ARGOMENTO"), titolo 20/800, la
+  spiegazione 16, poi i legami come **frasi** ("Tiberio *lascia Roma a* **Seiano**", l'altro concetto in grassetto,
+  un clic porta a lui) e **Apri nello schema · parte 2**, che apre lo schema a quella parte. X o Esc chiudono; un clic
+  sul vuoto pure.
+
+### 45.5 La linea del tempo
+
+Asse 2,5 nel colore del testo; tacche tonde (anni, decenni, secoli; "20 a.C.") 12/700 molto tenue. Ogni data: pallino
+6 (bordo materia 3, tratteggiato se "circa") sull'asse, un gambo e una **scheda** (Superficie, bordo 1,5, raggio 14) con
+la data 13/800 in colore materia e il fatto 14/600 (fino a 3 righe), sopra e sotto l'asse a corsie, mai sovrapposte.
+I periodi sono fasce sotto l'asse (materia al 38%). Clic: come i concetti, nel pannello la data in alto ("41-54"), il
+fatto, la spiegazione, "Dal 41 al 54" e Apri nello schema.
+
+### 45.6 Mettiti alla prova
+
+Pillola con icona `domanda`. Si nasconde circa un terzo: concetti (mai la radice) e qualche verbo, oppure date e fatti
+(sempre gli stessi con lo stesso seme; Rimescola cambia). Un pezzo coperto è tratteggiato nel colore della materia con
+"?"; un clic lo scopre (300 ms), il secondo apre la spiegazione. Al posto della pillola una barra materia tenue:
+"Scoperti 3 su 8", **Rimescola**, **Basta così**. Tutto scoperto: avviso "Hai scoperto tutto. Rimescola per un altro
+giro." Lo zoom resta dov'era. (La classe è `coperto`: `nascosto` nell'app vuol dire "non si vede".)
+
+### 45.7 Scarica PDF
+
+Il PDF lo fa il computer (niente server, niente costo): la pagina prepara un foglio `.mappa-stampa` invisibile a
+schermo, il programma chiede dove salvarlo e stampa (`/locale/stampa-pdf`, WebView2 PrintToPdf). A4 orizzontale,
+margini 12 mm, **sempre in chiaro** anche col tema scuro (colori della materia da `COLORI_CHIARI`), titolo 24/800,
+"Storia · Mappa dei concetti · 16 concetti", la domanda, la mappa intera nella pagina, la firma bianca in fondo. La
+linea del tempo lunga va su più pagine, tagliata dove non c'è una scheda (stessa scala su tutte); se rimpicciolendo
+fino a 0,6 ci sta, una pagina sola. In prova il nome finisce con "- da completare" e i buchi restano.
+
+### 45.8 Modifica e Correggi a mano
+
+Modifica come §44, senza "Dove?" (la mappa è una parte sola). Spunti: concetti "Meno concetti", "Più concetti", "Più
+semplice"; date "Meno date", "Più date", "Frasi più corte". Correggi a mano: una scheda per concetto (testo, "Freccia
+da …" col verbo, spiegazione) o per data (data, fatto, spiegazione), più la domanda e i verbi delle frecce in più. Chi
+sta sotto a chi e l'ordine non si toccano; una data riscritta con un anno diverso si sposta sulla linea (lo fa il
+server).
+
+### 45.9 Icone, esempio, visita
+
+| Nome | Percorso |
+|---|---|
+| `mappa` | tre cerchi legati (vedi `ui/base.js`) |
+| `meno` | `M5 12h14` |
+| `adatta` | `M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5` |
+
+Esempio: lo schema 3 ha la mappa dei concetti (16, ad albero, un collegamento trasversale) e la linea del tempo (9 date
+dal 27 a.C. al 68, due periodi, una nota). Visita guidata, giro 3 delle novità: "Mappa" sulla pillola dello schema
+("Le date su una linea del tempo, oppure i concetti con cerchi e frecce.") e "Mettiti alla prova" sulla mappa ("Un
+clic su un cerchio e leggi la spiegazione. Da qui nascondi dei pezzi e provi a ricordarli."). Chi aveva già visto le
+novità vede solo i giri che non ha visto.

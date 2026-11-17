@@ -1,9 +1,10 @@
-"""Modifiche dopo (contratto 28): una lezione, uno schema, un riassunto o una verifica simulata già fatti si cambiano
-senza rifarli da capo.
+"""Modifiche dopo (contratto 28): una lezione, uno schema, un riassunto, una verifica simulata o una mappa già fatti
+si cambiano senza rifarli da capo.
 
 Come lavora una modifica con l'AI:
 1. le parti da cambiare: quelle scelte da Andrea, oppure (con "Tutto") le sceglie il modello di scrittura con una
-   richiesta breve (riassunti e verifiche no: lì il modello risponde direttamente solo con le parti che cambia);
+   richiesta breve (riassunti e verifiche no: lì il modello risponde direttamente solo con le parti che cambia; una
+   mappa è un pezzo solo e si riscrive intera);
 2. ogni parte si riscrive con il modello di scrittura partendo dalla STESSA richiesta della prima volta (stessi
    documenti, stesse regole), poi la versione di adesso come risposta del modello, poi la richiesta di Andrea;
 3. il solito controllo sui documenti (controllo.rivedi);
@@ -21,7 +22,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from . import ai, clock, controllo, db, lampo, memoria, misure, prompt, prompt_studio, riassunti, schema_ripasso, simulata
+from . import ai, clock, controllo, db, lampo, mappe, memoria, misure, prompt, prompt_studio, riassunti, schema_ripasso, simulata
 from .audio import PAUSA_CAPITOLI
 from .cartella import Cartella
 from .lezione import (CAPITOLO_FINALE, CAPITOLO_FINALE_INTERROGAZIONE, CAPITOLO_FINALE_RIPASSO, Annullata,
@@ -30,14 +31,16 @@ from .spesa import arrotonda_su
 
 log = logging.getLogger("uvicorn.error")
 
-TIPI = ("lezione", "schema", "riassunto", "simulata")
-TABELLE = {"lezione": "lezioni", "schema": "schemi", "riassunto": "riassunti", "simulata": "simulate"}
-NOMI = {"lezione": "la lezione", "schema": "lo schema", "riassunto": "il riassunto", "simulata": "la verifica di prova"}
+TIPI = ("lezione", "schema", "riassunto", "simulata", "mappa")
+TABELLE = {"lezione": "lezioni", "schema": "schemi", "riassunto": "riassunti", "simulata": "simulate", "mappa": "mappe"}
+NOMI = {"lezione": "la lezione", "schema": "lo schema", "riassunto": "il riassunto", "simulata": "la verifica di prova",
+        "mappa": "la mappa"}
+FEMMINILI = ("lezione", "simulata", "mappa")
 ATTIVE = ("in_coda", "in_preparazione")
 RICHIESTA_MASSIMA = 600
-VERSIONI_MASSIME = {"lezione": 1, "schema": 3, "riassunto": 3, "simulata": 3}
+VERSIONI_MASSIME = {"lezione": 1, "schema": 3, "riassunto": 3, "simulata": 3, "mappa": 3}
 MODIFICABILI = {"lezione": ("pronta",), "schema": ("pronto",), "riassunto": ("pronto",),
-                "simulata": ("pronta", "in_corso", "corretta")}
+                "simulata": ("pronta", "in_corso", "corretta"), "mappa": ("pronta",)}
 FINALI = (CAPITOLO_FINALE, CAPITOLO_FINALE_RIPASSO, CAPITOLO_FINALE_INTERROGAZIONE)
 FILE_LEZIONE = ("capitoli.json", "copione.json", "lezione.mp3")
 FRASE_VECCHIA = "Questa cosa è stata fatta con una versione vecchia di Lectio e non si può modificare: fanne una nuova."
@@ -67,7 +70,7 @@ def trova_oggetto(conn: sqlite3.Connection, tipo: str, oggetto_id: int) -> sqlit
 def titolo_di(tipo: str, r) -> str:
     if tipo == "lezione":
         return r["argomento"]
-    return (r["titolo"] or "").strip() or (r["argomento"] if "argomento" in r.keys() else "") or "Riassunto"
+    return (r["titolo"] or "").strip() or (r["argomento"] if "argomento" in r.keys() else "") or ("Mappa" if tipo == "mappa" else "Riassunto")
 
 
 def attiva(conn: sqlite3.Connection, tipo: str, oggetto_id: int) -> sqlite3.Row | None:
@@ -85,7 +88,7 @@ def perche_no(conn: sqlite3.Connection, tipo: str, r) -> str | None:
     if r["stato"] not in MODIFICABILI[tipo]:
         if tipo == "simulata" and r["stato"] == "in_correzione":
             return "La sto correggendo: aspetta il voto, poi la puoi modificare."
-        return f"{NOMI[tipo].capitalize()} non è ancora pronta da modificare." if tipo in ("lezione", "simulata") else \
+        return f"{NOMI[tipo].capitalize()} non è ancora pronta da modificare." if tipo in FEMMINILI else \
             f"{NOMI[tipo].capitalize()} non è ancora pronto da modificare."
     if attiva(conn, tipo, r["id"]):
         return "C'è già una modifica in corso: aspetta che finisca."
@@ -124,6 +127,11 @@ def parti_di(tipo: str, r) -> list[dict]:
     if tipo == "simulata":
         return [{"n": d["n"], "titolo": _inizio(d["testo"], 80), "inizio": _inizio(d["testo"])}
                 for d in json.loads(r["domande"] or "[]")]
+    if tipo == "mappa":
+        # Una mappa è un pezzo solo: si riscrive intera (i legami tengono insieme tutto).
+        contenuto = json.loads(r["contenuto"] or "{}") or {}
+        pezzi = [c["testo"] for c in contenuto.get("concetti") or []] or [f"{e['data']} {e['cosa']}" for e in contenuto.get("eventi") or []]
+        return [{"n": 1, "titolo": (r["titolo"] or "").strip() or "La mappa", "inizio": _inizio(", ".join(pezzi))}] if pezzi else []
     testo = {t["capitolo"]: " ".join(t.get("paragrafi") or []) for t in json.loads(r["testo"] or "[]")}
     return [{"n": c["n"], "titolo": c["titolo"], "inizio": _inizio(testo.get(c["n"], ""))}
             for c in json.loads(r["capitoli"] or "[]")]
@@ -155,6 +163,8 @@ def _dati_di(conn: sqlite3.Connection, tipo: str, r) -> dict:
         return {"titolo": r["titolo"], "contenuto": r["contenuto"], "cambiato_il": r["cambiato_il"], "carte": carte}
     if tipo == "riassunto":
         return {k: r[k] for k in ("titolo", "contenuto", "parole", "schema_del")}
+    if tipo == "mappa":
+        return {k: r[k] for k in ("titolo", "contenuto", "elementi", "schema_del")}
     if tipo == "simulata":
         return {k: r[k] for k in ("titolo", "domande", "risposte", "esito", "stato", "iniziata_il", "consegnata_il", "nota")}
     domande = [dict(d) for d in conn.execute(
@@ -178,6 +188,9 @@ def _rimetti(conn: sqlite3.Connection, tipo: str, r, dati: dict) -> None:
     elif tipo == "riassunto":
         conn.execute("UPDATE riassunti SET titolo = ?, contenuto = ?, parole = ?, schema_del = ? WHERE id = ?",
                      (dati["titolo"], dati["contenuto"], dati["parole"], dati["schema_del"], oggetto_id))
+    elif tipo == "mappa":
+        conn.execute("UPDATE mappe SET titolo = ?, contenuto = ?, elementi = ?, schema_del = ? WHERE id = ?",
+                     (dati["titolo"], dati["contenuto"], dati["elementi"], dati["schema_del"], oggetto_id))
     elif tipo == "simulata":
         conn.execute("UPDATE simulate SET titolo = ?, domande = ?, risposte = ?, esito = ?, stato = ?, iniziata_il = ?,"
                      " consegnata_il = ?, nota = ? WHERE id = ?",
@@ -308,6 +321,13 @@ def stima(s, conn: sqlite3.Connection, tipo: str, r, parti: list[int]) -> dict:
         if not parti and len(tutte) > 1:
             costo += prezzi.costo_testo(medium, 3_000, 200)
         costo *= 1.3  # una riscrittura dopo il controllo, a volte
+    elif tipo == "mappa":
+        schema = conn.execute("SELECT contenuto FROM schemi WHERE id = ?", (r["schema_id"],)).fetchone()
+        lunghezza = len(mappe.testo_numerato(json.loads(schema["contenuto"] or "{}"))) if schema else 20_000
+        costo += prezzi.costo_testo(medium, int((lunghezza + 4_000 + len(r["contenuto"] or "")) / t), 3_500)
+        costo += prezzi.costo_testo(small, int((lunghezza + 3_000) / t), 400)
+        costo *= 1.5
+        minuti += 1
     elif tipo == "riassunto":
         contenuto = json.loads(r["contenuto"] or "{}")
         tutto = sum(len(x["inizio"]) for x in tutte) or 1
@@ -671,6 +691,50 @@ class PreparazioneModifica:
                          (json.dumps({"parti": nuove_parti}, ensure_ascii=False), riassunti.conta_parole(nuove_parti), r["id"]))
             self._chiudi(conn, [int(n) for n in fatto["parti"]], titolo_di("riassunto", r))
 
+    # --- mappa
+
+    def _mappa(self) -> None:
+        with db.aperta(self.ctx.settings.db_path) as conn:
+            r = dict(self._oggetto(conn))
+            schema = conn.execute("SELECT * FROM schemi WHERE id = ?", (r["schema_id"],)).fetchone()
+        if schema is None or not schema["contenuto"]:
+            raise ErroreLezione("Lo schema di questa mappa non c'è più: non posso modificarla.")
+        contenuto = json.loads(r["contenuto"] or "{}") or {}
+        tipo = r["tipo"]
+        if not mappe.elementi(tipo, contenuto):
+            raise ErroreLezione(FRASE_VECCHIA)
+        fatto = self.c.leggi("mappa.json")
+        if fatto is None:
+            self.avanza("scrittura", 0, 1, "Ridisegno la mappa")
+            contenuto_schema = json.loads(schema["contenuto"])
+            testo = mappe.testo_numerato(contenuto_schema)
+            materia = {"nome": self.riga["materia_nome"], "prof": self.riga["materia_prof"]}
+            titolo_schema = schema["titolo"] or schema["argomento"]
+            attuale = mappe.per_modello(tipo, r["titolo"], contenuto)
+            messaggi = prompt_studio.messaggi_mappa(materia, titolo_schema, testo, tipo) + [
+                {"role": "assistant", "content": json.dumps(attuale, ensure_ascii=False)},
+                {"role": "user", "content": prompt_studio.richiesta_modifica(self.richiesta, "la mappa")}]
+            grezzo, nuovo = mappe.scrivi(self.ctx, tipo=tipo, messaggi=messaggi, testo=testo, sezioni=mappe.sezioni_di(contenuto_schema),
+                                         materia_id=self.riga["materia_id"], prima=self.controlla, riferimento=self.riferimento,
+                                         cosa="Modifica · mappa", compito="mappa_modifica",
+                                         dati={"tipo": tipo, "attuale": attuale, "modifica": self.richiesta})
+            if not mappe.abbastanza(tipo, nuovo):
+                raise ErroreLezione("La mappa nuova è venuta vuota: tocca Riprova o scrivi la richiesta in un altro modo.")
+            titolo = mappe.titolo_pulito(grezzo.get("titolo")) or r["titolo"]
+            fatto = {"titolo": titolo, "contenuto": nuovo, "nota": grezzo.get("nota")}
+            self.c.scrivi("mappa.json", fatto)
+        self._segna_nota(fatto.get("nota"))
+        self.avanza("chiusura", 1, 1, "Metto a posto la mappa")
+        with db.aperta(self.ctx.settings.db_path) as conn, db.transazione(conn):
+            self.controlla()
+            attuale = self._oggetto(conn)
+            if attuale["contenuto"] != r["contenuto"]:
+                raise ErroreLezione(FRASE_CAMBIATA)
+            metti_da_parte(conn, self.ctx.settings.dati_dir, "mappa", attuale, "prima", "modifica", self.richiesta)
+            conn.execute("UPDATE mappe SET titolo = ?, contenuto = ?, elementi = ? WHERE id = ?",
+                         (fatto["titolo"], json.dumps(fatto["contenuto"], ensure_ascii=False), mappe.elementi(tipo, fatto["contenuto"]), r["id"]))
+            self._chiudi(conn, [1], fatto["titolo"])
+
     # --- verifica simulata
 
     def _simulata(self) -> None:
@@ -1018,7 +1082,8 @@ def in_errore(db_path: str, modifica_id: int, frase: str) -> None:
 
 
 def _di(tipo: str) -> str:
-    return {"lezione": "la lezione", "schema": "lo schema", "riassunto": " riassunto", "simulata": "la verifica di prova"}[tipo]
+    return {"lezione": "la lezione", "schema": "lo schema", "riassunto": " riassunto", "simulata": "la verifica di prova",
+            "mappa": "la mappa"}[tipo]
 
 
 def cancella_file(dati_dir: str, modifica_id: int) -> None:

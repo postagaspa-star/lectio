@@ -1034,7 +1034,9 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 .sch-indice .etichetta { padding: 0 10px 6px; }
 .sch-voce-foglio { display: flex; align-items: center; gap: 12px; min-height: 56px; width: 100%; padding: 8px 10px; border: none; border-radius: 12px; background: none; color: var(--testo); font-size: 15px; font-weight: 600; text-align: left; overflow-wrap: anywhere; }
 .sch-voce-foglio.corrente { background: var(--acc-tenue); color: var(--acc-tenue-testo); font-weight: 800; }
-.sch-testa { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sch-testa { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* §45: con Riassunto e Mappa le pillole della testata stanno ancora su una riga. */
+.sch-testa .pillola-azione { padding: 0 12px; }
 .sch-testa .spazio { flex-grow: 1; }
 .sch-titoli { display: flex; flex-direction: column; gap: 4px; }
 .sch-titoli h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.6px; line-height: 1.15; overflow-wrap: anywhere; }
@@ -1441,3 +1443,159 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 
 /* Le foto delle pagine (?prova=1): niente movimento, così si vede lo stato finale. */
 html.foto *, html.foto *::before, html.foto *::after { animation: none !important; transition: none !important; }
+
+/* ------------------------------------------------------------------ Mappe (§45) */
+
+.pagina.mp-pagina-larga { max-width: 1280px; }
+.mp-pagina { display: flex; flex-direction: column; gap: 14px; }
+.mp-pagina.cambia .mp-scheda, .mp-pagina.cambia .rs-manca { animation: appare .2s ease-out; }
+.mp-tipi { width: 280px; }
+.segmenti.binario.mp-tipi button { height: 36px; font-size: 14px; }
+.mp-strumenti { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mp-strumenti .spazio { flex: 1 1 auto; }
+.mp-forma { width: 240px; }
+.mp-forma button { height: 36px; font-size: 14px; }
+.mp-zoom { position: absolute; left: 14px; bottom: 14px; display: flex; align-items: center; gap: 6px; padding: 5px; border-radius: 999px; background: var(--sup); box-shadow: var(--ombra-rilievo); }
+:root[data-tema="scuro"] .mp-zoom { box-shadow: 0 0 0 1px var(--riga); }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="chiaro"]) .mp-zoom { box-shadow: 0 0 0 1px var(--riga); } }
+.mp-zoom .tondo, .mp-zoom .pillola-azione { height: 38px; }
+.mp-zoom .tondo { width: 38px; }
+.mp-zoom .tondo svg.icona { width: 18px; height: 18px; }
+.mp-prova-barra { display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 6px 0 16px; border-radius: 999px; background: var(--m-tenue); color: var(--m-testo); animation: entraGiu .22s ease-out; }
+.mp-prova-barra .mp-conta { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.mp-prova-barra .pulsante.testo { color: var(--m-testo); font-weight: 700; }
+
+/* La tela: un foglio a puntini, con la mappa che si sposta e si ingrandisce. */
+.mp-scheda {
+  position: relative; height: calc(100vh - 236px); min-height: 460px; border-radius: 22px; overflow: hidden;
+  background-color: var(--sup); background-image: radial-gradient(var(--riga) 1.2px, transparent 1.2px); background-size: 22px 22px;
+  box-shadow: var(--ombra);
+}
+.mp-scheda .mp-tela { width: 100%; height: 100%; }
+.mp-tela { display: block; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.mp-tela.trascina { cursor: grabbing; }
+.mp-tela:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.mp-tela text { font-family: Figtree, system-ui, 'Segoe UI', sans-serif; }
+
+/* I concetti: la radice piena del colore della materia, il primo giro col bordo colorato, gli altri col bordo grigio. */
+.mp-nodo { cursor: pointer; transition: opacity .2s ease; }
+.mp-nodo rect { fill: var(--sup); stroke: var(--bordo); stroke-width: 1.5; transition: stroke .15s ease, stroke-width .15s ease; }
+.mp-nodo text { fill: var(--testo); font-size: 14px; font-weight: 600; }
+.mp-nodo.l0 rect { fill: var(--m-tenue); stroke: var(--m-pieno); stroke-width: 2.5; }
+.mp-nodo.l0 text { fill: var(--m-testo); font-size: 17px; font-weight: 800; }
+.mp-nodo.l1 rect { stroke: var(--m-pieno); stroke-width: 2; }
+.mp-nodo.l1 text { font-size: 15px; font-weight: 700; }
+.mp-nodo:hover rect { stroke: var(--m-pieno); stroke-width: 2.5; }
+.mp-nodo:focus { outline: none; }
+.mp-nodo:focus-visible rect, .mp-data:focus-visible > rect { stroke: var(--acc); stroke-width: 3; }
+.mp-nodo.scelto rect, .mp-data.scelto > rect { stroke: var(--acc); stroke-width: 3; }
+.mp-nodo.coperto rect { fill: var(--fondo-blocco); stroke: var(--m-pieno); stroke-dasharray: 6 5; }
+.mp-nodo .punto { fill: var(--m-testo); font-size: 20px; font-weight: 800; }
+.mp-nodo.mp-entra, .mp-data.mp-entra { animation: mpEntra .3s cubic-bezier(.2, .7, .3, 1) both; animation-delay: var(--ritardo, 0ms); }
+.appena { animation: appare .3s ease-out; }
+@keyframes mpEntra { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+
+.mp-legame { stroke: var(--moltotenue); stroke-width: 1.6; fill: none; transition: opacity .2s ease, stroke .15s ease; }
+.mp-legame.acceso { stroke: var(--m-pieno); stroke-width: 2.2; }
+.mp-punta { fill: var(--moltotenue); }
+.mp-trasversale { stroke: var(--m-pieno); stroke-width: 1.6; stroke-dasharray: 6 5; fill: none; transition: opacity .2s ease; }
+.mp-punta-x { fill: var(--m-pieno); }
+.mp-verbo { transition: opacity .2s ease; }
+.mp-verbo rect { fill: var(--sup); stroke: var(--riga); stroke-width: 1; }
+.mp-verbo text { fill: var(--tenue); font-size: 12px; font-weight: 700; }
+.mp-verbo.trasversale text { fill: var(--m-testo); }
+.mp-verbo.acceso text { fill: var(--testo); }
+.mp-verbo.coperto { cursor: pointer; }
+.mp-verbo.coperto rect { fill: var(--fondo-blocco); stroke: var(--m-pieno); stroke-dasharray: 4 3; }
+.mp-verbo.coperto text { fill: var(--m-testo); font-weight: 800; }
+/* Un concetto scelto: lui e i vicini restano accesi, il resto si fa da parte. */
+.mp-tela.con-scelta .mp-nodo:not(.acceso), .mp-tela.con-scelta .mp-legame:not(.acceso), .mp-tela.con-scelta .mp-trasversale:not(.acceso),
+.mp-tela.con-scelta .mp-verbo:not(.acceso) { opacity: .3; }
+.mp-tela.con-scelta .mp-data:not(.acceso), .mp-tela.con-scelta .mp-gambo:not(.acceso), .mp-tela.con-scelta .mp-punto:not(.acceso),
+.mp-tela.con-scelta .mp-fascia:not(.acceso) { opacity: .35; }
+
+/* La linea del tempo: l'asse, le tacche degli anni, i periodi come fasce, le date in schede. */
+.mp-asse { stroke: var(--testo); stroke-width: 2.5; stroke-linecap: round; }
+.mp-tacca line { stroke: var(--moltotenue); stroke-width: 1.5; }
+.mp-tacca text { fill: var(--moltotenue); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mp-fascia { fill: var(--m-pieno); opacity: .38; transition: opacity .2s ease; }
+.mp-fascia.acceso { opacity: .7; }
+.mp-gambo { stroke: var(--m-pieno); stroke-width: 1.5; transition: opacity .2s ease; }
+.mp-punto { fill: var(--sup); stroke: var(--m-pieno); stroke-width: 3; transition: opacity .2s ease; }
+.mp-punto.circa { stroke-dasharray: 3 2.5; }
+.mp-data { cursor: pointer; transition: opacity .2s ease; }
+.mp-data:focus { outline: none; }
+.mp-data > rect { fill: var(--sup); stroke: var(--bordo); stroke-width: 1.5; transition: stroke .15s ease; }
+.mp-data:hover > rect { stroke: var(--m-pieno); }
+.mp-data text.data { fill: var(--m-testo); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mp-data text.cosa { fill: var(--testo); font-size: 14px; font-weight: 600; }
+.mp-buco rect { fill: var(--m-tenue); stroke: var(--m-pieno); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.mp-buco text { fill: var(--m-testo); font-size: 14px; font-weight: 800; }
+
+/* Il pannello della spiegazione: entra da destra sopra la tela. */
+.mp-pannello {
+  position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px; max-width: calc(100% - 24px); padding: 22px 20px 20px;
+  border-radius: 18px; background: var(--sup); box-shadow: var(--ombra-finestra); overflow: auto;
+  transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none;
+  transition: transform .26s cubic-bezier(.2, .7, .3, 1), opacity .2s ease;
+}
+.mp-pannello.aperto { transform: none; opacity: 1; pointer-events: auto; }
+.mp-p-chiudi { position: absolute; top: 12px; right: 12px; }
+.mp-p-corpo { display: flex; flex-direction: column; gap: 12px; }
+.mp-p-corpo .etichetta { padding-right: 48px; }
+.mp-p-data { color: var(--m-testo); }
+.mp-p-titolo { font-size: 20px; font-weight: 800; line-height: 1.25; padding-right: 40px; overflow-wrap: anywhere; }
+.mp-p-testo { font-size: 16px; line-height: 1.55; margin: 0; }
+.mp-p-durata { font-size: 14px; font-weight: 600; color: var(--tenue); margin: 0; }
+.mp-p-vicini { display: flex; flex-direction: column; gap: 6px; }
+.mp-p-vicino { display: block; width: 100%; padding: 9px 12px; border: none; border-radius: 12px; background: var(--sup2); color: var(--testo); text-align: left; font-size: 15px; line-height: 1.4; }
+.mp-p-vicino:hover { filter: brightness(.97); }
+.mp-p-vicino .q { color: var(--tenue); font-weight: 500; }
+.mp-p-vicino .v { color: var(--tenue); font-weight: 600; font-style: italic; }
+.mp-p-vicino.trasversale .v { color: var(--m-testo); }
+.mp-p-vicino .t { font-weight: 800; }
+.mp-p-schema { align-self: flex-start; }
+
+/* "Che mappa vuoi?": la miniatura di ogni tipo. */
+.mp-mini { width: 56px; height: 56px; border-radius: 12px; background: var(--fondo-blocco); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+:root[data-tema="scuro"] .mp-mini { background: var(--sup); }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="chiaro"]) .mp-mini { background: var(--sup); } }
+.mm-linea { stroke: var(--moltotenue); stroke-width: 2; stroke-linecap: round; }
+.mm-punto { fill: var(--sup); stroke: var(--m-pieno); stroke-width: 2; }
+.mm-punto.pieno { fill: var(--m-pieno); }
+.mm-scheda { fill: var(--sup); stroke: var(--moltotenue); stroke-width: 1.5; }
+.mm-scheda.pieno { fill: var(--m-tenue); stroke: var(--m-pieno); }
+
+/* Correggi a mano della mappa: un pezzo per riga. */
+.mp-correggi { gap: 18px; }
+.mp-c-voce { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--riga); }
+.mp-c-voce:last-child { border-bottom: none; padding-bottom: 0; }
+.mp-c-riga { display: flex; align-items: center; gap: 10px; }
+.mp-c-riga > textarea { flex: 1 1 auto; min-width: 0; }
+.mp-c-riga.piccola { padding-left: 34px; }
+.mp-c-da { font-size: 13px; font-weight: 600; color: var(--tenue); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.mod-correggi-campo.mp-c-data { flex: 0 0 132px; }
+.mod-correggi-campo.mp-c-verbo { font-size: 14px; }
+
+/* §45.7 Il PDF: a schermo non si vede; in stampa resta solo lui, sempre in chiaro. */
+.mappa-stampa {
+  display: none;
+  --sup: #FFFFFF; --sup2: #ECEAE4; --testo: #1A1A1F; --tenue: #5E5E68; --moltotenue: #74747D; --riga: #ECEBE6;
+  --bordo: #CFCDC5; --fondo-blocco: #F5F4F0; --acc: #3D4ED8;
+  color: #1A1A1F; background: #FFFFFF; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.ms-pagina { position: relative; width: 1032px; height: 700px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; break-after: page; page-break-after: always; }
+.ms-pagina:last-child { break-after: auto; page-break-after: auto; }
+.ms-testa h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; margin: 0; }
+.ms-testa p { font-size: 13px; font-weight: 600; color: #5E5E68; margin: 2px 0 0; }
+.ms-testa p.ms-domanda { color: #1A1A1F; font-weight: 700; }
+.ms-testa.piccola p { margin: 0; }
+.ms-firma { position: absolute; left: 0; right: 0; bottom: 0; font-size: 8px; color: #FFFFFF; text-align: center; }
+.mappa-stampa .mp-tela { cursor: default; flex: 0 0 auto; }
+@media print {
+  /* Si stampa solo la mappa (§45.7): A4 orizzontale, come le impostazioni del programma. */
+  @page { size: A4 landscape; margin: 12mm; }
+  html.stampa-mappa, html.stampa-mappa body { height: auto !important; overflow: visible !important; background: #FFFFFF !important; color-scheme: light !important; }
+  html.stampa-mappa body > *:not(.mappa-stampa) { display: none !important; }
+  html.stampa-mappa .mappa-stampa { display: block !important; }
+}

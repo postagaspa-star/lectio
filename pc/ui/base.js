@@ -161,6 +161,10 @@
     // §44.7: Modifica e Torna a prima.
     matita: 'M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z',
     torna: 'M1 4v6h6 M3.51 15a9 9 0 1 0 2.13-9.36L1 10',
+    // §45: la mappa (tre cerchi legati), lo zoom e Adatta.
+    mappa: 'M12 2.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z M5 16.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z M19 16.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z M10.8 7.2 6.2 16.8 M13.2 7.2l4.6 9.6',
+    meno: 'M5 12h14',
+    adatta: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
   };
   const PIENE = {
     play: 'M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z',
@@ -327,7 +331,7 @@
     const menu = S.dom.menu;
     if (!menu) return;
     const v = S.rotta.vista;
-    const dentroMateria = ['materia', 'scheda', 'cartella', 'schema', 'simulata', 'riassunto'].includes(v);
+    const dentroMateria = ['materia', 'scheda', 'cartella', 'schema', 'simulata', 'riassunto', 'mappa'].includes(v);
     // Da uno schema o da una verifica la materia accesa è la loro (l'id nella rotta è il loro, non della materia).
     const materiaAccesa = v === 'materia' || v === 'scheda' || v === 'cartella' ? S.rotta.id : dentroMateria ? S.materiaAperta : null;
     const attiva = (nome) => (nome === v || (nome === 'materie' && dentroMateria) || (nome === 'lezioni' && (v === 'lettore' || v === 'lezione')) || (nome === 'oggi' && v === 'racconta'));
@@ -385,7 +389,7 @@
     if (!box) return;
     const pillole = [];
     if (S.esempio && !S.prova) pillole.push(h('span', { class: 'pillola stato esempio', 'data-stato': 'esempio' }, 'Esempio'));
-    if (S.senzaRete && (!S.esempio || S.prova)) pillole.push(h('span', { class: 'pillola stato rete', 'data-stato': 'rete' }, icona('rete'), ['schema', 'simulata', 'riassunto'].includes(S.rotta.vista) ? 'Senza rete' : 'Senza rete: vedi solo le lezioni scaricate'));
+    if (S.senzaRete && (!S.esempio || S.prova)) pillole.push(h('span', { class: 'pillola stato rete', 'data-stato': 'rete' }, icona('rete'), ['schema', 'simulata', 'riassunto', 'mappa'].includes(S.rotta.vista) ? 'Senza rete' : 'Senza rete: vedi solo le lezioni scaricate'));
     if (A.modalitaProva() && !S.esempio) {
       pillole.push(h('button', { type: 'button', class: 'pillola stato prova', 'data-stato': 'prova', onclick: spiegaProva }, 'Prova'));
     }

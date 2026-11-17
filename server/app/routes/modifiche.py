@@ -6,19 +6,19 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 
-from .. import clock, forme, modifiche, riassunti
+from .. import clock, forme, mappe, modifiche, riassunti
 from ..auth import richiede_token
 from ..db import get_conn, transazione
 from ..errori import conflitto, non_trovato, non_valido, tetto
 from ..lezione import ErroreLezione
-from ..schemi import ModificaIn, TestoRiassuntoIn, TestoSchemaIn
+from ..schemi import ModificaIn, TestoMappaIn, TestoRiassuntoIn, TestoSchemaIn
 from ..servizi import Servizi, servizi
-from .studio import _schema_completo, riassunto_api, simulata_api
+from .studio import _schema_completo, mappa_api, riassunto_api, simulata_api
 
 router = APIRouter(dependencies=[Depends(richiede_token)])
 
 NON_TROVATO = {"lezione": "Lezione non trovata.", "schema": "Schema non trovato.", "riassunto": "Riassunto non trovato.",
-               "simulata": "Verifica non trovata."}
+               "simulata": "Verifica non trovata.", "mappa": "Mappa non trovata."}
 
 
 def _oggetto(conn: sqlite3.Connection, tipo: str, oggetto_id: int) -> sqlite3.Row:
@@ -36,6 +36,8 @@ def _per_api(conn: sqlite3.Connection, s: Servizi, tipo: str, oggetto_id: int) -
         return _schema_completo(conn, s, oggetto_id)
     if tipo == "riassunto":
         return riassunto_api(conn, r)
+    if tipo == "mappa":
+        return mappa_api(conn, r)
     return simulata_api(conn, r)
 
 
@@ -177,6 +179,11 @@ def scambia_riassunto(oggetto_id: int, conn: sqlite3.Connection = Depends(get_co
     return _scambia(conn, s, "riassunto", oggetto_id)
 
 
+@router.post("/mappe/{oggetto_id}/scambia-versione")
+def scambia_mappa(oggetto_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
+    return _scambia(conn, s, "mappa", oggetto_id)
+
+
 @router.post("/simulate/{oggetto_id}/scambia-versione")
 def scambia_simulata(oggetto_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     return _scambia(conn, s, "simulata", oggetto_id)
@@ -186,8 +193,8 @@ def scambia_simulata(oggetto_id: int, conn: sqlite3.Connection = Depends(get_con
 
 def _prima_di_correggere(conn: sqlite3.Connection, tipo: str, oggetto_id: int) -> sqlite3.Row:
     r = _oggetto(conn, tipo, oggetto_id)
-    if r["stato"] != "pronto":
-        raise conflitto("Si può correggere solo quando è pronto.")
+    if r["stato"] not in ("pronto", "pronta"):
+        raise conflitto("Si può correggere solo quando è pronta." if tipo == "mappa" else "Si può correggere solo quando è pronto.")
     if modifiche.attiva(conn, tipo, oggetto_id):
         raise conflitto("C'è una modifica in corso: aspetta che finisca.")
     return r
@@ -233,3 +240,24 @@ def correggi_riassunto(oggetto_id: int, corpo: TestoRiassuntoIn, conn: sqlite3.C
 
 def trova_riassunto_riga(conn: sqlite3.Connection, oggetto_id: int) -> sqlite3.Row:
     return _oggetto(conn, "riassunto", oggetto_id)
+
+
+@router.put("/mappe/{oggetto_id}/testo")
+def correggi_mappa(oggetto_id: int, corpo: TestoMappaIn, conn: sqlite3.Connection = Depends(get_conn),
+                   s: Servizi = Depends(servizi)):
+    with transazione(conn):
+        r = _prima_di_correggere(conn, "mappa", oggetto_id)
+        attuale = json.loads(r["contenuto"] or "{}")
+        try:
+            nuovo = mappe.pulisci(r["tipo"], attuale, corpo.contenuto)
+        except mappe.FormaSbagliata:
+            raise non_valido("Il testo corretto non ha la forma giusta: riapri e riprova.", campo="contenuto") from None
+        if not mappe.abbastanza(r["tipo"], nuovo):
+            raise non_valido("Così la linea del tempo resta quasi vuota: lascia almeno due date.", campo="contenuto")
+        titolo = " ".join(corpo.titolo.split()) or r["titolo"]
+        if nuovo != attuale or titolo != r["titolo"]:
+            modifiche.metti_da_parte(conn, s.settings.dati_dir, "mappa", r, "prima", "a_mano", None)
+            conn.execute("UPDATE mappe SET titolo = ?, contenuto = ?, elementi = ? WHERE id = ?",
+                         (titolo, json.dumps(nuovo, ensure_ascii=False), mappe.elementi(r["tipo"], nuovo), oggetto_id))
+            modifiche.chiudi_ferme(conn, s.settings.dati_dir, "mappa", oggetto_id)
+    return mappa_api(conn, _oggetto(conn, "mappa", oggetto_id))

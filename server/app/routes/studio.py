@@ -7,11 +7,12 @@ import sqlite3
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, Response
 
-from .. import chiarimenti, clock, lampo, modifiche, pdf, riassunti, schema_ripasso, simulata
+from ..firma import FIRMA
+from .. import chiarimenti, clock, lampo, mappe, modifiche, pdf, riassunti, schema_ripasso, simulata
 from ..auth import richiede_token
 from ..db import get_conn, transazione
 from ..errori import conflitto, non_trovato, non_valido, tetto
-from ..schemi import ChiarimentoIn, LampoIn, RiassuntoIn, SchemaIn, SchemaStimaIn, SimulataIn, SimulataPatch, SimulataStimaIn
+from ..schemi import ChiarimentoIn, LampoIn, MappaIn, RiassuntoIn, SchemaIn, SchemaStimaIn, SimulataIn, SimulataPatch, SimulataStimaIn
 from ..servizi import Servizi, servizi
 from ..spesa import arrotonda_su
 from .lezioni import _materiale
@@ -77,6 +78,13 @@ def _stima_riassunto(s: Servizi, r: sqlite3.Row) -> float:
     return arrotonda_su(s.cassa.stima_riassunto(len(testo), s.settings.modello_piano, s.settings.modello_scrittura))
 
 
+def _stima_mappa(s: Servizi, r: sqlite3.Row) -> float:
+    if s.settings.modalita_prova:
+        return 0.0
+    testo = mappe.testo_numerato(json.loads(r["contenuto"] or "{}"))
+    return arrotonda_su(s.cassa.stima_mappa(len(testo), s.settings.modello_piano, s.settings.modello_scrittura))
+
+
 def _schema_completo(conn: sqlite3.Connection, s: Servizi, schema_id: int) -> dict:
     r = trova_schema(conn, schema_id)
     uscita = schema_ripasso.per_api(r, completo=True)
@@ -86,6 +94,11 @@ def _schema_completo(conn: sqlite3.Connection, s: Servizi, schema_id: int) -> di
         uscita["riassunti"] = {"stima_eur": _stima_riassunto(s, r), "fatti": [
             {"id": x["id"], "forma": x["forma"], "stato": x["stato"]}
             for x in conn.execute("SELECT id, forma, stato FROM riassunti WHERE schema_id = ? ORDER BY id", (schema_id,))]}
+    uscita["mappe"] = None
+    if r["stato"] == "pronto":
+        uscita["mappe"] = {"stima_eur": _stima_mappa(s, r), "date_possibili": mappe.date_possibili(json.loads(r["contenuto"] or "{}")),
+                           "fatte": [{"id": x["id"], "tipo": x["tipo"], "stato": x["stato"]}
+                                     for x in conn.execute("SELECT id, tipo, stato FROM mappe WHERE schema_id = ? ORDER BY id", (schema_id,))]}
     return uscita
 
 
@@ -152,6 +165,8 @@ def cancella_schema(schema_id: int, conn: sqlite3.Connection = Depends(get_conn)
     trova_schema(conn, schema_id)
     for x in conn.execute("SELECT id FROM riassunti WHERE schema_id = ?", (schema_id,)).fetchall():
         modifiche.togli_di(conn, s.settings.dati_dir, "riassunto", x["id"])
+    for x in conn.execute("SELECT id FROM mappe WHERE schema_id = ?", (schema_id,)).fetchall():
+        modifiche.togli_di(conn, s.settings.dati_dir, "mappa", x["id"])
     conn.execute("DELETE FROM schemi WHERE id = ?", (schema_id,))
     modifiche.togli_di(conn, s.settings.dati_dir, "schema", schema_id)
     schema_ripasso.cancella_file(s.settings.dati_dir, schema_id)
@@ -279,6 +294,81 @@ def pdf_riassunto(riassunto_id: int, conn: sqlite3.Connection = Depends(get_conn
         raise conflitto("Questo riassunto non è ancora pronto.")
     materia = trova_materia(conn, r["materia_id"])
     return _pdf(pdf.riassunto_pdf(dict(r), json.loads(r["contenuto"]), dict(materia), riassunti.NOME_FORMA[r["forma"]]), r["titolo"] or "Riassunto")
+
+
+# --- mappe (contratto 29) ------------------------------------------------------------------
+
+
+def mappa_api(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
+    """La Mappa con i campi delle modifiche (contratto 28.3) e "schema_cambiato" (29.4)."""
+    uscita = mappe.per_api(r)
+    uscita.update(modifiche.campi_in_piu(conn, "mappa", r))
+    schema = conn.execute("SELECT cambiato_il FROM schemi WHERE id = ?", (r["schema_id"],)).fetchone()
+    uscita["schema_cambiato"] = bool(r["stato"] == "pronta" and schema is not None and schema["cambiato_il"]
+                                     and schema["cambiato_il"] != r["schema_del"])
+    # Il PC stampa da solo il PDF della mappa (29.7): la firma in bianco in fondo, come nei PDF del server.
+    uscita["firma"] = FIRMA
+    return uscita
+
+
+def trova_mappa(conn: sqlite3.Connection, mappa_id: int) -> sqlite3.Row:
+    r = conn.execute("SELECT * FROM mappe WHERE id = ?", (mappa_id,)).fetchone()
+    if r is None:
+        raise non_trovato("Mappa non trovata.")
+    return r
+
+
+@router.post("/schemi/{schema_id}/mappe", status_code=201)
+def crea_mappa(schema_id: int, corpo: MappaIn, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
+    r = trova_schema(conn, schema_id)
+    if r["stato"] != "pronto":
+        raise conflitto("Questo schema non è ancora pronto.")
+    esiste = conn.execute("SELECT * FROM mappe WHERE schema_id = ? AND tipo = ?", (schema_id, corpo.tipo)).fetchone()
+    if esiste is not None and esiste["stato"] != "errore":
+        return mappa_api(conn, esiste)
+    if corpo.tipo == "date" and not mappe.date_possibili(json.loads(r["contenuto"] or "{}")):
+        raise conflitto(mappe.FRASE_POCHE_DATE)
+    st = _decidi(conn, s, _stima_mappa(s, r), "Questa mappa")
+    if not st["consentita"]:
+        raise tetto(st["motivo"])
+    ora = clock.adesso()
+    if esiste is not None:
+        conn.execute("UPDATE mappe SET stato = 'in_coda', errore = NULL, stima_eur = ?, in_coda_dal = ? WHERE id = ?", (st["costo_eur"], ora, esiste["id"]))
+        ident = esiste["id"]
+    else:
+        ident = conn.execute("INSERT INTO mappe (schema_id, materia_id, tipo, stato, stima_eur, creato_il, in_coda_dal) VALUES (?, ?, ?, 'in_coda', ?, ?, ?)",
+                             (schema_id, r["materia_id"], corpo.tipo, st["costo_eur"], ora, ora)).lastrowid
+    s.lavoro.sveglia("studio")
+    return mappa_api(conn, trova_mappa(conn, ident))
+
+
+@router.get("/schemi/{schema_id}/mappe")
+def elenco_mappe(schema_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    trova_schema(conn, schema_id)
+    return [mappa_api(conn, r) for r in conn.execute("SELECT * FROM mappe WHERE schema_id = ? ORDER BY id", (schema_id,))]
+
+
+@router.get("/mappe/{mappa_id}")
+def una_mappa(mappa_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    return mappa_api(conn, trova_mappa(conn, mappa_id))
+
+
+@router.post("/mappe/{mappa_id}/riprova")
+def riprova_mappa(mappa_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
+    cur = conn.execute("UPDATE mappe SET stato = 'in_coda', errore = NULL, in_coda_dal = ? WHERE id = ? AND stato = 'errore'", (clock.adesso(), mappa_id))
+    if cur.rowcount == 0:
+        trova_mappa(conn, mappa_id)
+        raise conflitto("Si può riprovare solo una mappa che si è fermata per un errore.")
+    s.lavoro.sveglia("studio")
+    return mappa_api(conn, trova_mappa(conn, mappa_id))
+
+
+@router.delete("/mappe/{mappa_id}")
+def cancella_mappa(mappa_id: int, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
+    trova_mappa(conn, mappa_id)
+    conn.execute("DELETE FROM mappe WHERE id = ?", (mappa_id,))
+    modifiche.togli_di(conn, s.settings.dati_dir, "mappa", mappa_id)
+    return {"ok": True}
 
 
 # --- non ho capito -------------------------------------------------------------------------

@@ -11,7 +11,7 @@
   const A = window.LectioApp;
   const { L, S, T, h, svuota, icona } = A;
 
-  const CARTELLA = { lezione: 'lezioni', schema: 'schemi', riassunto: 'riassunti', simulata: 'simulate' };
+  const CARTELLA = { lezione: 'lezioni', schema: 'schemi', riassunto: 'riassunti', simulata: 'simulate', mappa: 'mappe' };
   const percorso = (tipo, id) => '/server/api/' + CARTELLA[tipo] + '/' + id;
   A.percorsoOggetto = percorso;
   const chiaveNota = (tipo, id) => 'lectio.modifica.nota.' + tipo + '.' + id;
@@ -22,7 +22,7 @@
   /** L'oggetto si può cambiare adesso (contratto §28.1: fuori da questi stati il server risponde 409). */
   function pronto(tipo, x) {
     if (!x) return false;
-    if (tipo === 'lezione') return x.stato === 'pronta';
+    if (tipo === 'lezione' || tipo === 'mappa') return x.stato === 'pronta';
     if (tipo === 'simulata') return ['pronta', 'in_corso', 'corretta'].includes(x.stato);
     return x.stato === 'pronto';
   }
@@ -44,7 +44,7 @@
     const tipo = o.tipo;
     const x = o.oggetto || {};
     const m = o.materia || { colore: 'ambra' };
-    const cfg = L.MODIFICA_PER_TIPO[tipo];
+    const cfg = L.MODIFICA_PER_TIPO[tipo === 'mappa' && x.tipo === 'date' ? 'mappa_date' : tipo];
     const parti = L.partiModificabili(x, tipo);
     const corretta = tipo === 'simulata' && x.stato === 'corretta';
     const seq = L.creaSequenza();
@@ -77,7 +77,7 @@
         h('button', { type: 'button', class: 'tondo', 'aria-label': 'Chiudi', 'data-azione': 'chiudi-modifica', onclick: () => ctl.chiudi() }, icona('chiudi'))),
       h('div', { class: 'mod-gruppo' }, campo, conta),
       h('div', { class: 'mod-spunti', 'data-spunti': tipo }, cfg.spunti.map((f) => h('button', { type: 'button', class: 'mod-spunto', 'data-spunto': f, onclick: () => spunto(f) }, f))),
-      h('div', { class: 'mod-gruppo' }, h('span', { class: 'mod-etichetta' }, 'Dove?'), sceltaDove, sottoDove),
+      parti.length > 1 ? h('div', { class: 'mod-gruppo' }, h('span', { class: 'mod-etichetta' }, 'Dove?'), sceltaDove, sottoDove) : null,
       riepilogo);
     svuota(piede, pulsante, sotto);
 
@@ -487,7 +487,7 @@
   /**
    * La pagina in correzione (schemi e riassunti), disegnata in `box`: barra ferma con Annulla e Salva, ogni testo in un
    * campo. Esc e l'uscita dalla pagina chiedono "Lasciare le correzioni?" se c'è qualcosa di cambiato.
-   * o = { tipo: 'schema'|'riassunto', oggetto, materia, indietro, parte, foto(blocco) → elemento, salvato(nuovo), annullato() }.
+   * o = { tipo: 'schema'|'riassunto'|'mappa', oggetto, materia, indietro, parte, foto(blocco) → elemento, salvato(nuovo), annullato() }.
    */
   A.correggiAMano = function (box, o) {
     const tipo = o.tipo;
@@ -584,8 +584,35 @@
       }));
     }
 
+    /** §45.8 La mappa: una scheda per concetto (testo, verbo della freccia che arriva, spiegazione) o per data. */
+    function testoMappa() {
+      const conc = Array.isArray(corretto.concetti);
+      const per = new Map((corretto.concetti || []).map((c) => [c.id, c]));
+      const voci = conc ? corretto.concetti : (corretto.eventi || []);
+      return h('article', { class: 'rs-scheda mod-correggi-rs mp-correggi' },
+        conc && typeof corretto.domanda === 'string' ? h('div', { class: 'mp-c-voce' }, h('span', { class: 'mod-etichetta' }, 'Domanda'),
+          campo(corretto.domanda, (v) => { corretto.domanda = v; }, { etichetta: 'Domanda della mappa', unaRiga: true, max: 160 })) : null,
+        voci.map((v, i) => h('section', { class: 'mp-c-voce', 'data-parte': String(i + 1) },
+          conc
+            ? [h('div', { class: 'mp-c-riga' }, h('span', { class: 'mod-n', 'aria-hidden': 'true' }, String(i + 1)),
+              campo(v.testo, (t) => { v.testo = t; }, { classe: 'mod-titolo-parte', etichetta: 'Concetto ' + (i + 1), unaRiga: true, max: 80 })),
+            v.genitore != null && typeof v.verbo === 'string' ? h('div', { class: 'mp-c-riga piccola' },
+              h('span', { class: 'mp-c-da' }, 'Freccia da ' + ((per.get(v.genitore) || {}).testo || '')),
+              campo(v.verbo, (t) => { v.verbo = t; }, { classe: 'mp-c-verbo', etichetta: 'Verbo della freccia', unaRiga: true, max: 40 })) : null]
+            : [h('div', { class: 'mp-c-riga' },
+              campo(v.data, (t) => { v.data = t; }, { classe: 'mod-titolo-parte mp-c-data', etichetta: 'Data ' + (i + 1), unaRiga: true, max: 40 }),
+              campo(v.cosa, (t) => { v.cosa = t; }, { classe: 'mod-titolo-parte', etichetta: 'Che cosa', unaRiga: true, max: 120 }))],
+          typeof v.spiegazione === 'string' ? campo(v.spiegazione, (t) => { v.spiegazione = t; }, { etichetta: 'Spiegazione', max: 600 }) : null)),
+        (corretto.collegamenti || []).length ? h('section', { class: 'mp-c-voce' }, h('span', { class: 'mod-etichetta' }, 'Frecce in più'),
+          corretto.collegamenti.map((k, i) => (typeof k.verbo === 'string' ? h('div', { class: 'mp-c-riga piccola' },
+            h('span', { class: 'mp-c-da' }, ((per.get(k.da) || {}).testo || '') + ' → ' + ((per.get(k.a) || {}).testo || '')),
+            campo(k.verbo, (t) => { k.verbo = t; }, { classe: 'mp-c-verbo', etichetta: 'Verbo della freccia ' + (i + 1), unaRiga: true, max: 40 })) : null))) : null);
+    }
+
     const testa = h('div', { class: 'sch-testa' }, A.frecciaIndietro(o.indietro), A.pillolaMateria(m));
-    if (tipo === 'riassunto') {
+    if (tipo === 'mappa') {
+      svuota(box, h('div', { class: 'rs-pagina mod-correggendo ' + A.classeMateria(m.colore), 'data-correggi': tipo }, testa, barra, errore, titoloCampo, testoMappa()));
+    } else if (tipo === 'riassunto') {
       svuota(box, h('div', { class: 'rs-pagina mod-correggendo ' + A.classeMateria(m.colore), 'data-correggi': tipo }, testa, barra, errore, titoloCampo, testoRiassunto()));
     } else {
       svuota(box, h('div', { class: 'schema-contenitore mod-correggendo ' + A.classeMateria(m.colore), 'data-correggi': tipo },
@@ -634,7 +661,8 @@
       invio = true;
       salva.disabled = true;
       salva.textContent = 'Salvo…';
-      const contenuto = tipo === 'riassunto' ? L.contenutoRiassuntoCorretto(originale, corretto) : L.contenutoSchemaCorretto(originale, corretto);
+      const contenuto = tipo === 'riassunto' ? L.contenutoRiassuntoCorretto(originale, corretto)
+        : tipo === 'mappa' ? L.contenutoMappaCorretto(originale, corretto) : L.contenutoSchemaCorretto(originale, corretto);
       const r = await A.api.put(percorso(tipo, x.id) + '/testo', { titolo, contenuto });
       invio = false;
       salva.disabled = false;

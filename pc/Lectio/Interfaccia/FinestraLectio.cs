@@ -19,7 +19,7 @@ namespace Lectio.Interfaccia;
 public sealed class FinestraLectio : Form
 {
     private static readonly Regex FrammentoLezione = new(@"^lezione/\d{1,12}$", RegexOptions.CultureInvariant);
-    private static readonly Regex FrammentoStudio = new(@"^(materia/\d{1,12}(/schemi|/simulate)?|schema/\d{1,12}|simulata/\d{1,12}|riassunto/\d{1,12})$", RegexOptions.CultureInvariant);
+    private static readonly Regex FrammentoStudio = new(@"^(materia/\d{1,12}(/schemi|/simulate)?|schema/\d{1,12}|simulata/\d{1,12}|riassunto/\d{1,12}|mappa/\d{1,12})$", RegexOptions.CultureInvariant);
 
     /// <summary>Le pagine che si possono aprire da fuori (clic su un avviso di Windows).</summary>
     private static readonly HashSet<string> Sezioni = new(StringComparer.Ordinal) { "oggi", "materie", "lezioni", "gemini", "impostazioni" };
@@ -72,8 +72,10 @@ public sealed class FinestraLectio : Form
         ponte.TemaCambiato += SuTemaScelto;
         ponte.Copia = CopiaNegliAppunti;
         ponte.ChiediDoveSalvare = ChiediDoveSalvare;
+        ponte.StampaPdf = StampaPdfAsync;
         FormClosed += (_, _) =>
         {
+            ponte.StampaPdf = null;
             SystemEvents.UserPreferenceChanged -= SuCambioTema;
             ponte.TemaCambiato -= SuTemaScelto;
             ponte.Copia = null;
@@ -137,6 +139,48 @@ public sealed class FinestraLectio : Form
         catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException)
         {
             fatto.TrySetResult(null);
+        }
+        return fatto.Task;
+    }
+
+    /// <summary>
+    /// §45.7 Il PDF della mappa: la pagina ha già messo il foglio da stampare (CSS di stampa), qui si stampa la pagina
+    /// così com'è, A4 orizzontale, con gli sfondi e senza intestazioni. Sul filo della finestra, come vuole WebView2.
+    /// </summary>
+    private Task<bool> StampaPdfAsync(string dove)
+    {
+        var fatto = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        async void Fai()
+        {
+            try
+            {
+                var core = IsDisposed ? null : vista.CoreWebView2;
+                if (core == null) { fatto.TrySetResult(false); return; }
+                var impostazioni = core.Environment.CreatePrintSettings();
+                impostazioni.Orientation = CoreWebView2PrintOrientation.Landscape;
+                impostazioni.PageWidth = 8.27;
+                impostazioni.PageHeight = 11.69;
+                impostazioni.MarginTop = impostazioni.MarginBottom = impostazioni.MarginLeft = impostazioni.MarginRight = 0.47;
+                impostazioni.ShouldPrintBackgrounds = true;
+                impostazioni.ShouldPrintHeaderAndFooter = false;
+                impostazioni.ShouldPrintSelectionOnly = false;
+                impostazioni.ScaleFactor = 1.0;
+                fatto.TrySetResult(await core.PrintToPdfAsync(dove, impostazioni));
+            }
+            catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException or ArgumentException or System.Runtime.InteropServices.COMException)
+            {
+                Log.Errore("PDF della mappa non stampato", e);
+                fatto.TrySetResult(false);
+            }
+        }
+        try
+        {
+            if (IsDisposed || !IsHandleCreated) fatto.TrySetResult(false);
+            else BeginInvoke(Fai);
+        }
+        catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException)
+        {
+            fatto.TrySetResult(false);
         }
         return fatto.Task;
     }

@@ -346,6 +346,39 @@ class TestoFinto:
                 parti.append({"titolo": sezione["titolo"], "paragrafi": [" ".join(righe[:2])], "punti": righe[2:]})
         return {"titolo": "Riassunto", "parti": parti}
 
+    def _mappa(self, d: dict) -> dict:
+        """Mappe di prova: i titoli delle sezioni sotto il titolo dello schema; le date trovate nelle righe dello schema."""
+        sezioni = d.get("sezioni") or []
+        if d.get("tipo") == "date":
+            eventi = []
+            for s in sezioni:
+                for riga in s["testo"].splitlines()[1:]:
+                    m = re.search(r"\b(\d{1,4})\s*a\.\s?C\.|\b(1\d{3}|20\d{2})\b", riga)
+                    if not m or len(eventi) >= 15:
+                        continue
+                    ac = m.group(1) is not None
+                    anno = int(m.group(1) or m.group(2))
+                    eventi.append({"data": f"{anno} a.C." if ac else str(anno), "anno": anno, "ac": ac, "fine": None, "circa": False,
+                                   "mese": None, "cosa": " ".join(riga.split()[:10]), "spiegazione": riga.strip()[:200], "sezione": s["n"]})
+            return {"titolo": f"Le date: {d.get('titolo') or ''}".strip(), "eventi": eventi}
+        concetti = [{"id": 1, "testo": " ".join(str(d.get("titolo") or "Argomento").split()[:5]), "genitore": None, "verbo": None,
+                     "spiegazione": "", "sezione": None}]
+        for s in sezioni[:8]:
+            righe = [r for r in s["testo"].splitlines()[1:] if r.strip()]
+            nuovo = len(concetti) + 1
+            concetti.append({"id": nuovo, "testo": " ".join(s["titolo"].split()[:5]), "genitore": 1, "verbo": "comprende",
+                             "spiegazione": righe[0][:200] if righe else "", "sezione": s["n"]})
+            if len(righe) > 1 and len(concetti) < 14:
+                concetti.append({"id": len(concetti) + 1, "testo": " ".join(righe[1].split()[:4]), "genitore": nuovo, "verbo": "parla di",
+                                 "spiegazione": righe[1][:200], "sezione": s["n"]})
+        return {"titolo": f"Mappa: {d.get('titolo') or ''}".strip(), "domanda": None, "forma": "raggiera" if len(sezioni) > 5 else "albero",
+                "concetti": concetti, "collegamenti": []}
+
+    def _mappa_modifica(self, d: dict) -> dict:
+        attuale = json.loads(json.dumps(d.get("attuale") or {}))
+        attuale["titolo"] = f"{attuale.get('titolo') or 'Mappa'} (cambiata in prova: {str(d.get('modifica') or '')[:40]})"
+        return {**attuale, "nota": None}
+
     def _modifica_scelta(self, d: dict) -> dict:
         return {"parti": list(d.get("numeri") or [])}
 

@@ -67,7 +67,7 @@ public sealed class Motore : IDisposable
     private static readonly Regex PercorsoRisposta = new(@"^api/lezioni/\d+/domande/\d+/risposta/?$", RegexOptions.CultureInvariant);
     // §28: anche una modifica chiesta (o ripresa dopo un errore) accende il giro; la sua stima no.
     private static readonly Regex PercorsoLavoroStudio = new(@"^api/(schemi|simulate)/?$|^api/(schemi|simulate)/\d+/riprova/?$|^api/simulate/\d+/consegna/?$|^api/modifiche/?$|^api/modifiche/\d+/riprova/?$", RegexOptions.CultureInvariant);
-    private static readonly Regex PercorsoRiassunto = new(@"^api/schemi/\d+/riassunti/?$|^api/riassunti/\d+/riprova/?$", RegexOptions.CultureInvariant);
+    private static readonly Regex PercorsoRiassunto = new(@"^api/schemi/\d+/(riassunti|mappe)/?$|^api/(riassunti|mappe)/\d+/riprova/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoChiarimenti = new(@"^api/chiarimenti/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoFotoSchema = new(@"^api/schemi/(\d{1,12})/immagini/(\d{1,6})(/cambia)?/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoSchema = new(@"^api/schemi/(\d{1,12})/?$", RegexOptions.CultureInvariant);
@@ -381,7 +381,7 @@ public sealed class Motore : IDisposable
                 {
                     if (NotificaPer(v) is Notifica n) NuovaNotifica?.Invoke(n);
                 }
-                foreach (var _ in nuove.Where(v => v.Tipo is "riassunto_pronto" or "riassunto_errore")) RiassuntoArrivato();
+                foreach (var _ in nuove.Where(v => v.Tipo is "riassunto_pronto" or "riassunto_errore" or "mappa_pronta" or "mappa_errore")) RiassuntoArrivato();
                 if (nuove.Count > 0) Novita?.Invoke(Json.Scrivi(nuove));
             }
             if (ComeSenzaRete(r) || r.Stato == 401) return;
@@ -464,6 +464,8 @@ public sealed class Motore : IDisposable
             "schema_errore" => new Notifica(Testo(v.Testo, "Lo schema non è riuscito"), "Fai clic per vedere cosa è successo.", schemi),
             "riassunto_pronto" => new Notifica(Testo(v.Testo, "Il riassunto è pronto"), "Fai clic per aprire gli schemi.", schemi),
             "riassunto_errore" => new Notifica(Testo(v.Testo, "Il riassunto non è riuscito"), "Fai clic per aprire gli schemi.", schemi),
+            "mappa_pronta" => new Notifica(Testo(v.Testo, "La mappa è pronta"), "Fai clic per aprire gli schemi.", schemi),
+            "mappa_errore" => new Notifica(Testo(v.Testo, "La mappa non è riuscita"), "Fai clic per aprire gli schemi.", schemi),
             "simulata_pronta" => new Notifica(Testo(v.Testo, "La verifica di prova è pronta"), "Fai clic per aprirla.", simulate),
             "simulata_corretta" => new Notifica(Testo(v.Testo, "Ho corretto la verifica di prova"), "Fai clic per vedere com'è andata.", simulate),
             "simulata_errore" => new Notifica(Testo(v.Testo, "La verifica di prova non è riuscita"), "Fai clic per vedere cosa è successo.", simulate),
@@ -527,6 +529,7 @@ public sealed class Motore : IDisposable
             ["tutorial_novita_visto"] = c.TutorialNovitaVisto,
             // Visita delle cose nuove già vista, ma prima dell'ultimo giro: si mostrano solo i passi nuovi.
             ["novita_nuove"] = c.TutorialNovitaVisto && c.NovitaViste < Configurazione.GiroNovita,
+            ["novita_viste"] = c.NovitaViste,
             ["tema"] = c.Tema ?? "sistema",
             ["diagnosi"] = Diagnosi,
             ["scaricate"] = new JsonArray(scaricate.Select(v => (JsonNode)JsonValue.Create(v.Id)).ToArray()),

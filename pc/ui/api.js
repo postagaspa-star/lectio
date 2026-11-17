@@ -38,7 +38,7 @@
     if (/^\/locale\/lezioni\/\d+\/scarica$/.test(percorso)) return ATTESA_SCARICA_MS;
     if (percorso.startsWith('/locale/carica')) return ATTESA_CARICA_MS;
     if (/^\/server\/api\/lezioni\/\d+\/domande\/\d+\/risposta$/.test(percorso)) return ATTESA_CORREZIONE_MS;
-    if (percorso === '/locale/salva-pdf') return ATTESA_PDF_MS;
+    if (percorso === '/locale/salva-pdf' || percorso === '/locale/stampa-pdf') return ATTESA_PDF_MS;
     if (percorso === '/server/api/chiarimenti') return ATTESA_CHIARIMENTO_MS;
     if (/^\/server\/api\/schemi\/\d+\/immagini\/\d+\/cambia$/.test(percorso)) return ATTESA_CAMBIA_FOTO_MS;
     if (percorso.startsWith('/server/')) return ATTESA_SERVER_MS;

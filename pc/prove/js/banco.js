@@ -12,7 +12,7 @@ const path = require('path');
 
 // LECTIO_UI: un'altra cartella dell'interfaccia (per esempio quella di una versione vecchia, per vedere che i test la bocciano).
 const UI = process.env.LECTIO_UI || path.join(__dirname, '..', '..', 'ui');
-const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'modifiche.js', 'visita.js', 'avvio.js'];
+const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'disegno-mappe.js', 'mappe.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'modifiche.js', 'visita.js', 'avvio.js'];
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 
@@ -61,6 +61,7 @@ function server(opzioni) {
     if (p === '/locale/tutorial-visto') { s.stato.tutorial_visto = true; return [200, { ok: true }]; }
     if (p === '/locale/tutorial-novita-visto') { s.stato.tutorial_novita_visto = true; return [200, { ok: true }]; }
     if (p === '/locale/salva-pdf') return s.salvaPdf ? s.salvaPdf(corpo) : [200, { ok: true, id: 7, nome: corpo.nome }];
+    if (p === '/locale/stampa-pdf') return s.stampaPdf ? s.stampaPdf(corpo) : [200, { ok: true, id: 8, nome: corpo.nome }];
     if (p === '/locale/apri-pdf') return [200, { ok: true }];
     if (p === '/locale/tema') { s.stato.tema = corpo.tema; return [200, { ok: true, tema: corpo.tema }]; }
     if (p === '/locale/copia') return s.copia ? [200, { ok: true }] : [422, { errore: 'Non sono riuscito a copiarlo: seleziona il testo qui sotto e copialo con Ctrl+C.', codice: 'appunti' }];
@@ -116,6 +117,9 @@ async function pagina(s, opzioni) {
       return new ReadableStream({ async start(c) { c.enqueue(new Uint8Array(await blob.arrayBuffer())); c.close(); } });
     };
   }
+  // La tela per misurare i testi delle mappe: jsdom non la ha (senza il pacchetto canvas) e lo scriverebbe a ogni
+  // pagina; così la pagina usa la stima, come quando la tela manca davvero.
+  w.HTMLCanvasElement.prototype.getContext = () => null;
   // L'orologio della pagina è fermo al giorno dei dati d'esempio (27 ottobre), così i test non invecchiano.
   const D0 = w.Date;
   const sposta = Date.parse('2026-10-27T10:00:00+01:00') - D0.now();
@@ -172,7 +176,9 @@ async function pagina(s, opzioni) {
     clic(el) {
       if (!el) throw new Error('elemento da cliccare non trovato');
       el.dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true }));
-      el.click();
+      // Un pezzo di SVG (le mappe) non ha click(): si manda il clic come fa il mouse.
+      if (typeof el.click === 'function') el.click();
+      else el.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
     },
     scrivi(el, testo) {
       el.focus();

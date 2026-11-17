@@ -382,6 +382,46 @@
     ];
   }
 
+  /** §45 Le due mappe dello schema 3: i concetti (ad albero) e le date (linea del tempo). */
+  function mappe() {
+    const base = { schema_id: 3, materia_id: 1, titolo: 'L\'Impero romano da Augusto a Nerone', frase: null, errore: null, nota: null, stima_eur: 0.01, creato_il: '2026-10-26T18:10:00+01:00', pronto_il: '2026-10-26T18:11:00+01:00', schema_cambiato: false };
+    const c = (id, testo, genitore, verbo, sezione, spiegazione) => ({ id, testo, genitore, verbo, sezione, spiegazione });
+    const concetti = [
+      c(1, 'L\'Impero da Augusto a Nerone', null, null, null, 'Cento anni in cui Roma passa dalla Repubblica al governo di un solo uomo, sempre della stessa famiglia.'),
+      c(2, 'Augusto', 1, 'comincia con', 1, 'Nel 27 a.C. Ottaviano riceve il titolo di Augusto dal senato.'),
+      c(3, 'Tiberio', 1, 'continua con', 2, 'Il figlio adottivo di Augusto: tiene bene i conti dello Stato.'),
+      c(4, 'Caligola', 1, 'poi', 3, 'Governa da padrone assoluto e umilia il senato.'),
+      c(5, 'Claudio', 1, 'poi', 3, 'Sembra debole, ma organizza bene lo Stato.'),
+      c(6, 'Nerone', 1, 'finisce con', 4, 'L\'ultimo della dinastia giulio-claudia.'),
+      c(7, 'Principato', 2, 'crea il', 1, 'Un modo di governare in cui Augusto è il primo cittadino, non un re.'),
+      c(8, 'Seiano', 3, 'lascia Roma a', 2, 'Il prefetto del pretorio: governa Roma mentre Tiberio sta a Capri.'),
+      c(9, 'Processi per lesa maestà', 3, 'fa i', 2, 'Processi contro chi offende l\'imperatore: riempiono Roma di paura.'),
+      c(10, 'Pretoriani', 4, 'è ucciso dai', 3, 'La guardia dell\'imperatore: nel 41 uccidono Caligola.'),
+      c(11, 'Uffici con i liberti', 5, 'organizza', 3, 'Claudio affida gli uffici dello Stato a ex schiavi di fiducia.'),
+      c(12, 'Britannia', 5, 'conquista la', 3, 'Nel 43 Claudio ne conquista una parte e ne fa una provincia.'),
+      c(13, 'Incendio di Roma', 6, 'dopo l\'', 4, 'Nel 64 Roma brucia per giorni.'),
+      c(14, 'Istituzioni della Repubblica', 7, 'tiene in piedi le', 1, 'Senato e magistrati restano, almeno di nome.'),
+      c(15, 'Potere di uno solo', 7, 'ma dà il', 1, 'Esercito, province e leggi dipendono da Augusto.'),
+      c(16, 'Cristiani', 13, 'accusa i', 4, 'Nerone dà la colpa dell\'incendio ai cristiani di Roma.'),
+    ];
+    const e = (id, data, anno, ac, fine, cosa, sezione, spiegazione) => ({ id, data, anno, ac, fine, fine_ac: fine ? false : null, x: ac ? 1 - anno : anno, x_fine: fine || null, circa: false, mese: null, cosa, sezione, spiegazione });
+    const eventi = [
+      e(1, '27 a.C.', 27, true, null, 'Ottaviano diventa Augusto', 1, 'Il senato gli dà il titolo di Augusto: comincia il principato.'),
+      e(2, '26', 26, false, null, 'Tiberio si ritira a Capri', 2, 'Da lì governa poco: Roma resta nelle mani di Seiano.'),
+      e(3, '31', 31, false, null, 'Cade Seiano', 2, 'Tiberio scopre la congiura e lo fa uccidere.'),
+      e(4, '37-41', 37, false, 41, 'Caligola imperatore', 3, null),
+      e(5, '41-54', 41, false, 54, 'Claudio imperatore', 3, 'I pretoriani lo mettono sul trono dopo aver ucciso Caligola.'),
+      e(6, '43', 43, false, null, 'Claudio conquista la Britannia', 3, null),
+      e(7, '54', 54, false, null, 'Nerone diventa imperatore', 4, 'All\'inizio governa bene, guidato da Seneca.'),
+      e(8, '64', 64, false, null, 'Incendio di Roma', 4, 'Nerone accusa i cristiani.'),
+      e(9, '68', 68, false, null, 'Nerone si uccide', 5, 'Il senato lo dichiara nemico pubblico: finisce la dinastia giulio-claudia.'),
+    ];
+    return [
+      Object.assign({}, base, { id: 7, tipo: 'concetti', stato: 'pronta', elementi: 16, contenuto: { forma: 'albero', domanda: 'Come passa il potere da Augusto a Nerone?', concetti, collegamenti: [{ da: 10, a: 5, verbo: 'mettono sul trono', spiegazione: null }] } }),
+      Object.assign({}, base, { id: 8, tipo: 'date', stato: 'pronta', elementi: 9, nota: 'Di Tiberio i tuoi documenti non dicono quando diventa imperatore.', contenuto: { eventi } }),
+    ];
+  }
+
   function carteLampo() {
     const carta = (id, materia_id, materia, colore, domanda, risposta, fonti, scatola) => ({ id, materia_id, materia, colore, domanda, risposta, fonti: fonti.map((k) => copia(FONTI[k])), scatola });
     return [
@@ -480,6 +520,7 @@
       spesa: { mese: oggiVero.slice(0, 7), speso_eur: o.speso != null ? o.speso : 0.8, tetto_eur: 2.0, si_azzera_il: iso(new Date(anno, mese, 1)), voce_gratis: { caratteri_usati: 88000, caratteri_mese: 500000 }, voci: [] },
       schemi: o.vuoto ? [] : schemi(),
       riassunti: o.vuoto ? [] : riassunti(),
+      mappe: o.vuoto ? [] : mappe(),
       simulate: o.vuoto ? [] : simulate(),
       lampo: o.vuoto ? [] : carteLampo(),
       lampo_domani: o.vuoto ? 0 : 3,
@@ -488,7 +529,7 @@
       prossimoId: 200,
       chiamate: [],
     };
-    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare', 'schemi', 'riassunti', 'simulate', 'modifiche']) s[k] = spostaDate(s[k], giorni);
+    for (const k of ['schede', 'materiale', 'eventi', 'lezioni', 'ripassare', 'schemi', 'riassunti', 'mappe', 'simulate', 'modifiche']) s[k] = spostaDate(s[k], giorni);
     // §44.8: una modifica finta lavora 2 secondi, poi è pronta (i test la accorciano).
     const durataModifica = o.tempoModifica != null ? o.tempoModifica : 2000;
 
@@ -607,6 +648,17 @@
       }
       if (i >= 1) Object.assign(r, { stato: 'in_preparazione', frase: 'Scrivo il riassunto' });
     };
+    const avanzaMappa = (x) => {
+      if (!x._t0 || (x.stato !== 'in_coda' && x.stato !== 'in_preparazione')) return;
+      const i = passi(x);
+      if (i >= 2) {
+        const modello = mappe().find((y) => y.tipo === x.tipo);
+        Object.assign(x, { stato: 'pronta', frase: null, pronto_il: new Date().toISOString(), elementi: modello.elementi, nota: null, contenuto: copia(modello.contenuto) });
+        delete x._t0;
+        return;
+      }
+      if (i >= 1) Object.assign(x, { stato: 'in_preparazione', frase: x.tipo === 'date' ? 'Cerco le date' : 'Disegno la mappa' });
+    };
     const avanzaSimulata = (x) => {
       if (!x._t0) return;
       const i = passi(x);
@@ -629,19 +681,20 @@
     };
 
     // --- Modifiche dopo (contratto §28): modifica finta, versione di prima, correzione a mano ---
-    const LISTA = { lezione: 'lezioni', schema: 'schemi', riassunto: 'riassunti', simulata: 'simulate' };
+    const LISTA = { lezione: 'lezioni', schema: 'schemi', riassunto: 'riassunti', simulata: 'simulate', mappa: 'mappe' };
     const oggettoDi = (tipo, id) => (s[LISTA[tipo]] || []).find((x) => x.id === Number(id)) || null;
     const modificaDi = (tipo, id) => s.modifiche.filter((md) => md.tipo === tipo && md.oggetto_id === Number(id)).reduce((u, md) => (!u || md.id > u.id ? md : u), null);
     const lavora = (md) => !!md && (md.stato === 'in_coda' || md.stato === 'in_preparazione');
-    const modificabile = (tipo, x) => !!x && (tipo === 'lezione' ? x.stato === 'pronta' : tipo === 'simulata' ? ['pronta', 'in_corso', 'corretta'].includes(x.stato) : x.stato === 'pronto');
+    const modificabile = (tipo, x) => !!x && (tipo === 'lezione' || tipo === 'mappa' ? x.stato === 'pronta' : tipo === 'simulata' ? ['pronta', 'in_corso', 'corretta'].includes(x.stato) : x.stato === 'pronto');
     const partiDi = (tipo, x) => {
       if (!modificabile(tipo, x)) return [];
       if (tipo === 'schema') return ((x.contenuto && x.contenuto.sezioni) || []).map((z) => ({ n: z.n, titolo: z.titolo }));
       if (tipo === 'riassunto') return ((x.contenuto && x.contenuto.parti) || []).map((q, i) => ({ n: i + 1, titolo: q.titolo || 'Parte ' + (i + 1) }));
       if (tipo === 'lezione') return (x.capitoli || []).map((c) => ({ n: c.n, titolo: c.titolo }));
+      if (tipo === 'mappa') return [{ n: 1, titolo: x.titolo || 'La mappa' }];
       return (x.domande || []).map((d) => ({ n: d.n, titolo: d.testo.length > 60 ? d.testo.slice(0, 57) + '…' : d.testo }));
     };
-    const CAMPI_VERSIONE = { schema: ['titolo', 'contenuto', 'carte'], riassunto: ['titolo', 'contenuto', 'parole'], lezione: ['capitoli', 'domande', 'testo', 'durata_s', 'audio'], simulata: ['stato', 'domande', 'risposte', 'esito', 'iniziata_il', 'consegnata_il'] };
+    const CAMPI_VERSIONE = { schema: ['titolo', 'contenuto', 'carte'], riassunto: ['titolo', 'contenuto', 'parole'], lezione: ['capitoli', 'domande', 'testo', 'durata_s', 'audio'], simulata: ['stato', 'domande', 'risposte', 'esito', 'iniziata_il', 'consegnata_il'], mappa: ['titolo', 'contenuto', 'elementi'] };
     const versioneDi = (tipo, x) => Object.fromEntries(CAMPI_VERSIONE[tipo].map((k) => [k, copia(x[k])]));
     /** Prima di ogni cambiamento la versione di adesso va da parte (§28.2): "Torna a prima". */
     const mettiDaParte = (tipo, x, perche, richiesta) => {
@@ -654,7 +707,7 @@
       x._prima = ora;
       x._vdp = Object.assign({}, x._vdp, { ruolo: x._vdp.ruolo === 'prima' ? 'dopo' : 'prima', quando: new Date().toISOString() });
     };
-    const schemaCambiato = (schemaId) => { for (const r of s.riassunti) if (r.schema_id === schemaId) r.schema_cambiato = true; };
+    const schemaCambiato = (schemaId) => { for (const r of s.riassunti.concat(s.mappe)) if (r.schema_id === schemaId) r.schema_cambiato = true; };
     const DATE_PARTI = {
       1: ['27 avanti Cristo: Ottaviano diventa **Augusto**.', '14 dopo Cristo: muore Augusto.'],
       2: ['14: Tiberio diventa imperatore.', '26: si ritira a Capri.', '31: cade Seiano.'],
@@ -672,6 +725,17 @@
         const parte = ((x.contenuto && x.contenuto.parti) || [])[n - 1];
         if (parte) parte.punti = (parte.punti || []).concat(['Le date da sapere: 14, 26, 31, 41, 54, 68.']);
         x.parole = (Number(x.parole) || 0) + 9;
+      } else if (tipo === 'mappa') {
+        // In esempio la mappa cambiata prende un pezzo in più: un concetto sotto Tiberio, oppure il 14 d.C.
+        const c = x.contenuto || {};
+        if (x.tipo === 'concetti') {
+          const id = (c.concetti || []).reduce((mx, q) => Math.max(mx, q.id), 0) + 1;
+          c.concetti = (c.concetti || []).concat([{ id, testo: 'Capri', genitore: 3, verbo: 'si ritira a', sezione: 2, spiegazione: 'Dal 26 Tiberio vive sull\'isola di Capri.' }]);
+        } else if (!(c.eventi || []).some((q) => q.data === '14')) {
+          c.eventi = [{ data: '14', anno: 14, ac: false, fine: null, fine_ac: null, x: 14, x_fine: null, circa: false, mese: null, cosa: 'Muore Augusto', sezione: 1, spiegazione: 'Tiberio diventa imperatore.' }]
+            .concat(c.eventi || []).sort((a, b) => a.x - b.x).map((q, i) => Object.assign(q, { id: i + 1 }));
+        }
+        x.elementi = (c.concetti || c.eventi || []).length;
       } else if (tipo === 'lezione') {
         const t = (x.testo || []).find((z) => z.capitolo === n);
         if (t) t.paragrafi = ['Riprendiamo questo capitolo con calma, un passo alla volta.'].concat(t.paragrafi || []);
@@ -713,7 +777,7 @@
       const md = modificaDi(tipo, x.id);
       return Object.assign(c, { modifica: md ? senzaInterni(md) : null, versione_da_parte: x._vdp ? copia(x._vdp) : null, parti_modificabili: partiDi(tipo, x) });
     };
-    const COSTO_PARTE = { lezione: 0.03, schema: 0.02, riassunto: 0.01, simulata: 0.01 };
+    const COSTO_PARTE = { lezione: 0.03, schema: 0.02, riassunto: 0.01, simulata: 0.01, mappa: 0.01 };
     /** Le regole di POST /api/modifiche e della stima: un errore [stato, dati] oppure quello che serve. */
     const leggiModifica = (c) => {
       const tipo = String(c.tipo || '');
@@ -762,13 +826,15 @@
     const ERRORE_TITOLO = [422, { errore: 'Il titolo deve avere da 1 a 120 caratteri.', codice: 'non_valido', campo: 'titolo' }];
 
     const riassuntiDi = (x) => (x.stato === 'pronto' ? { stima_eur: 0.01, fatti: s.riassunti.filter((r) => r.schema_id === x.id).map((r) => ({ id: r.id, forma: r.forma, stato: r.stato })) } : null);
-    const schemaPerApi = (x) => conModifiche('schema', x, Object.assign(senzaInterni(x), { riassunti: riassuntiDi(x) }));
-    const schemaInLista = (x) => Object.assign(senzaInterni(x), { contenuto: null, riassunti: null });
+    const mappeDi = (x) => (x.stato === 'pronto' ? { stima_eur: 0.01, date_possibili: true, fatte: s.mappe.filter((r) => r.schema_id === x.id).map((r) => ({ id: r.id, tipo: r.tipo, stato: r.stato })) } : null);
+    const schemaPerApi = (x) => conModifiche('schema', x, Object.assign(senzaInterni(x), { riassunti: riassuntiDi(x), mappe: mappeDi(x) }));
+    const schemaInLista = (x) => Object.assign(senzaInterni(x), { contenuto: null, riassunti: null, mappe: null });
+    const mappaPerApi = (r) => conModifiche('mappa', r, Object.assign(senzaInterni(r), { schema_cambiato: !!r.schema_cambiato }));
     const riassuntoPerApi = (r) => conModifiche('riassunto', r, Object.assign(senzaInterni(r), { schema_cambiato: !!r.schema_cambiato }));
     /** Le risposte attese e le correzioni si vedono solo a verifica corretta (contratto §21). */
     const simulataPerApi = (x) => conModifiche('simulata', x, senzaInterni(x));
     const lezionePerApi = (l) => conModifiche('lezione', l, senzaInterni(l));
-    const perApi = { schema: schemaPerApi, riassunto: riassuntoPerApi, simulata: simulataPerApi, lezione: lezionePerApi };
+    const perApi = { schema: schemaPerApi, riassunto: riassuntoPerApi, simulata: simulataPerApi, lezione: lezionePerApi, mappa: mappaPerApi };
     const simulataInLista = (x) => {
       const c = senzaInterni(x);
       delete c.domande;
@@ -1087,6 +1153,58 @@
         avanzaModificheDi('schema', x);
         return [200, schemaPerApi(x)];
       }
+      // --- Mappe (§29) ---
+      if ((m = /^\/server\/api\/schemi\/(\d+)\/mappe$/.exec(p))) {
+        const x = s.schemi.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questo schema non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'GET') { s.mappe.forEach(avanzaMappa); return [200, s.mappe.filter((r) => r.schema_id === x.id).map(mappaPerApi)]; }
+        if (x.stato !== 'pronto') return [409, { errore: 'Questo schema non è ancora pronto.', codice: 'conflitto' }];
+        const tipo = String((corpo || {}).tipo || '');
+        if (!['date', 'concetti'].includes(tipo)) return [422, { errore: 'Tipo sconosciuto.', codice: 'non_valido', campo: 'tipo' }];
+        const c = s.mappe.find((r) => r.schema_id === x.id && r.tipo === tipo);
+        if (c && c.stato !== 'errore') return [201, mappaPerApi(c)];
+        const st = stimaStudio(0.01, {}, 1, 0);
+        if (!st.consentita) return [402, { errore: st.motivo, codice: 'tetto_raggiunto' }];
+        if (c) { c.stato = 'in_coda'; c.errore = null; c._t0 = Date.now(); return [201, mappaPerApi(c)]; }
+        const r = { id: s.prossimoId++, schema_id: x.id, materia_id: x.materia_id, tipo, titolo: x.titolo, stato: 'in_coda', frase: null, errore: null, nota: null, stima_eur: 0.01, creato_il: new Date().toISOString(), pronto_il: null, elementi: 0, contenuto: null, _t0: Date.now() };
+        s.mappe.push(r);
+        return [201, mappaPerApi(r)];
+      }
+      if ((m = /^\/server\/api\/mappe\/(\d+)\/riprova$/.exec(p)) && metodo === 'POST') {
+        const r = s.mappe.find((y) => y.id === Number(m[1]));
+        if (!r) return [404, { errore: 'Questa mappa non c\'è più.', codice: 'non_trovato' }];
+        r.stato = 'in_coda'; r.errore = null; r._t0 = Date.now();
+        return [200, mappaPerApi(r)];
+      }
+      if ((m = /^\/server\/api\/mappe\/(\d+)$/.exec(p))) {
+        const r = s.mappe.find((y) => y.id === Number(m[1]));
+        if (!r) return [404, { errore: 'Questa mappa non c\'è più.', codice: 'non_trovato' }];
+        if (metodo === 'DELETE') { s.mappe = s.mappe.filter((y) => y !== r); return [200, { ok: true }]; }
+        avanzaMappa(r);
+        avanzaModificheDi('mappa', r);
+        return [200, mappaPerApi(r)];
+      }
+      if ((m = /^\/server\/api\/mappe\/(\d+)\/testo$/.exec(p)) && metodo === 'PUT') {
+        const r = s.mappe.find((y) => y.id === Number(m[1]));
+        if (!r) return [404, { errore: 'Questa mappa non c\'è più.', codice: 'non_trovato' }];
+        avanzaModificheDi('mappa', r);
+        if (r.stato !== 'pronta' || lavora(modificaDi('mappa', r.id))) return [409, { errore: 'Adesso non si può correggere.', codice: 'conflitto' }];
+        const titolo = titoloValido((corpo || {}).titolo);
+        if (!titolo) return ERRORE_TITOLO;
+        const nuovo = (corpo || {}).contenuto || {};
+        const chiave = r.tipo === 'date' ? 'eventi' : 'concetti';
+        const vecchi = (r.contenuto && r.contenuto[chiave]) || [];
+        if (!Array.isArray(nuovo[chiave]) || nuovo[chiave].length !== vecchi.length) return [422, { errore: 'I pezzi della mappa non tornano.', codice: 'non_valido', campo: 'contenuto' }];
+        mettiDaParte('mappa', r, 'a_mano', null);
+        r.titolo = titolo;
+        const c = copia(r.contenuto);
+        const campi = r.tipo === 'date' ? ['data', 'cosa', 'spiegazione'] : ['testo', 'verbo', 'spiegazione'];
+        c[chiave].forEach((v, i) => { const n = nuovo[chiave][i] || {}; for (const k of campi) if (typeof n[k] === 'string' && pulisci(n[k])) v[k] = pulisci(n[k]); });
+        (c.collegamenti || []).forEach((v, i) => { const n = (nuovo.collegamenti || [])[i] || {}; if (typeof n.verbo === 'string') v.verbo = pulisci(n.verbo) || null; });
+        if (typeof nuovo.domanda === 'string' && 'domanda' in c) c.domanda = pulisci(nuovo.domanda) || null;
+        r.contenuto = c;
+        return [200, mappaPerApi(r)];
+      }
       // --- Riassunti (§26) ---
       if ((m = /^\/server\/api\/riassunti\/(\d+)\/riprova$/.exec(p)) && metodo === 'POST') {
         const r = s.riassunti.find((y) => y.id === Number(m[1]));
@@ -1144,8 +1262,8 @@
         avanzaModifica(md);
         return [200, senzaInterni(md)];
       }
-      if ((m = /^\/server\/api\/(lezioni|schemi|riassunti|simulate)\/(\d+)\/scambia-versione$/.exec(p)) && metodo === 'POST') {
-        const tipo = { lezioni: 'lezione', schemi: 'schema', riassunti: 'riassunto', simulate: 'simulata' }[m[1]];
+      if ((m = /^\/server\/api\/(lezioni|schemi|riassunti|simulate|mappe)\/(\d+)\/scambia-versione$/.exec(p)) && metodo === 'POST') {
+        const tipo = { lezioni: 'lezione', schemi: 'schema', riassunti: 'riassunto', simulate: 'simulata', mappe: 'mappa' }[m[1]];
         const x = oggettoDi(tipo, m[2]);
         if (!x) return [404, { errore: 'Non c\'è più.', codice: 'non_trovato' }];
         avanzaModificheDi(tipo, x);
@@ -1272,7 +1390,7 @@
       if ((m = /^\/locale\/lezioni\/(\d+)\/scarica$/.exec(p))) return [200, { ok: true, url: null, finto: true, byte: 0 }];
       if ((m = /^\/locale\/lezioni\/(\d+)\/scaricamento$/.exec(p))) return [200, { in_corso: false, percentuale: 100, scaricata: true }];
       if (p === '/locale/lezioni/scaricate') return [200, { lezioni: [{ id: 12, byte: 9496000 }, { id: 10, byte: 9200000 }], byte: 18696000 }];
-      if (p === '/locale/salva-pdf') return [200, { ok: true, id: 1, nome: (corpo || {}).nome || 'Lectio.pdf' }];
+      if (p === '/locale/salva-pdf' || p === '/locale/stampa-pdf') return [200, { ok: true, id: 1, nome: (corpo || {}).nome || 'Lectio.pdf' }];
       if (p.startsWith('/locale/')) return [200, { ok: true }];
       return [404, { errore: 'Nell\'esempio questa parte non c\'è.', codice: 'non_trovato' }];
     }

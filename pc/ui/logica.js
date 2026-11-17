@@ -991,6 +991,7 @@
       case 'schema': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'schema', id: id(parti[1]) };
       case 'simulata': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'simulata', id: id(parti[1]) };
       case 'riassunto': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'riassunto', id: id(parti[1]) };
+      case 'mappa': return id(parti[1]) == null ? { vista: 'materie' } : { vista: 'mappa', id: id(parti[1]) };
       default: return { vista: 'oggi' };
     }
   }
@@ -1210,6 +1211,55 @@
     return (fatti || []).reduce((ultimo, x) => (!ultimo || Number(x.id) > Number(ultimo.id) ? x : ultimo), null);
   }
 
+  // --- Mappe (contratto §29, guida §45) ------------------------------------------------------------
+
+  function mappaDelTipo(fatte, tipo) {
+    return (fatte || []).find((x) => x.tipo === tipo) || null;
+  }
+
+  /**
+   * §45.2 A destra di ogni riga di "Che mappa vuoi?": il prezzo, oppure a che punto è quella mappa. `possibile` = false
+   * se nello schema ci sono troppe poche date (la riga è spenta e lo dice).
+   */
+  function statoTipoMappa(fatta, stima, prova, possibile) {
+    if (fatta) {
+      if (fatta.stato === 'pronta') return { tipo: 'pronta', testo: 'Pronta' };
+      if (fatta.stato === 'errore') return { tipo: 'errore', testo: 'Si è fermata' };
+      return { tipo: 'lavoro', testo: 'La sto disegnando' };
+    }
+    if (possibile === false) return { tipo: 'spenta', testo: null, frase: 'Poche date in questo schema' };
+    return { tipo: 'prezzo', testo: prova ? 'Prova' : euro(stima) };
+  }
+
+  /** §45.1 L'ultima mappa fatta di uno schema: quella a cui porta "Apri la mappa". */
+  function ultimaMappa(fatte) {
+    return (fatte || []).reduce((ultima, x) => (!ultima || Number(x.id) > Number(ultima.id) ? x : ultima), null);
+  }
+
+  /**
+   * Contratto §29.6 La mappa corretta a mano: dal `corretto` si prendono SOLO i testi (concetti: testo, verbo,
+   * spiegazione; collegamenti: verbo; date: data, cosa, spiegazione); ordine, legami e sezioni restano quelli di
+   * `originale`. Il resto (anni, posizione sulla linea) lo ricalcola il server dalla data scritta.
+   */
+  function contenutoMappaCorretto(originale, corretto) {
+    const fuori = copiaJson(originale) || {};
+    const c = corretto || {};
+    const testi = (lista, nuovi, campi) => (lista || []).forEach((x, i) => {
+      const n = (nuovi || []).find((y) => y && y.id === x.id) || (nuovi || [])[i] || {};
+      for (const k of campi) if (typeof n[k] === 'string' && (typeof x[k] === 'string' || x[k] == null)) x[k] = pulito(n[k]);
+    });
+    if (Array.isArray(fuori.concetti)) testi(fuori.concetti, c.concetti, ['testo', 'verbo', 'spiegazione']);
+    if (Array.isArray(fuori.collegamenti)) {
+      fuori.collegamenti.forEach((k, i) => {
+        const n = (c.collegamenti || [])[i];
+        if (n && typeof n.verbo === 'string') k.verbo = pulito(n.verbo);
+      });
+    }
+    if (Array.isArray(fuori.eventi)) testi(fuori.eventi, c.eventi, ['data', 'cosa', 'spiegazione']);
+    if (typeof fuori.domanda === 'string' && typeof c.domanda === 'string') fuori.domanda = pulito(c.domanda);
+    return fuori;
+  }
+
   // --- "Non ho capito" (contratto §19, guida §34) -------------------------------------------------
 
   const SPUNTI_CHIARIMENTO = [
@@ -1352,11 +1402,12 @@
 
   // --- Il pulsante Nuovo e "Cosa vuoi fare?" (guida §43) ------------------------------------------
 
-  /** §43.3 Le cinque cose che Lectio sa fare, nell'ordine del foglio. `icona` = nome dell'icona del PC. */
+  /** §43.3 Le cose che Lectio sa fare, nell'ordine del foglio (§45.1: Mappa dopo Riassunto). `icona` = nome dell'icona del PC. */
   const SCELTE_NUOVO = [
     { scelta: 'lezione', nome: 'Lezione da ascoltare', frase: 'Te la spiego a voce, con le domande lungo la strada', icona: 'lezioni' },
     { scelta: 'schema', nome: 'Schema', frase: 'Da leggere: i punti chiave, con le immagini', icona: 'testo' },
     { scelta: 'riassunto', nome: 'Riassunto', frase: 'Da uno schema già pronto: per punti o discorsivo', icona: 'riassunto' },
+    { scelta: 'mappa', nome: 'Mappa', frase: 'Da uno schema già pronto: le date o i concetti', icona: 'mappa' },
     { scelta: 'simulata', nome: 'Verifica simulata', frase: 'Come quella del prof, poi la correggo', icona: 'verifica' },
     { scelta: 'lampo', nome: 'Ripasso lampo', frase: '', icona: 'lampo' },
   ];
@@ -1384,8 +1435,9 @@
         return r;
       }
       if (x.senzaRete) { r.spenta = true; r.frase = 'Serve la rete'; return r; }
-      if (s.scelta === 'riassunto' && x.pronti === 0) { r.spenta = true; r.frase = 'Prima serve uno schema pronto'; }
-      else if (s.scelta === 'riassunto' && x.pronti == null) r.spenta = true;
+      const daSchema = s.scelta === 'riassunto' || s.scelta === 'mappa';
+      if (daSchema && x.pronti === 0) { r.spenta = true; r.frase = 'Prima serve uno schema pronto'; }
+      else if (daSchema && x.pronti == null) r.spenta = true;
       return r;
     });
   }
@@ -1410,6 +1462,8 @@
     riassunto: { segnaposto: 'Per esempio: più corto, solo le cose da sapere', spunti: ['Più corto', 'Più semplice', 'Più dettagli'] },
     lezione: { segnaposto: 'Per esempio: spiega meglio la terza crociata', spunti: ['Spiega meglio', 'Più esempi', 'Più semplice'] },
     simulata: { segnaposto: 'Per esempio: più domande aperte, meno crocette', spunti: ['Più difficile', 'Più facile', 'Più domande aperte', 'Meno crocette'] },
+    mappa: { segnaposto: 'Per esempio: aggiungi i concetti sulle cause', spunti: ['Meno concetti', 'Più concetti', 'Più semplice'] },
+    mappa_date: { segnaposto: 'Per esempio: aggiungi le date delle battaglie', spunti: ['Meno date', 'Più date', 'Frasi più corte'] },
   };
 
   /** Una modifica che lavora ancora (in coda o in preparazione): intanto niente altre modifiche né scambi. */
@@ -1448,6 +1502,7 @@
       if (tipo === 'riassunto') lista = ((o.contenuto && o.contenuto.parti) || []).map((p, i) => ({ n: i + 1, titolo: p && p.titolo }));
       else if (tipo === 'schema') lista = ((o.contenuto && o.contenuto.sezioni) || []).map((s) => ({ n: s.n, titolo: s.titolo }));
       else if (tipo === 'lezione') lista = (o.capitoli || []).map((c) => ({ n: c.n, titolo: c.titolo }));
+      else if (tipo === 'mappa') lista = o.stato === 'pronta' ? [{ n: 1, titolo: o.titolo || 'La mappa' }] : [];
       else lista = (o.domande || []).map((d) => ({ n: d.n, titolo: d.testo }));
     }
     return lista.filter((p) => p && p.n != null).map((p) => ({ n: Number(p.n), titolo: String(p.titolo || '').trim() || 'Parte ' + p.n }));
@@ -1565,8 +1620,9 @@
   /** §44.4 C'è qualcosa di cambiato rispetto a com'era? (per "Lasciare le correzioni?") */
   function correzioniFatte(tipo, originale, titoloPrima, corretto, titoloOra) {
     if (pulito(titoloPrima) !== pulito(titoloOra)) return true;
-    const ricostruito = tipo === 'riassunto' ? contenutoRiassuntoCorretto(originale, corretto) : contenutoSchemaCorretto(originale, corretto);
-    const base = tipo === 'riassunto' ? contenutoRiassuntoCorretto(originale, originale) : contenutoSchemaCorretto(originale, originale);
+    const f = tipo === 'riassunto' ? contenutoRiassuntoCorretto : tipo === 'mappa' ? contenutoMappaCorretto : contenutoSchemaCorretto;
+    const ricostruito = f(originale, corretto);
+    const base = f(originale, originale);
     return JSON.stringify(ricostruito) !== JSON.stringify(base);
   }
 
@@ -1609,6 +1665,7 @@
     ESITI_LAMPO, minutiLampo, fraseLampo, fraseFineRipasso,
     DURATE_SIMULATA, esitoSimulata, voto, statoRigaSimulata, testoTempo, riassuntoSimulata, contaRisposte, unisciRisposte, frasePunti, fraseOltreTempo, puntiDomanda, riepilogoData,
     FORME_RIASSUNTO, riassuntoDellaForma, statoFormaRiassunto, fraseParole, ultimoRiassunto,
+    mappaDelTipo, statoTipoMappa, ultimaMappa, contenutoMappaCorretto,
     SCELTE_NUOVO, schemiPronti, righeNuovo, nuovoSpento,
     MASSIMO_RICHIESTA, AVVISO_RICHIESTA_DA, MASSIMO_TESTO_A_MANO, MASSIMO_TITOLO_A_MANO, MODIFICA_PER_TIPO, modificaAttiva, aggiungiSpuntoModifica,
     contatoreRichiesta, partiModificabili, motivoSpentaModifica, pulsanteVersione, fraseCambiate, costoModifica, righeRiepilogoModifica,

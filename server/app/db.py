@@ -442,6 +442,75 @@ ALTER TABLE spese ADD COLUMN di_cui_cache INTEGER
 """
 
 
+# 1.4.0 (17/11): le mappe di ripasso (contratto 29), da uno schema pronto: le date (linea del tempo) o i concetti.
+# modifiche e versioni si rifanno con 'mappa' tra i tipi ammessi (SQLite non cambia un CHECK con ALTER TABLE).
+SCHEMA_7 = """
+CREATE TABLE mappe (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schema_id INTEGER NOT NULL REFERENCES schemi(id) ON DELETE CASCADE,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    tipo TEXT NOT NULL CHECK (tipo IN ('date', 'concetti')),
+    titolo TEXT NOT NULL DEFAULT '',
+    stato TEXT NOT NULL CHECK (stato IN ('in_coda', 'in_preparazione', 'pronta', 'errore')),
+    frase TEXT,
+    errore TEXT,
+    nota TEXT,
+    stima_eur REAL NOT NULL DEFAULT 0,
+    creato_il TEXT NOT NULL,
+    in_coda_dal TEXT NOT NULL,
+    pronto_il TEXT,
+    elementi INTEGER NOT NULL DEFAULT 0,
+    contenuto TEXT,
+    schema_del TEXT,
+    UNIQUE (schema_id, tipo)
+);
+CREATE INDEX mappe_coda ON mappe (stato, in_coda_dal, id);
+CREATE TABLE modifiche_7 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('lezione', 'schema', 'riassunto', 'simulata', 'mappa')),
+    oggetto_id INTEGER NOT NULL,
+    materia_id INTEGER NOT NULL REFERENCES materie(id) ON DELETE CASCADE,
+    richiesta TEXT NOT NULL,
+    parti TEXT NOT NULL DEFAULT '[]',
+    stato TEXT NOT NULL CHECK (stato IN ('in_coda', 'in_preparazione', 'pronta', 'errore', 'annullata')),
+    fase TEXT,
+    fatto INTEGER NOT NULL DEFAULT 0,
+    totale INTEGER NOT NULL DEFAULT 0,
+    frase TEXT,
+    errore TEXT,
+    nota TEXT,
+    cambiate TEXT NOT NULL DEFAULT '[]',
+    stima_eur REAL NOT NULL DEFAULT 0,
+    creata_il TEXT NOT NULL,
+    in_coda_dal TEXT NOT NULL,
+    pronta_il TEXT
+);
+INSERT INTO modifiche_7 (id, tipo, oggetto_id, materia_id, richiesta, parti, stato, fase, fatto, totale, frase, errore, nota,
+                         cambiate, stima_eur, creata_il, in_coda_dal, pronta_il)
+    SELECT id, tipo, oggetto_id, materia_id, richiesta, parti, stato, fase, fatto, totale, frase, errore, nota, cambiate,
+           stima_eur, creata_il, in_coda_dal, pronta_il FROM modifiche;
+DROP TABLE modifiche;
+ALTER TABLE modifiche_7 RENAME TO modifiche;
+CREATE INDEX modifiche_coda ON modifiche (stato, in_coda_dal, id);
+CREATE INDEX modifiche_oggetto ON modifiche (tipo, oggetto_id, id);
+CREATE TABLE versioni_7 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('lezione', 'schema', 'riassunto', 'simulata', 'mappa')),
+    oggetto_id INTEGER NOT NULL,
+    dati TEXT NOT NULL,
+    ruolo TEXT NOT NULL CHECK (ruolo IN ('prima', 'dopo')),
+    perche TEXT NOT NULL CHECK (perche IN ('modifica', 'a_mano')),
+    richiesta TEXT,
+    quando TEXT NOT NULL
+);
+INSERT INTO versioni_7 (id, tipo, oggetto_id, dati, ruolo, perche, richiesta, quando)
+    SELECT id, tipo, oggetto_id, dati, ruolo, perche, richiesta, quando FROM versioni;
+DROP TABLE versioni;
+ALTER TABLE versioni_7 RENAME TO versioni;
+CREATE INDEX versioni_oggetto ON versioni (tipo, oggetto_id, id)
+"""
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
@@ -450,6 +519,7 @@ MIGRAZIONI = [
     (4, SCHEMA_4, _semina_4),
     (5, SCHEMA_5, None),
     (6, SCHEMA_6, None),
+    (7, SCHEMA_7, None),
 ]
 
 
@@ -595,6 +665,8 @@ def ripristina_dopo_riavvio(db_path: str) -> None:
             conn.execute("UPDATE simulate SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
                          (INTERROTTA_RIAVVIO,))
             conn.execute("UPDATE riassunti SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
+                         (INTERROTTA_RIAVVIO,))
+            conn.execute("UPDATE mappe SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
                          (INTERROTTA_RIAVVIO,))
             conn.execute("UPDATE modifiche SET stato = 'errore', errore = ? WHERE stato = 'in_preparazione'",
                          (INTERROTTA_RIAVVIO,))

@@ -249,6 +249,22 @@
       },
     },
     {
+      // §45.9: le mappe (1.3.7, giro 3): la pillola dello schema, poi la mappa vera.
+      giro: 3,
+      titolo: 'Mappa', frase: 'Le date su una linea del tempo, oppure i concetti con cerchi e frecce.', leggi: true,
+      bersaglio: ['[data-visita="pillola-mappa"]'],
+      prepara: async () => {
+        await apriSchema();
+        portaInVista(await aspetta(() => document.querySelector('[data-visita="pillola-mappa"]'), 2000), 'center');
+      },
+    },
+    {
+      giro: 3,
+      titolo: 'Mettiti alla prova', frase: 'Un clic su un cerchio e leggi la spiegazione. Da qui nascondi dei pezzi e provi a ricordarli.', leggi: true,
+      bersaglio: ['[data-visita="prova-mappa"]'],
+      prepara: async () => { A.chiudiTuttiIVeli(); A.chiudiLettore(false); await vaiA('#mappa/7', '[data-visita="prova-mappa"]'); },
+    },
+    {
       titolo: 'Ripasso lampo', frase: 'Poche schede al giorno, tre minuti.', evento: 'lampo-apri', tasto: 'clic',
       bersaglio: ['[data-visita="lampo-inizia"]'],
       prepara: async () => { A.chiudiTuttiIVeli(); A.chiudiLettore(false); await vaiA('#oggi', '[data-visita="lampo-inizia"]'); },
@@ -286,13 +302,17 @@
   ];
   const FINE = { fine: true };
   /** Il giro di novità di questa versione: uguale a Configurazione.GiroNovita nel programma. */
-  const GIRO_NOVITA = 2;
+  const GIRO_NOVITA = 3;
 
   /** Le visite: quella di sempre, le cose nuove (una volta sola dopo l'aggiornamento), solo i passi dell'ultimo giro per chi
    *  aveva già visto le novità, tutte e due da Impostazioni. */
   function passiDi(modo) {
     if (modo === 'novita') return PASSI_NUOVI.concat([FINE]);
-    if (modo === 'ultime') return PASSI_NUOVI.filter((p) => p.giro === GIRO_NOVITA).concat([FINE]);
+    if (modo === 'ultime') {
+      // Solo i giri non ancora visti (il programma dice l'ultimo visto, 0 = il primo; se non lo dice, il penultimo).
+      const visti = S.motore && Number.isFinite(S.motore.novita_viste) ? Math.max(1, S.motore.novita_viste) : GIRO_NOVITA - 1;
+      return PASSI_NUOVI.filter((p) => (p.giro || 1) > visti).concat([FINE]);
+    }
     if (modo === 'tutta') return PASSI.concat(PASSI_NUOVI, [FINE]);
     return PASSI.concat([FINE]);
   }

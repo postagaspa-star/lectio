@@ -65,6 +65,8 @@ public class PonteTest
     [InlineData("schema/4", true)]
     [InlineData("simulata/5", true)]
     [InlineData("riassunto/6", true)]
+    [InlineData("mappa/7", true)]
+    [InlineData("mappa/7/x", false)]
     [InlineData("schema/4/x", false)]
     [InlineData("lezione/12');alert(1);//", false)]
     [InlineData("javascript:alert(1)", false)]
@@ -256,6 +258,64 @@ public class PonteTest
         Assert.Equal(true, Json.Booleano(Json.Nodo(annullato.Json)!["annullato"]));
     }
 
+    [Fact]
+    public async Task Il_pdf_della_mappa_lo_stampa_il_pc_dove_dice_Windows()
+    {
+        using var cartella = new CartellaTemporanea();
+        using var b = new Banco(_ => (200, "{}"));
+        string? propostoNome = null;
+        string? stampato = null;
+        string? aperto = null;
+        var dove = cartella.File("mappa.pdf");
+        var ponte = new Ponte(b.Motore)
+        {
+            ChiediDoveSalvare = n => { propostoNome = n; return Task.FromResult<string?>(dove); },
+            StampaPdf = f => { stampato = f; File.WriteAllBytes(f, Encoding.ASCII.GetBytes("%PDF-1.7 mappa")); return Task.FromResult(true); },
+            ApriFile = f => aperto = f,
+        };
+
+        var r = await ponte.GestisciAsync("POST", new Uri(Base, "locale/stampa-pdf"), Encoding.UTF8.GetBytes("{\"nome\":\"Le date: Roma?\"}"));
+        Assert.Equal(200, r.Stato);
+        Assert.Equal("Le date- Roma-.pdf", propostoNome);
+        Assert.Equal(dove, stampato);
+        // Il PDF lo fa il PC: al server non si chiede niente.
+        Assert.Empty(b.Finto.Ricevute);
+        var id = Json.Testo(Json.Nodo(r.Json)!["id"]);
+        var apri = await ponte.GestisciAsync("POST", new Uri(Base, "locale/apri-pdf"), Encoding.UTF8.GetBytes("{\"id\":\"" + id + "\"}"));
+        Assert.Equal(200, apri.Stato);
+        Assert.Equal(dove, aperto);
+    }
+
+    [Fact]
+    public async Task Pdf_della_mappa_annullato_o_non_riuscito()
+    {
+        using var cartella = new CartellaTemporanea();
+        using var b = new Banco(_ => (200, "{}"));
+        var stampato = false;
+        string? dove = null;
+        var ponte = new Ponte(b.Motore)
+        {
+            ChiediDoveSalvare = _ => Task.FromResult(dove),
+            StampaPdf = _ => { stampato = true; return Task.FromResult(false); },
+        };
+        var corpo = Encoding.UTF8.GetBytes("{\"nome\":\"Mappa\"}");
+        var annullato = await ponte.GestisciAsync("POST", new Uri(Base, "locale/stampa-pdf"), corpo);
+        Assert.Equal(200, annullato.Stato);
+        Assert.Equal(true, Json.Booleano(Json.Nodo(annullato.Json)!["annullato"]));
+        Assert.False(stampato);
+
+        dove = cartella.File("mappa.pdf");
+        var errore = await ponte.GestisciAsync("POST", new Uri(Base, "locale/stampa-pdf"), corpo);
+        Assert.True(stampato);
+        Assert.Equal(422, errore.Stato);
+        Assert.Equal("non_salvato", Json.Testo(Json.Nodo(errore.Json)!["codice"]));
+
+        // Senza la finestra (prove, chiusura) non si stampa niente.
+        var senza = new Ponte(b.Motore);
+        var r = await senza.GestisciAsync("POST", new Uri(Base, "locale/stampa-pdf"), corpo);
+        Assert.Equal(422, r.Stato);
+    }
+
     [Theory]
     [InlineData(null, "Lectio.pdf")]
     [InlineData("  ", "Lectio.pdf")]
@@ -317,6 +377,8 @@ public class PonteTest
     [InlineData("schema_errore", "materia/2/schemi")]
     [InlineData("riassunto_pronto", "materia/2/schemi")]
     [InlineData("riassunto_errore", "materia/2/schemi")]
+    [InlineData("mappa_pronta", "materia/2/schemi")]
+    [InlineData("mappa_errore", "materia/2/schemi")]
     [InlineData("simulata_pronta", "materia/2/simulate")]
     [InlineData("simulata_corretta", "materia/2/simulate")]
     [InlineData("simulata_errore", "materia/2/simulate")]
@@ -371,6 +433,14 @@ public class PonteTest
         Assert.True(b.Motore.InPreparazione);
 
         novita = "[{\"id\":5,\"tipo\":\"riassunto_pronto\",\"testo\":\"Pronto\",\"materia_id\":2}]";
+        await b.Motore.GiroAsync();
+        Assert.False(b.Motore.InPreparazione);
+
+        // §45: una mappa chiesta fa lo stesso, fino a "mappa_pronta".
+        novita = "[]";
+        await ponte.GestisciAsync("POST", new Uri(Base, "server/api/schemi/3/mappe"), Encoding.UTF8.GetBytes("{\"tipo\":\"date\"}"));
+        Assert.True(b.Motore.InPreparazione);
+        novita = "[{\"id\":6,\"tipo\":\"mappa_pronta\",\"testo\":\"Pronta\",\"materia_id\":2}]";
         await b.Motore.GiroAsync();
         Assert.False(b.Motore.InPreparazione);
 

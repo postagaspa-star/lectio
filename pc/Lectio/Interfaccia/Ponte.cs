@@ -40,6 +40,9 @@ public sealed class Ponte
     /// <summary>Chiede a Windows dove salvare un file, col nome proposto. null = l'utente ha annullato.</summary>
     public Func<string, Task<string?>>? ChiediDoveSalvare { get; set; }
 
+    /// <summary>§45.7 Stampa la pagina com'è adesso in un PDF in quel file (la mappa). true = fatto.</summary>
+    public Func<string, Task<bool>>? StampaPdf { get; set; }
+
     /// <summary>Apre un file già salvato col programma predefinito di Windows.</summary>
     public Action<string>? ApriFile { get; set; }
 
@@ -218,6 +221,31 @@ public sealed class Ponte
         return new JsonObject { ["ok"] = true, ["id"] = id, ["nome"] = Path.GetFileName(dove) };
     }
 
+    /// <summary>
+    /// §45.7 Il PDF della mappa lo fa il PC: si chiede dove salvarlo, poi si stampa la pagina (che ha già preparato il
+    /// foglio da stampare). Come per gli altri PDF, "Apri" può aprire solo il file appena salvato.
+    /// </summary>
+    private async Task<JsonObject> StampaMappaAsync(string? nome)
+    {
+        if (StampaPdf == null || ChiediDoveSalvare == null) return new JsonObject { ["errore"] = "Da qui non si può salvare il PDF.", ["codice"] = "non_disponibile" };
+        var dove = await ChiediDoveSalvare(NomePdf(nome)).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(dove)) return new JsonObject { ["annullato"] = true };
+        bool fatto;
+        try
+        {
+            fatto = await StampaPdf(dove).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Log.Errore("PDF della mappa non salvato", e);
+            fatto = false;
+        }
+        if (!fatto || !File.Exists(dove)) return new JsonObject { ["errore"] = "Non sono riuscito a fare il PDF. Prova un'altra cartella.", ["codice"] = "non_salvato" };
+        var id = Guid.NewGuid().ToString("N");
+        lock (pdfSalvati) pdfSalvati[id] = dove;
+        return new JsonObject { ["ok"] = true, ["id"] = id, ["nome"] = Path.GetFileName(dove) };
+    }
+
     private JsonObject ApriPdf(string? id)
     {
         string? file = null;
@@ -262,6 +290,7 @@ public sealed class Ponte
             "tutorial-novita-visto" => ("POST", () => Task.FromResult(motore.SegnaTutorialNovitaVisto())),
             "salva-pdf" => ("POST", () => SalvaPdfAsync(Json.Testo(o?["percorso"]), Json.Testo(o?["nome"]))),
             "apri-pdf" => ("POST", () => Task.FromResult(ApriPdf(Json.Testo(o?["id"])))),
+            "stampa-pdf" => ("POST", () => StampaMappaAsync(Json.Testo(o?["nome"]))),
             "fuori-casa" => ("POST", () => Task.FromResult(motore.ImpostaFuoriCasa(Json.Testo(o?["indirizzo"])))),
             "tema" => ("POST", () => Task.FromResult(motore.ImpostaTema(Json.Testo(o?["tema"])))),
             "lezioni/scaricate" => ("GET", () => Task.FromResult(motore.Scaricate())),

@@ -10,6 +10,12 @@
   const { L, S, T, h, svuota, icona } = A;
 
   const chiaveParte = (id) => 'lectio.schema.parte.' + id;
+
+  /** §45.4 "Apri nello schema · parte N" dalla mappa: lo schema si apre a quella parte (come quando ci si torna). */
+  A.apriSchemaAllaParte = function (id, n) {
+    A.memoriaStudio.scrivi(chiaveParte(id), Number(n));
+    A.vai('#schema/' + id);
+  };
   const inLavoro = (s) => s.stato === 'in_coda' || s.stato === 'in_preparazione';
   const senzaMovimento = () => !A.conMovimenti() || document.documentElement.classList.contains('foto');
 
@@ -95,6 +101,9 @@
     // §43.3 Da "Cosa vuoi fare?" → Riassunto: la lettura si apre col foglio dei riassunti già aperto (una volta sola).
     let conRiassunto = S.riassuntoDaAprire != null && Number(S.riassuntoDaAprire) === Number(id);
     S.riassuntoDaAprire = null;
+    // §45.1 Lo stesso per Mappa: la lettura si apre con "Che mappa vuoi?".
+    let conMappa = S.mappaDaAprire != null && Number(S.mappaDaAprire) === Number(id);
+    S.mappaDaAprire = null;
 
     async function carica() {
       const [r] = await Promise.all([A.api.get('/server/api/schemi/' + id), S.materie ? null : A.caricaMaterie(), S.salute ? null : A.caricaSalute()]);
@@ -113,7 +122,7 @@
     }
 
     function disegna() {
-      if (s.stato !== 'pronto') conRiassunto = false;
+      if (s.stato !== 'pronto') { conRiassunto = false; conMappa = false; }
       if (inLavoro(s)) {
         svuota(pag, A.vistaLavoro({
           materia: m, titolo: s.titolo || s.argomento, frase: s.stato === 'in_coda' ? 'In coda' : s.frase || 'In preparazione', percentuale: s.stato === 'in_coda' ? 0 : L.percentualeLavoro(s), indietro,
@@ -369,11 +378,14 @@
 
       const fatti = (s.riassunti && s.riassunti.fatti) || [];
       const ultimo = L.ultimoRiassunto(fatti);
+      const ultimaMappa = L.ultimaMappa((s.mappe && s.mappe.fatte) || []);
       const finale = [
         Number(s.carte) > 0 ? h('div', { class: 'sch-fine', 'data-fine': 'lampo' }, h('span', { class: 'testo-fine' }, L.plurale(Number(s.carte), 'scheda è già', 'schede sono già') + ' in Ripasso lampo.'),
           h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'ripassa-adesso', onclick: () => A.apriLampo({ materiaId: m.id }) }, 'Ripassa adesso')) : null,
         s.riassunti ? h('div', { class: 'sch-fine', 'data-fine': 'riassunto' }, h('h2', null, 'Riassunto'),
           h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': ultimo ? 'apri-riassunto' : 'fai-riassunto', onclick: () => (ultimo ? A.vai('#riassunto/' + ultimo.id) : A.apriSceltaRiassunto(s, m)) }, ultimo ? 'Apri il riassunto' : 'Fai il riassunto')) : null,
+        s.mappe ? h('div', { class: 'sch-fine', 'data-fine': 'mappa' }, h('h2', null, 'Mappa'),
+          h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': ultimaMappa ? 'apri-mappa' : 'fai-mappa', onclick: () => (ultimaMappa ? A.vai('#mappa/' + ultimaMappa.id) : A.apriSceltaMappa(s, m)) }, ultimaMappa ? 'Apri la mappa' : 'Fai una mappa')) : null,
       ];
 
       // §44.1 Modifica a sinistra di Scarica PDF; nel menu Correggi a mano e Torna a prima (o Rimetti la modifica).
@@ -406,6 +418,7 @@
       const colonna = h('div', { class: 'sch-colonna' },
         h('div', { class: 'sch-testa' }, A.frecciaIndietro(indietro), A.pillolaMateria(m), h('span', { class: 'spazio' }),
           s.riassunti ? h('button', { type: 'button', class: 'pillola-azione', 'data-azione': 'riassunto', onclick: () => A.apriSceltaRiassunto(s, m) }, icona('riassunto'), 'Riassunto') : null,
+          s.mappe ? h('button', { type: 'button', class: 'pillola-azione', 'data-azione': 'mappa', 'data-visita': 'pillola-mappa', onclick: () => A.apriSceltaMappa(s, m) }, icona('mappa'), 'Mappa') : null,
           sg.pillola(modifica),
           A.pulsantePdf('api/schemi/' + id + '/pdf', L.nomeFilePdf(s.titolo, 'Schema')),
           A.menuPuntini(vociMenu)),
@@ -418,8 +431,9 @@
 
       svuota(pag, h('div', { class: 'schema-contenitore ' + A.classeMateria(m.colore) }, h('div', { class: 'sch-griglia' }, indice, colonna)));
 
-      accendi(corrente);
+      // La parte da cui ripartire si legge prima di accendere la prima (che la scriverebbe sopra).
       const salvata = A.memoriaStudio.leggi(chiaveParte(id));
+      accendi(corrente);
       if (contenitore && salvata != null && parti.has(Number(salvata)) && Number(salvata) !== sezioni[0].n) {
         const dove = posizioneDi(Number(salvata));
         if (dove != null) {
@@ -454,6 +468,9 @@
       if (conRiassunto) {
         conRiassunto = false;
         if (s.riassunti) A.apriSceltaRiassunto(s, m);
+      } else if (conMappa) {
+        conMappa = false;
+        if (s.mappe) A.apriSceltaMappa(s, m);
       }
       if (A.visitaDopoDisegno) A.visitaDopoDisegno();
     }
