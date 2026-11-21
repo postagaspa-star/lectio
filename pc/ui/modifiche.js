@@ -36,34 +36,56 @@
 
   // --- §44.2 La finestra "Cosa vuoi cambiare?" -------------------------------------------------------------------
 
+  /** I file che si possono aggiungere a una modifica: gli stessi di Aggiungi materiale (§5). */
+  const ACCETTA_FILE = '.pdf,.docx,.odt,.rtf,.txt,.md,.jpg,.jpeg,.png,.webp,.heic,.heif,.zip';
+  const TIPI_FILE = [].concat(...L.FAMIGLIE_MATERIALE.map((f) => f.tipi));
+
   /**
-   * o = { tipo, oggetto, titolo, materia, inviata(modifica) }. La stima si chiede 400 ms dopo l'ultimo cambiamento;
-   * Modifica si accende solo con la stima di quella richiesta arrivata e consentita.
+   * o = { tipo, oggetto, titolo, materia, parte, inviata(modifica) }. La stima si chiede 400 ms dopo l'ultimo
+   * cambiamento; Modifica si accende solo con la stima di quella richiesta arrivata e consentita. Con `parte` (il
+   * pulsante vicino ad Ascolta questa parte) si apre su Scelgo io con quella parte già scelta.
+   * §44.9 File da usare: si mandano subito come materiale della materia (come gli altri) e la modifica li usa; se la
+   * finestra si chiude senza mandare la modifica, i file mandati si tolgono.
    */
   A.apriModifica = function (o) {
     const tipo = o.tipo;
     const x = o.oggetto || {};
     const m = o.materia || { colore: 'ambra' };
+    const materiaId = x.materia_id || m.id;
     const cfg = L.MODIFICA_PER_TIPO[tipo === 'mappa' && x.tipo === 'date' ? 'mappa_date' : tipo];
     const parti = L.partiModificabili(x, tipo);
     const corretta = tipo === 'simulata' && x.stato === 'corretta';
     const seq = L.creaSequenza();
-    const st = { dove: 'tutto', scelte: new Set(), stima: null, chiaveStima: null, erroreStima: null, invio: false, errore: null, statoErrore: null, timer: null, chiusa: false };
+    const conParte = o.parte != null && parti.some((p) => p.n === Number(o.parte));
+    const st = {
+      dove: conParte ? 'io' : 'tutto', scelte: new Set(conParte ? [Number(o.parte)] : []), stima: null, chiaveStima: null, erroreStima: null, invio: false, errore: null, statoErrore: null, timer: null, chiusa: false,
+      file: [], tipoFile: 'appunti', inviata: false, giroFile: null,
+    };
+    let contaFile = 0;
 
     const corpo = h('div', { class: 'corpo bianco' });
     const piede = h('div', { class: 'piede' });
     const ctl = A.apriFinestra({
       stretta: true, etichetta: 'Cosa vuoi cambiare?', classe: 'finestra-nuovo finestra-modifica ' + A.classeMateria(m.colore),
       disegna: (f) => svuota(f, corpo, piede),
-      suChiusura: () => { st.chiusa = true; clearTimeout(st.timer); },
+      suChiusura: () => {
+        st.chiusa = true;
+        clearTimeout(st.timer);
+        clearTimeout(st.giroFile);
+        if (!st.inviata) st.file.forEach((f) => { if (f.id) togliDalServer(f.id); });
+      },
     });
     ctl.tipo = 'modifica';
+    // I file trascinati sulla finestra diventano file da usare.
+    ctl.accettaFile = true;
+    ctl.riceviFile = (file) => aggiungiFile(file);
 
     const campo = h('textarea', { class: 'mod-campo', 'data-campo': 'richiesta', maxlength: String(L.MASSIMO_RICHIESTA), placeholder: cfg.segnaposto, 'aria-label': 'Cosa vuoi cambiare', rows: '4' });
     const conta = h('span', { class: 'mod-conta', 'data-conta': 'richiesta' });
     const sceltaDove = h('div', { class: 'segmenti mod-dove', role: 'group', 'aria-label': 'Dove?' });
     sceltaDove.style.setProperty('--n', '2');
     const sottoDove = h('div', { class: 'mod-sotto-dove' });
+    const fileBox = h('div', { class: 'mod-gruppo mod-file', 'data-file': 'modifica' });
     const riepilogo = h('div', { class: 'mod-riepilogo', 'data-riepilogo': 'modifica', 'aria-live': 'polite' });
     const pulsante = h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'manda-modifica', onclick: invia }, 'Modifica');
     const sotto = h('div', { class: 'mod-sotto', 'data-sotto': 'modifica' });
@@ -77,14 +99,131 @@
         h('button', { type: 'button', class: 'tondo', 'aria-label': 'Chiudi', 'data-azione': 'chiudi-modifica', onclick: () => ctl.chiudi() }, icona('chiudi'))),
       h('div', { class: 'mod-gruppo' }, campo, conta),
       h('div', { class: 'mod-spunti', 'data-spunti': tipo }, cfg.spunti.map((f) => h('button', { type: 'button', class: 'mod-spunto', 'data-spunto': f, onclick: () => spunto(f) }, f))),
+      fileBox,
       parti.length > 1 ? h('div', { class: 'mod-gruppo' }, h('span', { class: 'mod-etichetta' }, 'Dove?'), sceltaDove, sottoDove) : null,
       riepilogo);
     svuota(piede, pulsante, sotto);
 
     const richiesta = () => campo.value.trim();
     const partiScelte = () => (st.dove === 'tutto' ? [] : Array.from(st.scelte).sort((a, b) => a - b));
-    const completa = () => !!richiesta() && (st.dove === 'tutto' || st.scelte.size > 0);
-    const chiave = () => [richiesta(), st.dove, partiScelte().join(',')].join('|');
+    const materiali = () => st.file.filter((f) => f.id && f.stato !== 'errore').map((f) => f.id);
+    const completa = () => !!richiesta() && (st.dove === 'tutto' || st.scelte.size > 0) && !L.motivoFileModifica(st.file);
+    const chiave = () => [richiesta(), st.dove, partiScelte().join(','), st.file.map((f) => f.id + ':' + f.stato).join(',')].join('|');
+
+    // --- §44.9 File da usare --------------------------------------------------------------------------------------
+
+    function togliDalServer(id) {
+      A.api.elimina('/server/api/materiale/' + id).then((r) => { if (!r.ok && r.stato !== 404) A.avviso('Non sono riuscito a togliere un file: toglilo dalla materia.'); });
+    }
+
+    function scegliFile() {
+      const input = h('input', { type: 'file', accept: ACCETTA_FILE, multiple: true, class: 'sr' });
+      input.addEventListener('change', () => {
+        const scelti = Array.from(input.files || []);
+        input.remove();
+        if (scelti.length) aggiungiFile(scelti);
+      });
+      document.body.append(input);
+      input.click();
+    }
+
+    async function aggiungiFile(elementi) {
+      if (st.chiusa || st.invio) return;
+      if (S.senzaRete) { A.avviso('Senza rete i file non arrivano al server di casa.'); return; }
+      let es;
+      try {
+        es = await window.LectioArchivi.espandi(Array.from(elementi || []));
+      } catch (e) {
+        A.avviso('Non riesco ad aprire questi file dal computer.');
+        return;
+      }
+      if (st.chiusa) return;
+      if (!es.buoni.length) { A.avviso(window.LectioArchivi.fraseNiente(es)); return; }
+      const avvisi = window.LectioArchivi.frasiSaltati(es.saltati);
+      const posto = Math.max(0, L.MASSIMO_FILE_MODIFICA - st.file.length);
+      if (es.buoni.length > posto) avvisi.push('Al massimo ' + L.MASSIMO_FILE_MODIFICA + ' file per una modifica: gli altri non li ho aggiunti.');
+      if (avvisi.length) A.avviso(avvisi.join(' '));
+      const nuovi = es.buoni.slice(0, posto).map((f) => ({ chiave: ++contaFile, nome: f.name, foto: L.eImmagine(f.name), stato: 'mando', origine: f }));
+      if (!nuovi.length) return;
+      if (!richiesta()) campo.value = L.RICHIESTA_CON_FILE;
+      st.file.push(...nuovi);
+      disegnaFile();
+      cambiato();
+      for (const f of nuovi) await mandaFile(f); // uno alla volta, come in Aggiungi materiale
+    }
+
+    async function mandaFile(f) {
+      let byte;
+      try { byte = await f.origine.leggi(); } catch (e) { byte = null; }
+      if (!st.file.includes(f)) return; // tolto mentre lo leggevo dal computer
+      let r = null;
+      if (byte) r = await A.api.carica(byte, { materia_id: materiaId, tipo: st.tipoFile, data: L.iso(), nome: f.nome });
+      delete f.origine;
+      if (r && r.ok && r.dati) {
+        Object.assign(f, { id: r.dati.id, stato: r.dati.stato, errore: r.dati.errore || null, titolo: r.dati.stato === 'pronto' ? r.dati.titolo : null });
+        // Chiusa o tolto mentre andava: il file non serve più.
+        if ((st.chiusa && !st.inviata) || !st.file.includes(f)) { togliDalServer(f.id); return; }
+      } else {
+        Object.assign(f, { stato: 'errore', errore: byte ? ((r && r.errore) || 'Non è entrato.') : 'Non riesco a leggerlo dal computer.' });
+      }
+      if (st.chiusa) return;
+      disegnaFile();
+      cambiato();
+      seguiFile();
+    }
+
+    /** Finché un file si legge, ogni 3 secondi si guarda a che punto è (per "Letto" o per l'errore). */
+    function seguiFile() {
+      clearTimeout(st.giroFile);
+      if (st.chiusa || !st.file.some((f) => f.id && f.stato === 'in_lettura')) return;
+      st.giroFile = setTimeout(async () => {
+        let cambiati = false;
+        for (const f of st.file.filter((y) => y.id && y.stato === 'in_lettura')) {
+          const r = await A.api.get('/server/api/materiale/' + f.id);
+          if (st.chiusa) return;
+          if (r.ok && r.dati && r.dati.stato !== f.stato) {
+            Object.assign(f, { stato: r.dati.stato, errore: r.dati.errore || null, titolo: r.dati.stato === 'pronto' ? r.dati.titolo : null });
+            cambiati = true;
+          }
+        }
+        if (cambiati) { disegnaFile(); cambiato(); }
+        seguiFile();
+      }, T.statoFile || 3000);
+    }
+
+    function togliFile(f) {
+      st.file = st.file.filter((y) => y !== f);
+      if (f.id) togliDalServer(f.id);
+      disegnaFile();
+      cambiato();
+    }
+
+    function scegliTipoFile(t) {
+      if (st.tipoFile === t) return;
+      st.tipoFile = t;
+      // Vale anche per quelli già mandati: si cambia il tipo (Lectio lo rilegge con la priorità giusta).
+      st.file.filter((f) => f.id && f.stato !== 'errore').forEach((f) => {
+        A.api.patch('/server/api/materiale/' + f.id, { tipo: t }).then((r) => { if (!r.ok) A.avviso(r.errore); });
+      });
+      disegnaFile();
+    }
+
+    function disegnaFile() {
+      if (st.chiusa) return;
+      const foto = st.file.filter((f) => f.foto).length;
+      svuota(fileBox,
+        h('div', { class: 'mod-file-testa' },
+          h('span', { class: 'mod-etichetta' }, 'File da usare'),
+          h('button', { type: 'button', class: 'pulsante tenue piccolo', 'data-azione': 'aggiungi-file-modifica', disabled: S.senzaRete || st.invio || st.file.length >= L.MASSIMO_FILE_MODIFICA ? true : null, onclick: scegliFile },
+            icona('piu'), 'Aggiungi file')),
+        st.file.length ? h('div', { class: 'mod-file-elenco' }, st.file.map((f) => h('div', { class: 'mod-file-riga' + (f.stato === 'errore' ? ' errore' : ''), 'data-file-stato': f.stato },
+          f.stato === 'mando' || f.stato === 'in_lettura' ? h('span', { class: 'segnaposto mod-file-icona', 'aria-hidden': 'true' }) : icona(f.foto ? 'foto' : 'file', 'mod-file-icona'),
+          h('span', { class: 'testi' }, h('span', { class: 'forte' }, f.titolo || f.nome), h('span', { class: f.stato === 'errore' ? 'errore-campo' : 'secondario' }, L.statoFileModifica(f))),
+          h('button', { type: 'button', class: 'tondo piccolo', 'aria-label': 'Togli ' + (f.titolo || f.nome), 'data-azione': 'togli-file', disabled: f.stato === 'mando' ? true : null, onclick: () => togliFile(f) }, icona('chiudi'))))) : null,
+        st.file.length ? h('div', { class: 'mod-file-tipo', role: 'group', 'aria-label': 'Che cosa sono' }, h('span', { class: 'mod-file-sono' }, 'Sono'),
+          TIPI_FILE.map((t) => h('button', { type: 'button', class: 'nl-pillola', 'aria-pressed': t.tipo === st.tipoFile ? 'true' : 'false', 'data-tipo-file': t.tipo, onclick: () => scegliTipoFile(t.tipo) }, t.nome))) : null,
+        foto ? h('span', { class: 'moltotenue', 'data-file': 'costo-foto' }, foto > 1 ? 'Le foto si leggono a pagamento: circa 0,4 cent a foto, ' + L.euroCosto(foto * 0.004) + ' per ' + foto + ' foto.' : 'Le foto si leggono a pagamento: circa 0,4 cent a foto.') : null);
+    }
 
     function cambiato() {
       const c = L.contatoreRichiesta(campo.value);
@@ -108,7 +247,7 @@
       if (!completa() || st.chiusa) return;
       const k = chiave();
       const n = seq.nuova();
-      const r = await A.api.post('/server/api/modifiche/stima', { tipo, id: x.id, richiesta: richiesta(), parti: partiScelte() });
+      const r = await A.api.post('/server/api/modifiche/stima', { tipo, id: x.id, richiesta: richiesta(), parti: partiScelte(), materiali: materiali() });
       if (st.chiusa || !seq.valida(n)) return;
       st.chiaveStima = k;
       st.stima = r.ok && r.dati ? r.dati : null;
@@ -172,6 +311,7 @@
       else if (completa() && st.erroreStima) frase = A.messaggio('errore', st.erroreStima, [h('button', { type: 'button', class: 'pulsante bianco', 'data-azione': 'riprova-stima', onclick: chiediStima }, 'Riprova')]);
       else if (s && !consentita) frase = h('p', { class: 'mod-motivo', 'data-motivo': 'modifica' }, s.motivo || 'Sforerebbe il tetto del mese.');
       else if (S.senzaRete) frase = h('p', { class: 'mod-motivo', 'data-motivo': 'modifica' }, 'Serve la rete');
+      else if (richiesta() && L.motivoFileModifica(st.file)) frase = h('p', { class: 'mod-motivo', 'data-motivo': 'file' }, L.motivoFileModifica(st.file));
       svuota(sotto, frase);
     }
 
@@ -180,7 +320,7 @@
       st.invio = true;
       st.errore = null;
       disegnaRiepilogo();
-      const r = await A.api.post('/server/api/modifiche', { tipo, id: x.id, richiesta: richiesta(), parti: partiScelte() });
+      const r = await A.api.post('/server/api/modifiche', { tipo, id: x.id, richiesta: richiesta(), parti: partiScelte(), materiali: materiali() });
       st.invio = false;
       if (st.chiusa) return;
       if (!r.ok || !r.dati) {
@@ -190,12 +330,14 @@
         return;
       }
       if (S.motore) S.motore.in_preparazione = true;
+      st.inviata = true; // i file restano nella materia, legati alla modifica
       ctl.chiudi(true);
       if (o.inviata) o.inviata(r.dati);
     }
 
     cambiato();
     disegnaDove();
+    disegnaFile();
     setTimeout(() => { if (!st.chiusa) campo.focus(); }, 30);
     return ctl;
   };
@@ -676,4 +818,44 @@
 
   /** §44.3 Accanto al titolo di una parte cambiata: "CAMBIATA" nel colore accento. */
   A.etichettaCambiata = () => h('span', { class: 'mod-cambiata-t', 'data-cambiata': 'si' }, 'Cambiata');
+
+  // --- §44.9 I file legati alle parti che hanno cambiato -------------------------------------------------------------
+
+  /** Apre la scheda di un file della materia (Che cos'è, titolo, quello che ha letto). */
+  async function apriUnFile(f, materia) {
+    const r = await A.api.get('/server/api/materiale/' + f.materiale_id);
+    if (!r.ok || !r.dati) { A.avviso(r.stato === 404 ? 'Questo file non c\'è più.' : r.errore); return; }
+    A.apriMateriale(r.dati, materia || A.materiaDi(r.dati.materia_id), () => { if (S.aggiornaPagina) S.aggiornaPagina(); });
+  }
+
+  /** "Cambiata con 2 file": con un file solo si apre quello, con più file prima si sceglie quale. */
+  A.apriFileDellaParte = function (lista, materia) {
+    if (!lista || !lista.length) return;
+    if (lista.length === 1) { apriUnFile(lista[0], materia); return; }
+    A.apriFoglio({
+      titolo: 'File che l\'hanno cambiata',
+      corpo: (c, ctl) => svuota(c, h('div', null, lista.map((f) => h('button', {
+        type: 'button', class: 'riga-foglio', 'data-materiale': String(f.materiale_id), onclick: () => { ctl.chiudi(true); apriUnFile(f, materia); },
+      }, icona('file'), f.titolo || 'File')))),
+    });
+  };
+
+  /** L'etichetta sulla parte n di un oggetto: "Cambiata con 1 file" (null se nessun file l'ha cambiata). */
+  A.etichettaFile = function (oggetto, n, materia) {
+    const lista = L.fileDellaParte(oggetto, n);
+    const frase = L.fraseFileParte(lista);
+    if (!frase) return null;
+    return h('button', {
+      type: 'button', class: 'mod-file-chip', 'data-file-parte': String(n), title: lista.map((f) => f.titolo).filter(Boolean).join(', '),
+      onclick: (e) => { e.stopPropagation(); A.apriFileDellaParte(lista, materia); },
+    }, icona('file'), frase);
+  };
+
+  /** Dalla riga di un file (usato_per) alla cosa che ha cambiato: lo schema si apre alla parte giusta. */
+  A.apriCambiato = function (u) {
+    if (!u) return;
+    const n = (u.parti || [])[0];
+    if (u.tipo === 'schema' && n) { A.apriSchemaAllaParte(u.id, n.n); return; }
+    A.vai({ schema: '#schema/', lezione: '#lettore/', riassunto: '#riassunto/', simulata: '#simulata/', mappa: '#mappa/' }[u.tipo] + u.id);
+  };
 })();

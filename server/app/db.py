@@ -511,6 +511,17 @@ CREATE INDEX versioni_oggetto ON versioni (tipo, oggetto_id, id)
 """
 
 
+# 1.4.2 (21/11): i file aggiunti a una modifica (contratto 28.5) restano nella materia, legati alla modifica.
+SCHEMA_8 = """
+CREATE TABLE modifiche_materiali (
+    modifica_id INTEGER NOT NULL REFERENCES modifiche(id) ON DELETE CASCADE,
+    materiale_id INTEGER NOT NULL REFERENCES materiali(id) ON DELETE CASCADE,
+    PRIMARY KEY (modifica_id, materiale_id)
+);
+CREATE INDEX modifiche_materiali_file ON modifiche_materiali (materiale_id)
+"""
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
@@ -520,6 +531,7 @@ MIGRAZIONI = [
     (5, SCHEMA_5, None),
     (6, SCHEMA_6, None),
     (7, SCHEMA_7, None),
+    (8, SCHEMA_8, None),
 ]
 
 

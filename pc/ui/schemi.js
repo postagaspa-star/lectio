@@ -357,10 +357,17 @@
             h('span', { class: 'sch-num', 'aria-hidden': 'true' }, String(x.n)),
             h('h2', { class: 'sch-titolo-parte' }, x.titolo),
             cambiata ? A.etichettaCambiata() : null,
-            h('button', {
-              type: 'button', class: 'pillola-azione', 'data-azione': 'ascolta-parte', disabled: spento() ? true : null,
-              onclick: () => A.nuovaLezione(m.id, { argomento: x.titolo, materiali: s.materiali || [] }),
-            }, icona('lezioni'), 'Ascolta questa parte')),
+            A.etichettaFile(s, x.n, m),
+            h('div', { class: 'sch-azioni-parte' },
+              h('button', {
+                type: 'button', class: 'pillola-azione', 'data-azione': 'ascolta-parte', disabled: spento() ? true : null,
+                onclick: () => A.nuovaLezione(m.id, { argomento: x.titolo, materiali: s.materiali || [] }),
+              }, icona('lezioni'), 'Ascolta questa parte'),
+              // §44.9 Modifica anche da qui: si apre con questa parte già scelta (e si possono aggiungere file).
+              seguito().spegnibile(h('button', {
+                type: 'button', class: 'pillola-azione mod-pillola', 'data-azione': 'modifica-parte',
+                onclick: () => A.apriModifica({ tipo: 'schema', oggetto: s, titolo: s.titolo || s.argomento, materia: m, parte: x.n, inviata: (md) => seguito().avvia(md) }),
+              }, icona('matita'), 'Modifica questa parte')))),
           opera,
           h('div', { class: 'sch-blocchi' }, figli));
         parti.set(x.n, sezEl);

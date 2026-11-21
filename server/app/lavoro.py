@@ -72,7 +72,7 @@ class Lavoro:
             ).fetchone()
             # Le modifiche delle lezioni (contratto 28) aspettano nella stessa coda: anche loro rifanno la voce.
             modifica = conn.execute("SELECT id, in_coda_dal FROM modifiche WHERE tipo = 'lezione' AND stato = 'in_coda'"
-                                    " ORDER BY in_coda_dal, id LIMIT 1").fetchone()
+                                    f" AND NOT {modifiche.FILE_DA_ASPETTARE} ORDER BY in_coda_dal, id LIMIT 1").fetchone()
             if riga is None and modifica is None:
                 return VUOTO
             if conn.execute("SELECT 1 FROM lezioni WHERE stato = 'in_preparazione' UNION ALL SELECT 1 FROM modifiche"
@@ -153,8 +153,8 @@ class Lavoro:
             schema = conn.execute("SELECT id, in_coda_dal FROM schemi WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
             prova = conn.execute("SELECT id, in_coda_dal FROM simulate WHERE stato = 'in_coda' ORDER BY in_coda_dal, id LIMIT 1").fetchone()
             # Le modifiche (contratto 28) dopo correzioni e riassunti: riscrivono poche parti, fanno presto.
-            modifica = conn.execute("SELECT id FROM modifiche WHERE tipo <> 'lezione' AND stato = 'in_coda' ORDER BY in_coda_dal, id"
-                                    " LIMIT 1").fetchone()
+            modifica = conn.execute("SELECT id FROM modifiche WHERE tipo <> 'lezione' AND stato = 'in_coda'"
+                                    f" AND NOT {modifiche.FILE_DA_ASPETTARE} ORDER BY in_coda_dal, id LIMIT 1").fetchone()
             if da_correggere is None and riassunto is None and mappa is None and schema is None and prova is None and modifica is None:
                 return VUOTO
             if da_correggere is not None:
@@ -237,6 +237,9 @@ class Lavoro:
                     log.error("sottofondo %s %s: mi fermo, si riprova con Riprova o al riavvio", *chiave)
                 return VUOTO  # si aspetta prima di riprovare
             self._fallimenti.pop(chiave, None)
+            if chiave[0] in ("materiale", "memoria"):  # una modifica poteva aspettare questo file (contratto 28.5)
+                self.sveglia("studio")
+                self.sveglia("lezioni")
             return FATTO
         return VUOTO
 

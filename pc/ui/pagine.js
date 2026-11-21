@@ -504,10 +504,19 @@
         h('button', { type: 'button', class: 'pulsante bianco', onclick: async () => { const r = await A.api.post('/server/api/materiale/' + x.id + '/riprova', {}); if (!r.ok) A.avviso(r.errore); ricarica(); } }, 'Riprova'),
         h('button', { type: 'button', class: 'tondo', 'aria-label': 'Elimina', onclick: () => eliminaMateriale(x, ricarica) }, icona('cestino')));
     }
-    return h('button', { type: 'button', class: 'riga riga-materiale', 'data-materiale': String(x.id), onclick: () => A.apriMateriale(x, m, ricarica) }, icona(iconaTipo(x.tipo), 'icona-tipo'),
-      h('span', { class: 'testi' }, h('span', { class: 'forte' }, x.titolo || x.nome_file || 'Materiale'), h('span', { class: 'secondario' }, sotto),
-        // §15.5: il server dice se ha letto solo una parte (per esempio le prime pagine).
-        x.avviso ? h('span', { class: 'avviso-materiale', 'data-avviso': 'materiale' }, x.avviso) : null));
+    const testi = h('span', { class: 'testi' }, h('span', { class: 'forte' }, x.titolo || x.nome_file || 'Materiale'), h('span', { class: 'secondario' }, sotto),
+      // §15.5: il server dice se ha letto solo una parte (per esempio le prime pagine).
+      x.avviso ? h('span', { class: 'avviso-materiale', 'data-avviso': 'materiale' }, x.avviso) : null);
+    const legami = x.usato_per || [];
+    if (!legami.length) {
+      return h('button', { type: 'button', class: 'riga riga-materiale', 'data-materiale': String(x.id), onclick: () => A.apriMateriale(x, m, ricarica) }, icona(iconaTipo(x.tipo), 'icona-tipo'), testi);
+    }
+    // §44.9 Un file aggiunto con una modifica dice cosa ha cambiato; un clic porta lì.
+    return h('div', { class: 'riga riga-materiale con-legame', 'data-materiale': String(x.id) },
+      h('button', { type: 'button', class: 'mat-apri', onclick: () => A.apriMateriale(x, m, ricarica) }, icona(iconaTipo(x.tipo), 'icona-tipo'), testi),
+      h('div', { class: 'mat-legami' }, legami.slice(0, 3).map((u) => h('button', {
+        type: 'button', class: 'mat-legame', 'data-legame': u.tipo + ':' + u.id, onclick: () => A.apriCambiato(u),
+      }, h('span', null, L.fraseUsatoPer(u)), icona('freccia')))));
   }
   A.rigaMateriale = rigaMateriale;
 

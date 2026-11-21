@@ -1538,6 +1538,66 @@
     return 'Fatto: ho cambiato le parti ' + n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1];
   }
 
+  // --- §44.9 I file aggiunti a una modifica (contratto §28.5) ------------------------------------------------------
+
+  /** La richiesta che Lectio scrive da solo quando si aggiunge il primo file e il campo è ancora vuoto. */
+  const RICHIESTA_CON_FILE = 'Aggiungi quello che c\'è nei file che ho allegato.';
+  /** Quanti file al massimo per una modifica (il server ne accetta 20). */
+  const MASSIMO_FILE_MODIFICA = 20;
+  /** Come si chiamano le parti di ogni tipo (una mappa è un pezzo solo). */
+  const NOME_PARTE = { schema: ['parte', 'parti'], riassunto: ['parte', 'parti'], lezione: ['capitolo', 'capitoli'], simulata: ['domanda', 'domande'] };
+
+  /** "parte 3", "parti 2 e 5", "capitolo 1"; '' per una mappa o senza parti. Accetta numeri o { n }. */
+  function nomeParti(tipo, parti) {
+    const nomi = NOME_PARTE[tipo];
+    const n = Array.from(new Set((parti || []).map((p) => Number(p && typeof p === 'object' ? p.n : p)).filter((x) => Number.isFinite(x)))).sort((a, b) => a - b);
+    if (!nomi || !n.length) return '';
+    return (n.length === 1 ? nomi[0] + ' ' + n[0] : nomi[1] + ' ' + n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1]);
+  }
+
+  /**
+   * La riga di un file nella materia (usato_per): "Ha cambiato: Gli inizi dell'antropologia · parte 3". Finché la
+   * modifica lavora "Sta cambiando", se si è fermata "Doveva cambiare".
+   */
+  function fraseUsatoPer(u) {
+    if (!u) return null;
+    const verbo = u.stato === 'pronta' ? 'Ha cambiato' : u.stato === 'errore' ? 'Doveva cambiare' : 'Sta cambiando';
+    const parti = nomeParti(u.tipo, u.parti);
+    return verbo + ': ' + (pulisciTitolo(u.titolo) || 'senza titolo') + (parti ? ' · ' + parti : '');
+  }
+
+  /** I file che hanno cambiato la parte n (solo modifiche finite), un file una volta sola. */
+  function fileDellaParte(oggetto, n) {
+    const visti = new Set();
+    return ((oggetto && oggetto.file_delle_modifiche) || []).filter((f) => {
+      if (f.stato !== 'pronta' || visti.has(f.materiale_id) || !(f.parti || []).some((p) => Number(p.n) === Number(n))) return false;
+      visti.add(f.materiale_id);
+      return true;
+    });
+  }
+
+  /** L'etichetta sulla parte: "Cambiata con 1 file", "Cambiata con 2 file" (null senza file). */
+  function fraseFileParte(lista) {
+    return lista && lista.length ? 'Cambiata con ' + lista.length + ' file' : null;
+  }
+
+  /** Lo stato di un file nella finestra Modifica: f.stato = 'mando' | 'in_lettura' | 'pronto' | 'errore'. */
+  function statoFileModifica(f) {
+    if (!f) return '';
+    if (f.stato === 'mando') return 'Lo mando…';
+    if (f.stato === 'in_lettura') return 'Lo sto leggendo…';
+    if (f.stato === 'errore') return f.errore || 'Non sono riuscito a leggerlo.';
+    return 'Letto';
+  }
+
+  /** Perché Modifica è spento per colpa dei file (null = i file vanno bene). */
+  function motivoFileModifica(lista) {
+    const l = lista || [];
+    if (l.some((f) => f.stato === 'mando')) return 'Aspetta che i file siano arrivati.';
+    if (l.some((f) => f.stato === 'errore')) return 'Togli i file che non sono entrati, poi tocca Modifica.';
+    return null;
+  }
+
   /** §44.2 Il costo nel riepilogo: "circa 0,03 €", con "Tutto" "fino a 0,15 € (di solito meno)", in prova "Prova". */
   function costoModifica(stima, prova) {
     if (prova) return 'Prova';
@@ -1670,5 +1730,6 @@
     MASSIMO_RICHIESTA, AVVISO_RICHIESTA_DA, MASSIMO_TESTO_A_MANO, MASSIMO_TITOLO_A_MANO, MODIFICA_PER_TIPO, modificaAttiva, aggiungiSpuntoModifica,
     contatoreRichiesta, partiModificabili, motivoSpentaModifica, pulsanteVersione, fraseCambiate, costoModifica, righeRiepilogoModifica,
     righeVoci, contenutoSchemaCorretto, contenutoRiassuntoCorretto, correzioniFatte, puntoDopoModifica,
+    RICHIESTA_CON_FILE, MASSIMO_FILE_MODIFICA, nomeParti, fraseUsatoPer, fileDellaParte, fraseFileParte, statoFileModifica, motivoFileModifica,
   };
 });

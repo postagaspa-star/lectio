@@ -62,10 +62,17 @@
     });
   };
 
+  /** Il titolo di una parte con "Cambiata" (§44.3) e "Cambiata con 1 file" (§44.9). */
+  function testaParte(r, p, n, cambiata) {
+    const file = A.etichettaFile(r, n, A.materiaDi(r.materia_id));
+    if (!cambiata && !file) return p.titolo ? h('h2', null, p.titolo) : null;
+    return h('div', { class: 'mod-titolo-cambiata' }, p.titolo ? h('h2', null, p.titolo) : null, cambiata ? A.etichettaCambiata() : null, file);
+  }
+
   /** Il testo di un riassunto: titolo, paragrafi e punti, senza segni di fonte. `cambiate` = parti appena modificate (§44.3). */
   function testoRiassunto(r, cambiate) {
     return ((r.contenuto && r.contenuto.parti) || []).map((p, i) => h('section', { class: 'rs-parte' + (cambiate && cambiate.has(i + 1) ? ' mod-cambiata' : ''), 'data-parte': String(i + 1) },
-      cambiate && cambiate.has(i + 1) ? (p.titolo ? h('div', { class: 'mod-titolo-cambiata' }, h('h2', null, p.titolo), A.etichettaCambiata()) : A.etichettaCambiata()) : p.titolo ? h('h2', null, p.titolo) : null,
+      testaParte(r, p, i + 1, cambiate && cambiate.has(i + 1)),
       (p.paragrafi || []).length ? h('div', { class: 'rs-paragrafi' }, p.paragrafi.map((t) => h('p', { class: 'rs-testo' }, A.conGrassetto(t)))) : null,
       (p.punti || []).length ? h('ul', { class: 'sch-punti' }, p.punti.map((t) => h('li', null, A.conGrassetto(t)))) : null));
   }

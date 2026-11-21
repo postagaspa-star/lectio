@@ -639,7 +639,11 @@
   // --- Trascinare i file (§2: nella pagina di una materia e in Per Gemini) -----------------------
 
   const conFile = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
-  const paginaConFile = () => ['materia', 'cartella', 'gemini', 'scheda'].includes(S.rotta.vista) && !S.velo.some((v) => !v.accettaFile);
+  const paginaConFile = () => {
+    const sopra = S.velo[S.velo.length - 1];
+    if (sopra && sopra.accettaFile && sopra.riceviFile) return true; // la finestra aperta li prende (per esempio Modifica, §44.9)
+    return ['materia', 'cartella', 'gemini', 'scheda'].includes(S.rotta.vista) && !S.velo.some((v) => !v.accettaFile);
+  };
   function accendi(si) {
     document.querySelectorAll('.zona-trascina').forEach((z) => z.classList.toggle('accesa', !!si));
   }

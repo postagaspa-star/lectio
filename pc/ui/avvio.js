@@ -344,6 +344,41 @@
         await new Promise((r) => setTimeout(r, 200));
         break;
       }
+      // §44.9 File da usare: la finestra aperta da "Modifica questa parte", poi i legami sulla parte e nella materia.
+      case 'modifica-file': {
+        await vai('#schema/3', '.sch-parte');
+        document.querySelector('.sch-parte[data-parte="2"] [data-azione="modifica-parte"]').click();
+        await aspetta('[data-file="modifica"]');
+        const sopra = S.velo[S.velo.length - 1];
+        sopra.riceviFile([new File(['Augusto ricevette dal senato il titolo di princeps nel 27 a.C.'], 'Foto libro pag. 152.jpg', { type: 'image/jpeg' }),
+          new File(['Il principato: le forme della repubblica e il potere di uno solo.'], 'Appunti del prof.txt', { type: 'text/plain' })]);
+        await aspetta('.mod-file-riga + .mod-file-riga[data-file-stato="pronto"]');
+        await aspetta('[data-azione="manda-modifica"]:not(:disabled)');
+        break;
+      }
+      case 'modifica-file-legami': case 'materia-file-legame': {
+        const id = 140;
+        server.stato.materiale[1].unshift({
+          id, materia_id: 1, tipo: 'appunti', titolo: 'Augusto princeps: foto del libro', data: server.stato.oggi, origine: 'foto', nome_file: 'Foto libro pag. 152.jpg', titolo_da: 'file',
+          caratteri: 820, stato: 'pronto', errore: null, avviso: null, costo_eur: 0.004, creato_il: new Date().toISOString(), testo: 'Augusto ricevette dal senato il titolo di princeps.', cartella_id: null, cartella_da: null,
+        });
+        server.stato.modifiche.push({
+          id: 52, tipo: 'schema', oggetto_id: 3, materia_id: 1, richiesta: 'Aggiungi quello che c\'è nei file che ho allegato.', parti: [2], stato: 'pronta', fase: null, fatto: 1, totale: 1,
+          frase: null, errore: null, nota: null, cambiate: [2], stima_eur: 0.03, creata_il: new Date().toISOString(), pronta_il: new Date().toISOString(), _file: [id],
+        });
+        if (scena === 'materia-file-legame') {
+          await vai('#materia/1', '.riga-materiale.con-legame');
+          S.dom.scorre.style.scrollBehavior = 'auto';
+          S.dom.scorre.scrollTop += document.querySelector('.riga-materiale.con-legame').getBoundingClientRect().top - 300;
+          await attendi(200);
+          break;
+        }
+        await vai('#schema/3', '[data-file-parte="2"]');
+        S.dom.scorre.style.scrollBehavior = 'auto';
+        S.dom.scorre.scrollTop += document.querySelector('.sch-parte[data-parte="2"]').getBoundingClientRect().top - 24;
+        await attendi(200);
+        break;
+      }
       case 'correggi': {
         await vai('#schema/3', '.sch-parte');
         document.querySelector('[data-azione="puntini"]').click();

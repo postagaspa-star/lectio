@@ -917,7 +917,7 @@
         const i = caps.findIndex((c) => c.n === s.capitolo);
         const cap = caps[i];
         return h('section', { class: (stati[i] === 'corso' ? 'corso' : '') + (cambiato(s.capitolo) ? ' mod-cambiata' : ''), 'data-capitolo': String(s.capitolo) },
-          h('h3', { class: 'mod-titolo-cambiata' }, h('span', null, cap ? cap.titolo : 'Capitolo ' + s.capitolo), cambiato(s.capitolo) ? A.etichettaCambiata() : null),
+          h('h3', { class: 'mod-titolo-cambiata' }, h('span', null, cap ? cap.titolo : 'Capitolo ' + s.capitolo), cambiato(s.capitolo) ? A.etichettaCambiata() : null, A.etichettaFile(l, s.capitolo, materia())),
           (s.paragrafi || []).map((p) => h('p', null, p.replace(/^\s*(\[[a-z]+=[a-z]+\])+\s*/i, ''))));
       });
       destra.append(h('div', { class: 'testo-lezione' }, sezioni.length ? sezioni : h('p', { class: 'secondario' }, 'Il testo di questa lezione non c\'è.')));

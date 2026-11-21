@@ -9,7 +9,7 @@ const B = require('./banco');
 
 const L = B.L;
 const opz = { skip: B.SENZA_JSDOM };
-const TEMPI = { stato: 60, modifica: 40, stimaModifica: 20, avviso: 300 };
+const TEMPI = { stato: 60, modifica: 40, stimaModifica: 20, avviso: 300, statoFile: 40 };
 test.afterEach(() => B.chiudiTutte());
 
 async function apri(hash, opzioniServer, prima) {
@@ -227,13 +227,13 @@ test('schema: Modifica a sinistra di Scarica PDF; la finestra chiede la stima, m
   assert.equal(p.q('.mod-parte[data-parte="2"]').getAttribute('aria-checked'), 'true');
   await p.aspetta(() => !p.q('[data-azione="manda-modifica"]').disabled);
   const stime = p.s.chiamate('POST', '/server/api/modifiche/stima');
-  assert.deepEqual(stime[stime.length - 1].corpo, { tipo: 'schema', id: 3, richiesta: 'Aggiungi le date. Più corto', parti: [2] });
+  assert.deepEqual(stime[stime.length - 1].corpo, { tipo: 'schema', id: 3, richiesta: 'Aggiungi le date. Più corto', parti: [2], materiali: [] });
   assert.equal(p.q('[data-riep="costo"]').textContent, 'circa 0,02 €');
   assert.match(p.q('[data-riepilogo="modifica"]').textContent, /Pronta in circa 2 minuti/);
   p.clic(p.q('[data-azione="manda-modifica"]'));
   const mandate = () => p.s.chiamate('POST', '/server/api/modifiche').filter((x) => x.percorso === '/server/api/modifiche');
   await p.aspetta(() => mandate().length === 1);
-  assert.deepEqual(mandate()[0].corpo, { tipo: 'schema', id: 3, richiesta: 'Aggiungi le date. Più corto', parti: [2] });
+  assert.deepEqual(mandate()[0].corpo, { tipo: 'schema', id: 3, richiesta: 'Aggiungi le date. Più corto', parti: [2], materiali: [] });
   // La finestra si chiude, la scheda "Sto modificando" compare sotto la testata e la pillola si spegne.
   await p.aspetta(() => !p.q('.finestra-modifica') && p.q('[data-modifica="lavoro"]'));
   assert.match(p.q('[data-modifica="lavoro"]').textContent, /Sto modificando/);
@@ -573,4 +573,120 @@ test('avviso di Windows modifica_pronta: la pagina che segue la modifica richied
   assert.ok(p.s.chiamate('GET', '/server/api/schemi/3').length > prima);
   assert.doesNotMatch(p.q('#avvisi').textContent, /Ho modificato lo schema/);
   assert.match(p.q('#avvisi').textContent, /Fatto: ho cambiato la parte 2/);
+});
+
+// --- §44.9 File da usare nella modifica ------------------------------------------------------------
+
+test('file delle modifiche: nomi delle parti, frase della riga, etichetta sulla parte, stato e motivo', () => {
+  assert.equal(L.nomeParti('schema', [{ n: 3 }]), 'parte 3');
+  assert.equal(L.nomeParti('schema', [5, 2, 2]), 'parti 2 e 5');
+  assert.equal(L.nomeParti('lezione', [1, 2, 4]), 'capitoli 1, 2 e 4');
+  assert.equal(L.nomeParti('simulata', [4]), 'domanda 4');
+  assert.equal(L.nomeParti('mappa', [1]), '');
+  assert.equal(L.fraseUsatoPer({ tipo: 'schema', titolo: 'Gli inizi dell\'antropologia', stato: 'pronta', parti: [{ n: 3, titolo: 'Evoluzionismo' }] }),
+    'Ha cambiato: Gli inizi dell\'antropologia · parte 3');
+  assert.equal(L.fraseUsatoPer({ tipo: 'mappa', titolo: 'Mappa', stato: 'in_coda', parti: [] }), 'Sta cambiando: Mappa');
+  assert.equal(L.fraseUsatoPer({ tipo: 'riassunto', titolo: 'Riassunto', stato: 'errore', parti: [{ n: 1 }] }), 'Doveva cambiare: Riassunto · parte 1');
+  const o = { file_delle_modifiche: [
+    { materiale_id: 1, titolo: 'Foto', stato: 'pronta', parti: [{ n: 3 }] },
+    { materiale_id: 2, titolo: 'Scheda', stato: 'pronta', parti: [{ n: 3 }, { n: 4 }] },
+    { materiale_id: 1, titolo: 'Foto', stato: 'pronta', parti: [{ n: 3 }] },
+    { materiale_id: 3, titolo: 'Ancora in coda', stato: 'in_coda', parti: [{ n: 3 }] },
+  ] };
+  assert.deepEqual(L.fileDellaParte(o, 3).map((f) => f.materiale_id), [1, 2]);
+  assert.equal(L.fraseFileParte(L.fileDellaParte(o, 3)), 'Cambiata con 2 file');
+  assert.equal(L.fraseFileParte(L.fileDellaParte(o, 4)), 'Cambiata con 1 file');
+  assert.equal(L.fraseFileParte(L.fileDellaParte(o, 1)), null);
+  assert.equal(L.statoFileModifica({ stato: 'mando' }), 'Lo mando…');
+  assert.equal(L.statoFileModifica({ stato: 'in_lettura' }), 'Lo sto leggendo…');
+  assert.equal(L.statoFileModifica({ stato: 'pronto' }), 'Letto');
+  assert.equal(L.statoFileModifica({ stato: 'errore', errore: 'Foto vuota' }), 'Foto vuota');
+  assert.equal(L.motivoFileModifica([{ stato: 'pronto' }, { stato: 'in_lettura' }]), null);
+  assert.match(L.motivoFileModifica([{ stato: 'mando' }]), /Aspetta/);
+  assert.match(L.motivoFileModifica([{ stato: 'pronto' }, { stato: 'errore' }]), /Togli/);
+});
+
+test('schema: Modifica questa parte vicino ad Ascolta, un file aggiunto resta legato alla parte e nella materia', opz, async () => {
+  const p = await apri('#schema/3');
+  await p.aspetta(() => p.q('.sch-parte[data-parte="2"]'));
+  const testa = p.q('.sch-parte[data-parte="2"] .sch-testa-parte');
+  assert.deepEqual(Array.from(testa.querySelectorAll('.sch-azioni-parte > button')).map((b) => b.getAttribute('data-azione')), ['ascolta-parte', 'modifica-parte']);
+  assert.match(testa.querySelector('[data-azione="modifica-parte"]').textContent, /Modifica questa parte/);
+  assert.equal(testa.querySelector('[data-file-parte]'), null, 'nessun file ancora');
+  p.clic(testa.querySelector('[data-azione="modifica-parte"]'));
+  await p.aspetta(() => p.q('.finestra-modifica [data-file="modifica"]'));
+  assert.equal(p.q('[data-dove="io"]').getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(p.tutti('.mod-parte[aria-checked="true"]').map((b) => b.getAttribute('data-parte')), ['2']);
+  assert.match(p.q('[data-file="modifica"]').textContent, /File da usare/);
+  // Un file trascinato sulla finestra va subito nella materia (come gli altri) e la richiesta si scrive da sola.
+  const sopra = p.A.S.velo[p.A.S.velo.length - 1];
+  sopra.riceviFile([new p.w.File(['Augusto ricevette il titolo di princeps nel 27 a.C.'], 'Foto pag. 52.jpg', { type: 'image/jpeg' })]);
+  await p.aspetta(() => p.q('.mod-file-riga[data-file-stato="in_lettura"]'));
+  const mid = p.s.esempio.stato.schemi.find((x) => x.id === 3).materia_id;
+  const caricati = p.s.chiamate('POST', '/locale/carica');
+  assert.equal(caricati.length, 1);
+  const q = new URLSearchParams(caricati[0].percorso.split('?')[1]);
+  assert.equal(q.get('materia_id'), String(mid));
+  assert.equal(q.get('tipo'), 'appunti');
+  assert.equal(q.get('nome'), 'Foto pag. 52.jpg');
+  assert.match(p.q('.mod-file-riga').textContent, /Lo sto leggendo/);
+  assert.equal(p.q('[data-campo="richiesta"]').value, L.RICHIESTA_CON_FILE);
+  assert.match(p.q('[data-file="costo-foto"]').textContent, /circa 0,4 cent a foto/);
+  const f = p.s.esempio.stato.materiale[mid].find((x) => x.nome_file === 'Foto pag. 52.jpg');
+  Object.assign(f, { stato: 'pronto', titolo: 'Augusto princeps' });
+  await p.aspetta(() => p.q('.mod-file-riga[data-file-stato="pronto"]'));
+  assert.match(p.q('.mod-file-riga').textContent, /Augusto princeps\s*Letto/);
+  await p.aspetta(() => !p.q('[data-azione="manda-modifica"]').disabled);
+  const stime = p.s.chiamate('POST', '/server/api/modifiche/stima');
+  assert.deepEqual(stime[stime.length - 1].corpo.materiali, [f.id]);
+  p.clic(p.q('[data-azione="manda-modifica"]'));
+  const mandate = () => p.s.chiamate('POST', '/server/api/modifiche').filter((x) => x.percorso === '/server/api/modifiche');
+  await p.aspetta(() => mandate().length === 1);
+  assert.deepEqual(mandate()[0].corpo, { tipo: 'schema', id: 3, richiesta: L.RICHIESTA_CON_FILE, parti: [2], materiali: [f.id] });
+  await p.aspetta(() => !p.q('.finestra-modifica'));
+  assert.equal(p.s.chiamate('DELETE', '/server/api/materiale/').length, 0, 'mandata la modifica, il file resta');
+  // Pronta: sulla parte 2 "Cambiata con 1 file", e un clic apre il file.
+  await p.aspetta(() => p.q('.sch-parte[data-parte="2"] [data-file-parte="2"]'), 4000);
+  assert.equal(p.q('[data-file-parte="2"]').textContent, 'Cambiata con 1 file');
+  p.clic(p.q('[data-file-parte="2"]'));
+  await p.aspetta(() => p.q('.finestra-materiale #mat-titolo'));
+  assert.equal(p.q('#mat-titolo').value, 'Augusto princeps');
+  p.tasto('Escape');
+  await p.aspetta(() => !p.q('.finestra-materiale'));
+  // Nella materia la riga del file dice cosa ha cambiato; un clic riporta allo schema, alla parte 2.
+  p.A.vai('#materia/' + mid);
+  await p.aspetta(() => p.q('.riga-materiale.con-legame'));
+  const riga = p.q('.riga-materiale.con-legame');
+  assert.equal(riga.getAttribute('data-materiale'), String(f.id));
+  assert.match(riga.querySelector('.mat-legame').textContent, /^Ha cambiato: .+ · parte 2$/);
+  p.clic(riga.querySelector('.mat-legame'));
+  await p.aspetta(() => p.A.S.rotta.vista === 'schema' && p.q('.sch-parte'));
+  assert.equal(p.A.memoriaStudio.leggi('lectio.schema.parte.3'), 2);
+});
+
+test('Modifica: chiusa senza mandare toglie i file già mandati; un file non entrato spegne Modifica finché non si toglie', opz, async () => {
+  const p = await apri('#schema/3', {}, (s) => {
+    s.risposta = (metodo, percorso) => (percorso.startsWith('/locale/carica') && percorso.includes('rotto')
+      ? [415, { errore: 'Questo tipo di file non lo so leggere.', codice: 'non_valido' }] : undefined);
+  });
+  await p.aspetta(() => p.q('.sch-parte'));
+  p.clic(p.q('.sch-testa [data-azione="modifica"]'));
+  await p.aspetta(() => p.q('.finestra-modifica [data-file="modifica"]'));
+  p.scrivi(p.q('[data-campo="richiesta"]'), 'Aggiungi la scheda');
+  const sopra = p.A.S.velo[p.A.S.velo.length - 1];
+  sopra.riceviFile([new p.w.File(['testo'], 'scheda.txt'), new p.w.File(['x'], 'rotto.txt')]);
+  await p.aspetta(() => p.tutti('.mod-file-riga').length === 2 && p.q('.mod-file-riga[data-file-stato="errore"]'));
+  assert.equal(p.q('[data-campo="richiesta"]').value, 'Aggiungi la scheda', 'una richiesta già scritta resta');
+  assert.match(p.q('.mod-file-riga.errore').textContent, /non lo so leggere/);
+  await B.dorme(60);
+  assert.equal(p.q('[data-azione="manda-modifica"]').disabled, true);
+  assert.match(p.q('[data-motivo="file"]').textContent, /Togli i file che non sono entrati/);
+  p.clic(p.q('.mod-file-riga.errore [data-azione="togli-file"]'));
+  await p.aspetta(() => p.tutti('.mod-file-riga').length === 1);
+  const mid = p.s.esempio.stato.schemi.find((x) => x.id === 3).materia_id;
+  const scheda = p.s.esempio.stato.materiale[mid].find((x) => x.nome_file === 'scheda.txt');
+  // Si chiude senza mandare: il file mandato si toglie dalla materia.
+  p.clic(p.q('[data-azione="chiudi-modifica"]'));
+  await p.aspetta(() => p.s.chiamate('DELETE', '/server/api/materiale/' + scheda.id).length === 1);
+  assert.equal(p.s.chiamate('POST', '/server/api/modifiche').filter((x) => x.percorso === '/server/api/modifiche').length, 0);
 });

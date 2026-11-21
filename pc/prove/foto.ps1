@@ -101,6 +101,9 @@ $tutte = [ordered]@{
     '81_mappa_modifica' = 'mappa-modifica'
     '82_novita_passo11' = 'visita&modo=novita&passo=11'
     '83_novita_passo12' = 'visita&modo=novita&passo=12'
+    '84_modifica_file' = 'modifica-file'
+    '85_modifica_file_legami' = 'modifica-file-legami'
+    '86_materia_file_legame' = 'materia-file-legame'
 }
 if ($Scene) {
     # Con -File le scene arrivano come una stringa sola ("oggi,materia"): si dividono.

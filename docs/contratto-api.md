@@ -772,6 +772,30 @@ lo dicono e offrono Rifai).
 Prima di salvare il server mette da parte la versione di adesso (`perche: "a_mano"`), quindi "Torna a prima" funziona
 anche qui.
 
+### 28.5 File aggiunti a una modifica (v1.9, richiesta di Andrea del 21/11)
+
+Con una modifica si possono dare a Lectio dei file nuovi (una foto del libro, una scheda del prof). Le app li caricano
+prima come materiale normale della materia (sezione 6: vanno nella loro cartella con la solita regola, 27) e poi
+mandano i loro id nel corpo di stima e modifica:
+`{"tipo": "schema", "id": 12, "richiesta": "Aggiungi quello che c'è nei file", "parti": [3], "materiali": [41, 42]}`.
+- `materiali`: al massimo 20 id, materiale della stessa materia dell'oggetto e non in `errore` (altrimenti 422 con
+  `campo: "materiali"`). Possono essere ancora `in_lettura`: la modifica resta `in_coda` (con `frase` "Aspetto di finire
+  di leggere i file") finché i file non sono letti; un file che intanto finisce in errore si lascia fuori e la `nota` lo
+  dice.
+- I file diventano documenti in più per la riscrittura: per lezioni, schemi e verifiche entrano tra i documenti di ogni
+  parte riscritta (e restano tra i documenti dell'oggetto, per le modifiche dopo); per riassunti e mappe il loro testo va
+  nella richiesta. Il controllo sui documenti (17.1) li conta come gli altri. La stima tiene conto del loro testo.
+- Il legame resta: il file rimane nella materia anche dopo, legato alla modifica. Se si annulla la modifica il legame
+  non conta più (il file resta nella materia); se si cancella il file, il legame sparisce e l'oggetto resta com'è.
+
+Campi in più per mostrare il legame nei due versi:
+- `Materiale` (sezione 6) ha `"usato_per"`: `[{"tipo": "schema", "id": 12, "titolo": "Gli inizi dell'antropologia",
+  "modifica_id": 9, "stato": "pronta", "parti": [{"n": 3, "titolo": "Evoluzionismo"}]}]` (vuota se nessuna modifica).
+- `Lezione`, `Schema`, `Riassunto`, `Simulata` e `Mappa` (28.3) hanno `"file_delle_modifiche"`: `[{"materiale_id": 41,
+  "titolo": "Foto pag. 52", "modifica_id": 9, "stato": "pronta", "parti": [{"n": 3, "titolo": "Evoluzionismo"}]}]`.
+In tutti e due `parti` sono le parti cambiate (`cambiate`) quando la modifica è `pronta`, prima quelle chieste (vuota con
+"Tutto"); le modifiche annullate non ci sono.
+
 ## 29. Mappe (v1.8, richiesta di Andrea del 17/11)
 
 Da uno schema `pronto` il server prepara una **mappa**: `tipo` `date` (la linea del tempo, solo le date e a cosa si

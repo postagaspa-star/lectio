@@ -282,6 +282,8 @@ class ModificaIn(Corpo):
     id: StrictInt
     richiesta: str = Field(min_length=1, max_length=4000)
     parti: list[StrictInt] = Field(default_factory=list, max_length=200)
+    # Contratto 28.5: i file aggiunti per questa modifica (già caricati come materiali della stessa materia).
+    materiali: list[StrictInt] = Field(default_factory=list, max_length=20)
 
     @field_validator("richiesta")
     @classmethod

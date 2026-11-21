@@ -676,7 +676,7 @@
     };
     const senzaInterni = (x) => {
       const c = copia(x);
-      delete c._t0; delete c._prima; delete c._vdp;
+      delete c._t0; delete c._prima; delete c._vdp; delete c._file;
       return c;
     };
 
@@ -686,8 +686,8 @@
     const modificaDi = (tipo, id) => s.modifiche.filter((md) => md.tipo === tipo && md.oggetto_id === Number(id)).reduce((u, md) => (!u || md.id > u.id ? md : u), null);
     const lavora = (md) => !!md && (md.stato === 'in_coda' || md.stato === 'in_preparazione');
     const modificabile = (tipo, x) => !!x && (tipo === 'lezione' || tipo === 'mappa' ? x.stato === 'pronta' : tipo === 'simulata' ? ['pronta', 'in_corso', 'corretta'].includes(x.stato) : x.stato === 'pronto');
-    const partiDi = (tipo, x) => {
-      if (!modificabile(tipo, x)) return [];
+    const partiDi = (tipo, x) => (modificabile(tipo, x) ? tutteLeParti(tipo, x) : []);
+    const tutteLeParti = (tipo, x) => {
       if (tipo === 'schema') return ((x.contenuto && x.contenuto.sezioni) || []).map((z) => ({ n: z.n, titolo: z.titolo }));
       if (tipo === 'riassunto') return ((x.contenuto && x.contenuto.parti) || []).map((q, i) => ({ n: i + 1, titolo: q.titolo || 'Parte ' + (i + 1) }));
       if (tipo === 'lezione') return (x.capitoli || []).map((c) => ({ n: c.n, titolo: c.titolo }));
@@ -772,10 +772,30 @@
       Object.assign(md, { stato: 'in_preparazione', fase: 'scrittura', fatto, totale, frase: 'Riscrivo la parte ' + (md.parti[fatto] || 2) });
     };
     const avanzaModificheDi = (tipo, x) => { const md = x && modificaDi(tipo, x.id); if (md) avanzaModifica(md); };
-    /** I campi in più di §28.3: l'ultima modifica, la versione da parte, le parti che si possono cambiare. */
+    /** §28.5 Le parti a cui è legato un file: quelle cambiate, oppure (finché la modifica lavora) quelle chieste. */
+    const partiLegate = (md, x) => {
+      const titoli = new Map(tutteLeParti(md.tipo, x).map((q) => [q.n, q.titolo]));
+      return (md.stato === 'pronta' ? md.cambiate : md.parti).map((n) => ({ n, titolo: titoli.get(n) || null }));
+    };
+    const fileDelle = (tipo, x) => {
+      const tutti = Object.values(s.materiale).flat();
+      const uscita = [];
+      s.modifiche.filter((md) => md.tipo === tipo && md.oggetto_id === x.id && md.stato !== 'annullata').forEach((md) => (md._file || []).forEach((id) => {
+        const f = tutti.find((y) => y.id === id);
+        if (f) uscita.push({ materiale_id: id, titolo: f.titolo, modifica_id: md.id, stato: md.stato, parti: partiLegate(md, x) });
+      }));
+      return uscita;
+    };
+    /** §28.5 Le cose che un file ha cambiato. */
+    const usatoPer = (id) => s.modifiche.filter((md) => md.stato !== 'annullata' && (md._file || []).includes(id)).map((md) => {
+      const x = oggettoDi(md.tipo, md.oggetto_id);
+      return x ? { tipo: md.tipo, id: x.id, titolo: x.titolo || x.argomento || 'Senza titolo', modifica_id: md.id, stato: md.stato, parti: partiLegate(md, x) } : null;
+    }).filter(Boolean);
+    const conUsato = (c) => Object.assign(c, { usato_per: usatoPer(c.id) });
+    /** I campi in più di §28.3: l'ultima modifica, la versione da parte, le parti che si possono cambiare (e §28.5 i file). */
     const conModifiche = (tipo, x, c) => {
       const md = modificaDi(tipo, x.id);
-      return Object.assign(c, { modifica: md ? senzaInterni(md) : null, versione_da_parte: x._vdp ? copia(x._vdp) : null, parti_modificabili: partiDi(tipo, x) });
+      return Object.assign(c, { modifica: md ? senzaInterni(md) : null, versione_da_parte: x._vdp ? copia(x._vdp) : null, parti_modificabili: partiDi(tipo, x), file_delle_modifiche: fileDelle(tipo, x) });
     };
     const COSTO_PARTE = { lezione: 0.03, schema: 0.02, riassunto: 0.01, simulata: 0.01, mappa: 0.01 };
     /** Le regole di POST /api/modifiche e della stima: un errore [stato, dati] oppure quello che serve. */
@@ -791,8 +811,14 @@
       const parti = Array.isArray(c.parti) ? c.parti.map(Number) : [];
       if (parti.some((n) => !tutte.includes(n))) return [422, { errore: 'Scegli le parti tra quelle che ci sono.', codice: 'non_valido', campo: 'parti' }];
       const quante = parti.length || tutte.length || 1;
-      const st = Object.assign(stimaStudio(Math.round(COSTO_PARTE[tipo] * quante * 100) / 100, {}, 1 + Math.ceil(quante / 2), null), { fino_a: !parti.length });
-      return { tipo, x, richiesta, parti, st };
+      // §28.5 I file aggiunti: materiale della stessa materia, non in errore.
+      const ids = Array.from(new Set(Array.isArray(c.materiali) ? c.materiali.map(Number) : []));
+      const suoi = s.materiale[x.materia_id] || [];
+      if (ids.some((id) => !suoi.some((y) => y.id === id))) return [422, { errore: 'Uno dei file aggiunti non c\'è più: aggiungilo di nuovo.', codice: 'non_valido', campo: 'materiali' }];
+      if (ids.some((id) => suoi.find((y) => y.id === id).stato === 'errore')) return [422, { errore: 'Uno dei file aggiunti non si è potuto leggere: toglilo e riprova.', codice: 'non_valido', campo: 'materiali' }];
+      const conFile = ids.length ? 0.005 * ids.length : 0;
+      const st = Object.assign(stimaStudio(Math.round((COSTO_PARTE[tipo] * quante + conFile) * 1000) / 1000, {}, 1 + Math.ceil(quante / 2), null), { fino_a: !parti.length });
+      return { tipo, x, richiesta, parti, st, materiali: ids };
     };
     const pulisci = (t) => String(t == null ? '' : t).trim();
     /** §28.4: dal contenuto mandato contano solo i testi; le voci vuote si tolgono, un blocco senza testo sparisce. */
@@ -993,7 +1019,7 @@
           lista.unshift(nuovo);
           return [201, senzaTesto(nuovo)];
         }
-        return [200, lista.map(senzaTesto)];
+        return [200, lista.map((y) => conUsato(senzaTesto(y)))];
       }
       if ((m = /^\/server\/api\/materie\/(\d+)\/suggeriti$/.exec(p))) return [200, suggerisci(s.materiale[m[1]] || [], qs.get('argomento') || '', s.cartelle[m[1]] || [])];
       if ((m = /^\/server\/api\/materiale\/(\d+)$/.exec(p))) {
@@ -1017,9 +1043,9 @@
             x.tipo = corpo.tipo;
           }
           if (cambiaCartella) metti(x, corpo.cartella_id);
-          return [200, senzaTesto(x)];
+          return [200, conUsato(senzaTesto(x))];
         }
-        return [200, Object.assign(copia(x), { testo: x.testo || 'Testo d\'esempio letto dal server per "' + x.titolo + '".' })];
+        return [200, conUsato(Object.assign(copia(x), { testo: x.testo || 'Testo d\'esempio letto dal server per "' + x.titolo + '".' }))];
       }
       if (p === '/server/api/eventi' && metodo === 'GET') return [200, copia(s.eventi)];
       if ((m = /^\/server\/api\/materie\/(\d+)\/eventi$/.exec(p)) && metodo === 'POST') {
@@ -1233,6 +1259,7 @@
         const md = {
           id: s.prossimoId++, tipo: v.tipo, oggetto_id: v.x.id, materia_id: v.x.materia_id, richiesta: v.richiesta, parti: v.parti, stato: 'in_coda', fase: null, fatto: 0,
           totale: Math.max(1, v.parti.length), frase: null, errore: null, nota: null, cambiate: [], stima_eur: v.st.costo_eur, creata_il: new Date().toISOString(), pronta_il: null, _t0: Date.now(),
+          _file: v.materiali,
         };
         s.modifiche.push(md);
         return [201, senzaInterni(md)];

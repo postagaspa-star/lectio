@@ -1315,6 +1315,39 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 .mod-motivo { font-size: 14px; font-weight: 600; color: var(--avv-testo); }
 .mod-sotto:empty { display: none; }
 
+/* §44.9 File da usare nella finestra Modifica: si mandano subito, ognuno con il suo stato e la X per toglierlo. */
+.mod-file-testa { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mod-file-testa .pulsante svg.icona { width: 16px; height: 16px; }
+.mod-file-elenco { display: flex; flex-direction: column; background: var(--fondo-blocco); border-radius: 14px; padding: 2px 4px 2px 12px; }
+.mod-file-riga { display: flex; align-items: center; gap: 10px; min-height: 52px; border-bottom: 1px solid var(--riga); }
+.mod-file-riga:last-child { border-bottom: none; }
+.mod-file-riga .testi { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mod-file-riga .forte { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-file-riga .secondario, .mod-file-riga .errore-campo { font-size: 13px; }
+.mod-file-riga .tondo { background: transparent; color: var(--tenue); }
+.mod-file-riga .tondo:hover:not(:disabled) { background: var(--sup2); filter: none; }
+.mod-file-icona { width: 22px; height: 22px; flex-shrink: 0; color: var(--m-testo, var(--testo)); }
+.segnaposto.mod-file-icona { border-radius: 6px; }
+.mod-file-tipo { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.mod-file-sono { font-size: 14px; font-weight: 600; color: var(--tenue); margin-right: 2px; }
+.mod-file-tipo .nl-pillola { height: 36px; padding: 0 12px; font-size: 13px; }
+
+/* §44.9 Sulla parte cambiata: "Cambiata con 1 file" (un clic apre il file). */
+.mod-file-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: none; border-radius: 999px; background: var(--acc-tenue); color: var(--acc-tenue-testo); font-size: 13px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.mod-file-chip svg.icona { width: 14px; height: 14px; }
+.mod-file-chip:hover { filter: brightness(.96); }
+.sch-azioni-parte { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+
+/* §44.9 La riga di un file nella materia dice cosa ha cambiato: "Ha cambiato: … · parte 3 >". */
+.riga-materiale.con-legame { flex-wrap: wrap; gap: 6px 12px; }
+.riga-materiale .mat-apri { display: flex; align-items: center; gap: 12px; flex: 1 1 260px; min-width: 0; min-height: 44px; padding: 0; border: none; background: none; color: inherit; text-align: left; }
+.riga-materiale .mat-apri:hover .forte { color: var(--acc-tenue-testo); }
+.mat-legami { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1 1 100%; min-width: 0; padding-left: 34px; }
+.mat-legame { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 32px; padding: 4px 8px 4px 12px; border: none; border-radius: 999px; background: var(--acc-tenue); color: var(--acc-tenue-testo); font-size: 13px; font-weight: 700; text-align: left; }
+.mat-legame span { min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
+.mat-legame svg.icona { width: 14px; height: 14px; flex-shrink: 0; }
+.mat-legame:hover { filter: brightness(.96); }
+
 /* Spenti con la loro frase (§44.1): opacità 0,55. */
 .pillola-azione.mod-pillola:disabled { color: var(--testo); opacity: .55; }
 .pulsante[data-perche]:disabled { opacity: .55; }

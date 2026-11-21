@@ -56,6 +56,11 @@ def _costo(conn: sqlite3.Connection, colonna: str, valore: int) -> float:
 TITOLO_DA = {"lectio": "lectio", "file": "file", "file_fermo": "file", "utente": "utente"}
 
 
+def _usato_per(conn: sqlite3.Connection, materiale_id: int) -> list[dict]:
+    from . import modifiche  # qui dentro: modifiche usa moduli che usano forme
+    return modifiche.usato_per(conn, materiale_id)
+
+
 def materiale(conn: sqlite3.Connection, r: sqlite3.Row, con_testo: bool = False) -> dict:
     uscita = {
         "id": r["id"],
@@ -75,6 +80,8 @@ def materiale(conn: sqlite3.Connection, r: sqlite3.Row, con_testo: bool = False)
         "avviso": r["avviso"],
         "costo_eur": _costo(conn, "materiale_id", r["id"]),
         "creato_il": clock.per_utente(r["creato_il"]),
+        # Contratto 28.5: le cose che questo file ha cambiato con una modifica (lista vuota se nessuna).
+        "usato_per": _usato_per(conn, r["id"]),
     }
     if con_testo:
         uscita["testo"] = r["testo"]

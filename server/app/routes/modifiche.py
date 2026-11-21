@@ -70,6 +70,19 @@ def _controlla(conn: sqlite3.Connection, s: Servizi, corpo: ModificaIn) -> sqlit
     return r
 
 
+def _file(conn: sqlite3.Connection, corpo: ModificaIn, r: sqlite3.Row) -> list[sqlite3.Row]:
+    """Contratto 28.5: i file aggiunti devono essere materiali della stessa materia, non in errore."""
+    ids = list(dict.fromkeys(corpo.materiali))
+    if not ids:
+        return []
+    righe = conn.execute(f"SELECT * FROM materiali WHERE id IN ({','.join('?' * len(ids))})", ids).fetchall()
+    if len(righe) != len(ids) or any(x["materia_id"] != r["materia_id"] for x in righe):
+        raise non_valido("Uno dei file aggiunti non c'è più: aggiungilo di nuovo.", campo="materiali")
+    if any(x["stato"] == "errore" for x in righe):
+        raise non_valido("Uno dei file aggiunti non si è potuto leggere: toglilo e riprova.", campo="materiali")
+    return righe
+
+
 def trova_modifica(conn: sqlite3.Connection, modifica_id: int) -> sqlite3.Row:
     m = conn.execute("SELECT * FROM modifiche WHERE id = ?", (modifica_id,)).fetchone()
     if m is None:
@@ -86,7 +99,7 @@ def _sveglia(s: Servizi, tipo: str) -> None:
 @router.post("/modifiche/stima")
 def stima(corpo: ModificaIn, conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     r = _controlla(conn, s, corpo)
-    return modifiche.stima(s, conn, corpo.tipo, r, list(dict.fromkeys(corpo.parti)))
+    return modifiche.stima(s, conn, corpo.tipo, r, list(dict.fromkeys(corpo.parti)), _file(conn, corpo, r))
 
 
 @router.post("/modifiche", status_code=201)
@@ -94,15 +107,20 @@ def crea(corpo: ModificaIn, conn: sqlite3.Connection = Depends(get_conn), s: Ser
     parti = sorted(set(corpo.parti))
     with transazione(conn):
         r = _controlla(conn, s, corpo)
-        st = modifiche.stima(s, conn, corpo.tipo, r, parti)
+        file_aggiunti = _file(conn, corpo, r)
+        st = modifiche.stima(s, conn, corpo.tipo, r, parti, file_aggiunti)
         if not st["consentita"]:
             raise tetto(st["motivo"])
         modifiche.chiudi_ferme(conn, s.settings.dati_dir, corpo.tipo, corpo.id)
         ora = clock.adesso()
+        da_leggere = any(x["stato"] == "in_lettura" for x in file_aggiunti)
         ident = conn.execute(
-            "INSERT INTO modifiche (tipo, oggetto_id, materia_id, richiesta, parti, stato, stima_eur, creata_il, in_coda_dal)"
-            " VALUES (?, ?, ?, ?, ?, 'in_coda', ?, ?, ?)",
-            (corpo.tipo, corpo.id, r["materia_id"], corpo.richiesta, json.dumps(parti), st["costo_eur"], ora, ora)).lastrowid
+            "INSERT INTO modifiche (tipo, oggetto_id, materia_id, richiesta, parti, stato, frase, stima_eur, creata_il, in_coda_dal)"
+            " VALUES (?, ?, ?, ?, ?, 'in_coda', ?, ?, ?, ?)",
+            (corpo.tipo, corpo.id, r["materia_id"], corpo.richiesta, json.dumps(parti),
+             modifiche.FRASE_ASPETTA_FILE if da_leggere else None, st["costo_eur"], ora, ora)).lastrowid
+        for x in file_aggiunti:
+            conn.execute("INSERT INTO modifiche_materiali (modifica_id, materiale_id) VALUES (?, ?)", (ident, x["id"]))
     _sveglia(s, corpo.tipo)
     return modifiche.per_api(trova_modifica(conn, ident))
 

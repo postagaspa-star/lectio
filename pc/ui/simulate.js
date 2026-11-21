@@ -365,7 +365,8 @@
         statiEl.set(n, stato);
         const cambiata = seg.evidenzia.has(Number(d.n));
         const scheda = h('section', { class: 'sim-domanda' + (cambiata ? ' mod-cambiata' : ''), 'data-domanda': n },
-          h('span', { class: 'mod-titolo-cambiata' }, h('span', { class: 'etichetta' }, 'Domanda ' + d.n + ' · ' + L.plurale(Number(d.punti) || 0, 'punto', 'punti')), cambiata ? A.etichettaCambiata() : null),
+          h('span', { class: 'mod-titolo-cambiata' }, h('span', { class: 'etichetta' }, 'Domanda ' + d.n + ' · ' + L.plurale(Number(d.punti) || 0, 'punto', 'punti')), cambiata ? A.etichettaCambiata() : null,
+            A.etichettaFile(s, d.n, A.materiaDi(s.materia_id))),
           h('p', { class: 'testo-d' }, d.testo), area, stato);
         domandeEl.set(n, scheda);
         schede.push(scheda);

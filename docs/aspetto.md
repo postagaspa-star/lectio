@@ -1428,6 +1428,28 @@ Nella modalità esempio lo schema di esempio ha `versione_da_parte` e la modific
 poi pronta con la parte 2 cambiata). Visita guidata: un passo nuovo sulla pillola **Modifica** dello schema: "Qui
 chiedi di cambiare qualcosa senza rifare tutto. Se non ti piace, Torna a prima è nel menu."
 
+### 44.9 File da usare e Modifica questa parte (v1.3.9 PC, richiesta di Andrea del 21/11)
+
+- **Modifica questa parte:** nello schema, accanto ad **Ascolta questa parte**, una seconda pillola (Superficie 2,
+  icona matita) che apre "Cosa vuoi cambiare?" su **Scelgo io** con quella parte già spuntata. Spenta con la sua frase
+  come la pillola Modifica della testata (44.1).
+- **File da usare** nella finestra, subito sotto gli spunti e prima di "Dove?": etichetta a sinistra, pulsante tenue
+  piccolo **+ Aggiungi file** a destra (stessi file di Aggiungi materiale, anche zip e cartelle; si possono anche
+  trascinare sulla finestra). Ogni file si manda subito alla materia come materiale normale (tipo scelto con le pillole
+  **Sono** Appunti · Libro · Verifica · Interrogazione, Appunti all'inizio; cambiarle cambia anche i file già mandati).
+  Righe su Fondo blocco: icona (foto o file, segnaposto che pulsa mentre va), nome (poi il titolo scritto da Lectio),
+  stato in piccolo ("Lo mando…", "Lo sto leggendo…", "Letto", oppure l'errore in rosso) e la X per toglierlo. Sotto, se
+  ci sono foto, "Le foto si leggono a pagamento: circa 0,4 cent a foto." Con il primo file e il campo vuoto la richiesta
+  diventa "Aggiungi quello che c'è nei file che ho allegato." Modifica resta spento finché un file è in viaggio o ce n'è
+  uno non entrato (frase sotto: "Togli i file che non sono entrati, poi tocca Modifica."). Chiudere senza mandare toglie
+  dalla materia i file mandati; mandata la modifica, restano.
+- **Il legame, nei due versi:** sulla parte cambiata (schema, riassunto, domanda della verifica, capitolo nel testo della
+  lezione) l'etichetta accento tenue "Cambiata con 1 file" / "Cambiata con 2 file" con l'icona file: un clic apre il
+  file (con più file, prima un foglio per scegliere). Nella materia e nelle cartelle la riga del file ha sotto, allineata
+  al testo, la pillola accento tenue "Ha cambiato: Gli inizi dell'antropologia · parte 3 >" ("Sta cambiando" mentre la
+  modifica lavora, "Doveva cambiare" se si è fermata; il testo va a capo, non si taglia): un clic porta lì (lo schema si
+  apre alla parte giusta).
+
 ## 45. Mappe: le date e i concetti (v1.3.7 PC, richiesta di Andrea del 17/11)
 
 Da uno schema pronto Lectio disegna una **mappa**: la **linea del tempo** con solo le date e a cosa si riferiscono,
