@@ -2,8 +2,11 @@
  * Lectio per il computer: dove va ogni pezzo delle mappe (docs/aspetto.md §45). Solo numeri, niente pagina: le
  * misure dei testi le passa chi disegna. Si prova con Node (pc/prove/js/mappe.test.js).
  *
- * - Albero dall'alto: ogni ramo ha una sua striscia di larghezza (mai due rami uno sopra l'altro), il genitore sta in
- *   mezzo ai figli; 104 px tra un livello e l'altro, lo spazio per il verbo sulla freccia.
+ * - A riquadri (1.3.8, richiesta di Andrea del 21/11): un riquadro grande con l'argomento in alto, diviso nelle sue
+ *   parti (colonne, al massimo 4 per riga); dentro ogni parte le schede dei concetti una sotto l'altra, quelle più in
+ *   basso rientrate con una linea guida. Niente frecce tra le parti: le contiene l'argomento. Una freccia col verbo
+ *   solo tra due concetti, dove il modello l'ha messa (una causa, un passaggio), mai dall'argomento o da una parte: se
+ *   un concetto ha un solo figlio con il verbo, il figlio va subito sotto, in fila, come una catena.
  * - A raggiera: la radice al centro, ogni ramo ha una fetta di cerchio grande quanto le sue foglie; il raggio di ogni
  *   giro cresce finché i concetti dello stesso giro non si toccano.
  * - Linea del tempo: in scala (la distanza conta) o in fila (tutte alla stessa distanza); le schede delle date sopra e
@@ -18,9 +21,8 @@
 })(typeof window !== 'undefined' ? window : null, function () {
   'use strict';
 
-  const GAP_X = 28;
-  const GAP_Y = 104;
   const MARGINE = 40;
+  const r1 = (x) => Math.round(x * 10) / 10;
 
   // --- testi -------------------------------------------------------------------------------------------------------
 
@@ -71,6 +73,18 @@
     return { per, radice: radiceId, ordine };
   }
 
+  /**
+   * Il verbo che si vede: solo tra due concetti. Sotto l'argomento o sotto una parte non c'è (sono titoli di gruppo: lo
+   * dice il riquadro), nemmeno nelle mappe di prima che l'avevano. `per` = Map(id → concetto).
+   */
+  function verboDi(per, c) {
+    if (!c || !c.verbo) return null;
+    const g = per.get(c.genitore);
+    if (!g || g.genitore == null) return null;
+    const n = per.get(g.genitore);
+    return n && n.genitore == null ? null : c.verbo;
+  }
+
   /** Il riquadro di tutto: { x, y, larghezza, altezza } con il margine. */
   function cornice(nodi) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -89,46 +103,95 @@
     return { nodi, larghezza: c.larghezza, altezza: c.altezza };
   }
 
+  /** §45.4 Le misure dei riquadri. */
+  const RIQ = { colonna: 292, pad: 18, gap: 16, padParte: 16, dopoTesta: 12, gapSchede: 10, gapVerbo: 34, rientro: 24, rientriMassimi: 3 };
+
+  /** Quante parti per riga: tutte fino a 4, poi righe pari (5 e 6 → 3, 7 e 8 → 4). */
+  function colonneRiquadri(n) {
+    if (n <= 4) return Math.max(1, n);
+    return Math.min(4, Math.ceil(n / Math.ceil(n / 4)));
+  }
+
   /**
-   * Albero dall'alto. `dim` = { id: { w, h } }. Ogni ramo occupa una striscia larga quanto il più largo tra lui e i suoi
-   * figli messi in fila: così due rami non si sovrappongono mai.
+   * A riquadri. `alta(id, larghezza, ruolo)` → l'altezza del pezzo largo così (ruolo: 'radice', 'parte', 'scheda').
+   * Ritorna { larghezza, altezza, cornice, parti: [{ id, x, y, w, h }], nodi: { id: { x, y, w, h, ruolo, livello } }
+   * (x e y = angolo in alto a sinistra), legami: [{ da, a, tipo, d, freccia, verbo: { x, y } | null }] } con il margine.
+   * Tipi dei legami: 'guida' (figli rientrati, dal lato del genitore, con la punta se c'è il verbo), 'catena' (un figlio
+   * solo, con il verbo, subito sotto). Dalla parte ai suoi concetti niente legami: stanno nella colonna.
    */
-  function layoutAlbero(concetti, dim, opz) {
-    const o = opz || {};
-    const gx = o.gapX || GAP_X;
-    const gy = o.gapY || GAP_Y;
+  function layoutRiquadri(concetti, alta, opz) {
+    const o = Object.assign({}, RIQ, opz || {});
     const t = albero(concetti);
-    if (t.radice == null) return { nodi: {}, larghezza: 0, altezza: 0 };
-    const striscia = new Map();
-    const larga = (id) => {
-      if (striscia.has(id)) return striscia.get(id);
-      const n = t.per.get(id);
-      const figli = n.figli.reduce((s, f) => s + larga(f), 0) + gx * Math.max(0, n.figli.length - 1);
-      const w = Math.max(dim[id].w, figli);
-      striscia.set(id, w);
-      return w;
-    };
-    larga(t.radice);
-    const alte = [];
-    for (const id of t.ordine) { const l = t.per.get(id).livello; alte[l] = Math.max(alte[l] || 0, dim[id].h); }
-    const cime = [0];
-    for (let l = 1; l < alte.length; l++) cime[l] = cime[l - 1] + alte[l - 1] + gy;
+    if (t.radice == null) return { larghezza: 0, altezza: 0, cornice: null, parti: [], nodi: {}, legami: [] };
+    const per = new Map((concetti || []).map((c) => [c.id, c]));
+    const parti = t.per.get(t.radice).figli;
+    const colonne = colonneRiquadri(parti.length);
+    const W = colonne * o.colonna + (colonne - 1) * o.gap + 2 * o.pad;
+    const X = MARGINE;
+    const Y = MARGINE;
     const nodi = {};
-    const metti = (id, sinistra) => {
-      const n = t.per.get(id);
-      const w = striscia.get(id);
-      nodi[id] = { x: sinistra + w / 2, y: cime[n.livello] + alte[n.livello] / 2, w: dim[id].w, h: dim[id].h, livello: n.livello };
-      const figli = n.figli.reduce((s, f) => s + striscia.get(f), 0) + gx * Math.max(0, n.figli.length - 1);
-      let x = sinistra + (w - figli) / 2;
-      for (const f of n.figli) { metti(f, x); x += striscia.get(f) + gx; }
-      // Il genitore in mezzo tra il primo e l'ultimo figlio, senza uscire dalla sua striscia.
-      if (n.figli.length) {
-        const mezzo = (nodi[n.figli[0]].x + nodi[n.figli[n.figli.length - 1]].x) / 2;
-        nodi[id].x = Math.min(Math.max(mezzo, sinistra + dim[id].w / 2), sinistra + w - dim[id].w / 2);
-      }
-    };
-    metti(t.radice, 0);
-    return allOrigine(nodi);
+    const legami = [];
+    const cornici = [];
+    const hR = alta(t.radice, W - 2 * o.pad, 'radice');
+    nodi[t.radice] = { x: X, y: Y, w: W, h: hR, ruolo: 'radice', livello: 0 };
+    const wInt = o.colonna - 2 * o.padParte;
+
+    /** Una colonna, con le misure relative al suo angolo. */
+    function colonna(pid) {
+      const hT = alta(pid, wInt, 'parte');
+      const pezzi = [];
+      let y = o.padParte + hT;
+      const visita = (id, rientro, genitore, livello) => {
+        const c = per.get(id);
+        const verbo = verboDi(per, c);
+        y += verbo ? o.gapVerbo : (genitore || pezzi.length ? o.gapSchede : o.dopoTesta);
+        const r = Math.min(o.rientriMassimi, rientro);
+        const w = wInt - r * o.rientro;
+        const h = alta(id, w, 'scheda');
+        const pezzo = { id, x: o.padParte + r * o.rientro, y, w, h, rientro: r, genitore, verbo, livello };
+        pezzi.push(pezzo);
+        y += h;
+        const figli = t.per.get(id).figli;
+        const catena = figli.length === 1 && !!verboDi(per, per.get(figli[0]));
+        for (const f of figli) visita(f, catena ? rientro : rientro + 1, pezzo, livello + 1);
+      };
+      for (const f of t.per.get(pid).figli) visita(f, 0, null, 2);
+      return { testa: { x: o.padParte, y: o.padParte, w: wInt, h: hT }, pezzi, h: y + o.padParte };
+    }
+
+    let y = Y + hR + o.pad;
+    for (let i = 0; i < parti.length; i += colonne) {
+      const riga = parti.slice(i, i + colonne);
+      const col = riga.map(colonna);
+      const hRiga = Math.max(...col.map((c) => c.h));
+      const larga = riga.length * o.colonna + (riga.length - 1) * o.gap;
+      let x = X + o.pad + (W - 2 * o.pad - larga) / 2;
+      riga.forEach((pid, k) => {
+        const c = col[k];
+        cornici.push({ id: pid, x, y, w: o.colonna, h: hRiga });
+        nodi[pid] = { x: x + c.testa.x, y: y + c.testa.y, w: c.testa.w, h: c.testa.h, ruolo: 'parte', livello: 1 };
+        for (const p of c.pezzi) {
+          const n = { x: x + p.x, y: y + p.y, w: p.w, h: p.h, ruolo: 'scheda', livello: p.livello, rientro: p.rientro };
+          nodi[p.id] = n;
+          if (p.genitore && p.rientro > p.genitore.rientro) {
+            const g = nodi[p.genitore.id];
+            const gx = g.x + 14;
+            const fine = n.y + Math.min(n.h / 2, 21);
+            legami.push({ da: p.genitore.id, a: p.id, tipo: 'guida', d: 'M' + r1(gx) + ' ' + r1(g.y + g.h) + ' V' + r1(fine) + ' H' + r1(n.x),
+              freccia: !!p.verbo, verbo: p.verbo ? { x: gx + 10, y: n.y - o.gapVerbo / 2 } : null });
+          } else if (p.genitore) {
+            const g = nodi[p.genitore.id];
+            const ax = n.x + 22;
+            legami.push({ da: p.genitore.id, a: p.id, tipo: 'catena', d: 'M' + r1(ax) + ' ' + r1(g.y + g.h) + ' V' + r1(n.y),
+              freccia: true, verbo: p.verbo ? { x: ax + 10, y: (g.y + g.h + n.y) / 2 } : null });
+          }
+        }
+        x += o.colonna + o.gap;
+      });
+      y += hRiga + o.gap;
+    }
+    const H = parti.length ? y - o.gap + o.pad - Y : hR;
+    return { larghezza: W + 2 * MARGINE, altezza: H + 2 * MARGINE, cornice: { x: X, y: Y, w: W, h: H, testa: hR }, parti: cornici, nodi, legami };
   }
 
   /** A raggiera: fette di cerchio grandi quanto le foglie di ogni ramo; il primo ramo in alto, poi in senso orario. */
@@ -191,11 +254,9 @@
     return allOrigine(nodi);
   }
 
-  /** La forma che si legge meglio se il modello non l'ha detta: tanti figli alla pari sotto la radice → raggiera. */
+  /** La forma della mappa: quella scelta dal modello; le mappe di prima della 1.3.8 ("albero") vanno a riquadri. */
   function formaConsigliata(contenuto) {
-    if (contenuto && (contenuto.forma === 'albero' || contenuto.forma === 'raggiera')) return contenuto.forma;
-    const t = albero((contenuto && contenuto.concetti) || []);
-    return t.radice != null && t.per.get(t.radice).figli.length >= 6 ? 'raggiera' : 'albero';
+    return contenuto && contenuto.forma === 'raggiera' ? 'raggiera' : 'riquadri';
   }
 
   /** Dove la retta dal centro del nodo verso (vx, vy) esce dal suo riquadro (con un po' di aria). */
@@ -216,23 +277,6 @@
     const q = quota == null ? 0.52 : quota;
     return { x1: p0.x, y1: p0.y, x2: p1.x, y2: p1.y, mx: p0.x + (p1.x - p0.x) * q, my: p0.y + (p1.y - p0.y) * q };
   }
-
-  /** Il collegamento trasversale: una curva che si piega di lato, e il suo punto di mezzo. */
-  function curva(da, a) {
-    const p0 = puntoSulBordo(da, a.x, a.y, 4);
-    const p1 = puntoSulBordo(a, da.x, da.y, 7);
-    const mx = (p0.x + p1.x) / 2;
-    const my = (p0.y + p1.y) / 2;
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const piega = Math.min(140, d * 0.28);
-    const cx = mx - (dy / d) * piega;
-    const cy = my + (dx / d) * piega;
-    return { d: 'M' + r1(p0.x) + ' ' + r1(p0.y) + ' Q' + r1(cx) + ' ' + r1(cy) + ' ' + r1(p1.x) + ' ' + r1(p1.y), mx: (p0.x + 2 * cx + p1.x) / 4, my: (p0.y + 2 * cy + p1.y) / 4 };
-  }
-
-  const r1 = (x) => Math.round(x * 10) / 10;
 
   // --- linea del tempo ---------------------------------------------------------------------------------------------
 
@@ -397,8 +441,9 @@
   function sceltaProva(tipo, contenuto, seme) {
     if (tipo === 'concetti') {
       const nodi = (contenuto.concetti || []).filter((c) => c.genitore != null);
+      const per = new Map((contenuto.concetti || []).map((c) => [c.id, c]));
       const concetti = daNascondere(nodi.map((c) => c.id), 1 / 3, seme);
-      const verbi = daNascondere(nodi.filter((c) => c.verbo && !concetti.has(c.id)).map((c) => c.id), 1 / 4, seme * 7 + 3);
+      const verbi = daNascondere(nodi.filter((c) => verboDi(per, c) && !concetti.has(c.id)).map((c) => c.id), 1 / 4, seme * 7 + 3);
       return { concetti, verbi };
     }
     const ids = (contenuto.eventi || []).map((e) => e.id);
@@ -426,18 +471,18 @@
     return n + (n === 1 ? ' data' : ' date') + (n > 1 ? ' · dal ' + annoTesto(primo.x) + ' al ' + annoTesto(fineX) : '');
   }
 
-  /** I concetti vicini a uno (genitore, figli, collegamenti), con il verbo e il verso: per il pannello e per accendere. */
+  /**
+   * I concetti vicini a uno (il genitore e i figli), con il verbo e il verso: per il pannello e per accendere. Le frecce
+   * tra rami delle mappe di prima della 1.3.8 non contano più.
+   */
   function vicini(contenuto, id) {
     const per = new Map((contenuto.concetti || []).map((c) => [c.id, c]));
     const uscita = [];
     const c = per.get(id);
     if (!c) return uscita;
-    if (c.genitore != null && per.has(c.genitore)) uscita.push({ id: c.genitore, testo: per.get(c.genitore).testo, verbo: c.verbo, verso: 'da' });
-    for (const f of contenuto.concetti || []) if (f.genitore === id) uscita.push({ id: f.id, testo: f.testo, verbo: f.verbo, verso: 'a' });
-    for (const l of contenuto.collegamenti || []) {
-      if (l.da === id && per.has(l.a)) uscita.push({ id: l.a, testo: per.get(l.a).testo, verbo: l.verbo, verso: 'a', trasversale: true });
-      if (l.a === id && per.has(l.da)) uscita.push({ id: l.da, testo: per.get(l.da).testo, verbo: l.verbo, verso: 'da', trasversale: true });
-    }
+    const verbo = (f) => verboDi(per, f);
+    if (c.genitore != null && per.has(c.genitore)) uscita.push({ id: c.genitore, testo: per.get(c.genitore).testo, verbo: verbo(c), verso: 'da' });
+    for (const f of contenuto.concetti || []) if (f.genitore === id) uscita.push({ id: f.id, testo: f.testo, verbo: verbo(f), verso: 'a' });
     return uscita;
   }
 
@@ -452,8 +497,8 @@
   };
 
   return {
-    GAP_X, GAP_Y, MARGINE, COLORI_CHIARI,
-    aCapo, albero, layoutAlbero, layoutRaggiera, formaConsigliata, puntoSulBordo, legame, curva,
+    MARGINE, COLORI_CHIARI,
+    RIQ, aCapo, albero, verboDi, colonneRiquadri, layoutRiquadri, layoutRaggiera, formaConsigliata, puntoSulBordo, legame,
     annoTesto, passoTacche, tacche, layoutLinea, modoConsigliato, pagine,
     casuale, daNascondere, sceltaProva, fraseMappa, vicini,
   };

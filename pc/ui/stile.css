@@ -1491,6 +1491,29 @@ html.foto *, html.foto *::before, html.foto *::after { animation: none !importan
 .mp-nodo.scelto rect, .mp-data.scelto > rect { stroke: var(--acc); stroke-width: 3; }
 .mp-nodo.coperto rect { fill: var(--fondo-blocco); stroke: var(--m-pieno); stroke-dasharray: 6 5; }
 .mp-nodo .punto { fill: var(--m-testo); font-size: 20px; font-weight: 800; }
+.mp-nodo text.frase { fill: var(--tenue); font-size: 13px; font-weight: 500; }
+.mp-nodo.l1 text.frase { font-size: 13px; }
+.mp-nodo .mp-buco rect { stroke-dasharray: 4 3; }
+
+/* §45.4 A riquadri: il riquadro dell'argomento con la fascia in alto, le parti in colonne, le schede dentro. */
+.mp-cornice { fill: var(--sup); stroke: var(--m-pieno); stroke-width: 2; }
+.mp-fascia-testa { fill: var(--m-tenue); }
+.mp-riga-testa { stroke: var(--m-pieno); stroke-width: 1.5; opacity: .45; }
+.mp-colonna { fill: var(--fondo-blocco); stroke: var(--riga); stroke-width: 1; }
+.mp-nodo.mp-testa rect.fondo { fill: transparent; stroke: none; }
+.mp-nodo.mp-testa text.vero { fill: var(--m-testo); font-size: 21px; font-weight: 800; letter-spacing: -0.2px; }
+.mp-nodo.mp-capo rect.fondo { fill: transparent; stroke: transparent; stroke-width: 2; }
+.mp-nodo.mp-capo text.vero { fill: var(--m-testo); font-size: 16px; font-weight: 800; }
+.mp-nodo.mp-capo text.frase { fill: var(--testo); font-size: 13.5px; font-weight: 500; }
+.mp-nodo.mp-carta rect.fondo { fill: var(--sup); stroke: var(--bordo); stroke-width: 1.2; }
+.mp-nodo.mp-carta text.vero { font-size: 14.5px; font-weight: 700; }
+.mp-nodo.mp-capo:hover rect.fondo, .mp-nodo.mp-testa:hover rect.fondo, .mp-nodo.mp-carta:hover rect.fondo { stroke: var(--m-pieno); stroke-width: 2; }
+.mp-nodo.mp-carta.scelto rect.fondo, .mp-nodo.mp-carta:focus-visible rect.fondo { stroke: var(--acc); stroke-width: 3; }
+.mp-nodo.mp-testa.scelto rect.fondo, .mp-nodo.mp-capo.scelto rect.fondo, .mp-nodo.mp-testa:focus-visible rect.fondo,
+.mp-nodo.mp-capo:focus-visible rect.fondo { stroke: var(--acc); stroke-width: 3; }
+.mp-nodo.mp-capo.coperto rect.fondo, .mp-nodo.mp-carta.coperto rect.fondo { fill: var(--sup); stroke: var(--m-pieno); stroke-dasharray: 6 5; }
+.mp-legame.guida { stroke: var(--bordo); stroke-width: 1.5; }
+.mp-legame.guida[marker-end] { stroke: var(--moltotenue); stroke-width: 1.4; }
 .mp-nodo.mp-entra, .mp-data.mp-entra { animation: mpEntra .3s cubic-bezier(.2, .7, .3, 1) both; animation-delay: var(--ritardo, 0ms); }
 .appena { animation: appare .3s ease-out; }
 @keyframes mpEntra { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
@@ -1498,18 +1521,15 @@ html.foto *, html.foto *::before, html.foto *::after { animation: none !importan
 .mp-legame { stroke: var(--moltotenue); stroke-width: 1.6; fill: none; transition: opacity .2s ease, stroke .15s ease; }
 .mp-legame.acceso { stroke: var(--m-pieno); stroke-width: 2.2; }
 .mp-punta { fill: var(--moltotenue); }
-.mp-trasversale { stroke: var(--m-pieno); stroke-width: 1.6; stroke-dasharray: 6 5; fill: none; transition: opacity .2s ease; }
-.mp-punta-x { fill: var(--m-pieno); }
 .mp-verbo { transition: opacity .2s ease; }
 .mp-verbo rect { fill: var(--sup); stroke: var(--riga); stroke-width: 1; }
 .mp-verbo text { fill: var(--tenue); font-size: 12px; font-weight: 700; }
-.mp-verbo.trasversale text { fill: var(--m-testo); }
 .mp-verbo.acceso text { fill: var(--testo); }
 .mp-verbo.coperto { cursor: pointer; }
 .mp-verbo.coperto rect { fill: var(--fondo-blocco); stroke: var(--m-pieno); stroke-dasharray: 4 3; }
 .mp-verbo.coperto text { fill: var(--m-testo); font-weight: 800; }
 /* Un concetto scelto: lui e i vicini restano accesi, il resto si fa da parte. */
-.mp-tela.con-scelta .mp-nodo:not(.acceso), .mp-tela.con-scelta .mp-legame:not(.acceso), .mp-tela.con-scelta .mp-trasversale:not(.acceso),
+.mp-tela.con-scelta .mp-nodo:not(.acceso), .mp-tela.con-scelta .mp-legame:not(.acceso),
 .mp-tela.con-scelta .mp-verbo:not(.acceso) { opacity: .3; }
 .mp-tela.con-scelta .mp-data:not(.acceso), .mp-tela.con-scelta .mp-gambo:not(.acceso), .mp-tela.con-scelta .mp-punto:not(.acceso),
 .mp-tela.con-scelta .mp-fascia:not(.acceso) { opacity: .35; }
@@ -1545,6 +1565,7 @@ html.foto *, html.foto *::before, html.foto *::after { animation: none !importan
 .mp-p-corpo .etichetta { padding-right: 48px; }
 .mp-p-data { color: var(--m-testo); }
 .mp-p-titolo { font-size: 20px; font-weight: 800; line-height: 1.25; padding-right: 40px; overflow-wrap: anywhere; }
+.mp-p-frase { font-size: 16px; line-height: 1.5; font-weight: 700; margin: 0; }
 .mp-p-testo { font-size: 16px; line-height: 1.55; margin: 0; }
 .mp-p-durata { font-size: 14px; font-weight: 600; color: var(--tenue); margin: 0; }
 .mp-p-vicini { display: flex; flex-direction: column; gap: 6px; }
@@ -1552,7 +1573,6 @@ html.foto *, html.foto *::before, html.foto *::after { animation: none !importan
 .mp-p-vicino:hover { filter: brightness(.97); }
 .mp-p-vicino .q { color: var(--tenue); font-weight: 500; }
 .mp-p-vicino .v { color: var(--tenue); font-weight: 600; font-style: italic; }
-.mp-p-vicino.trasversale .v { color: var(--m-testo); }
 .mp-p-vicino .t { font-weight: 800; }
 .mp-p-schema { align-self: flex-start; }
 
@@ -1576,6 +1596,7 @@ html.foto *, html.foto *::before, html.foto *::after { animation: none !importan
 .mp-c-da { font-size: 13px; font-weight: 600; color: var(--tenue); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .mod-correggi-campo.mp-c-data { flex: 0 0 132px; }
 .mod-correggi-campo.mp-c-verbo { font-size: 14px; }
+.mod-correggi-campo.mp-c-frase { font-size: 15px; font-weight: 600; }
 
 /* §45.7 Il PDF: a schermo non si vede; in stampa resta solo lui, sempre in chiaro. */
 .mappa-stampa {

@@ -1,5 +1,5 @@
 // I test della pagina delle mappe (docs/aspetto.md §45, contratto §29) in jsdom, col server finto di esempio.js:
-// "Che mappa vuoi?", la mappa dei concetti (albero e raggiera, clic = spiegazione), la linea del tempo, Mettiti alla
+// "Che mappa vuoi?", la mappa dei concetti (riquadri e raggiera, clic = spiegazione), la linea del tempo, Mettiti alla
 // prova, Scarica PDF (il foglio che si stampa), Modifica, Correggi a mano, una mappa nuova che si prepara.
 // Si lanciano con: node --test --test-concurrency=2 pc/prove/js. Dati solo finti.
 'use strict';
@@ -48,25 +48,37 @@ test('dallo schema: pillola Mappa e scheda in fondo, "Che mappa vuoi?" con i due
 
 const location = (p) => p.w.location.hash;
 
-test('la mappa dei concetti: titolo, domanda, cerchi e frecce; albero o raggiera; il clic apre la spiegazione', opz, async () => {
+test('la mappa dei concetti: titolo, domanda, il riquadro diviso in parti; riquadri o raggiera; il clic apre la spiegazione', opz, async () => {
   const p = await apriMappa(7);
   assert.equal(p.q('.sch-titoli h1').textContent, 'L\'Impero romano da Augusto a Nerone');
   assert.equal(p.q('[data-sotto-mappa]').textContent, '16 concetti · Come passa il potere da Augusto a Nerone?');
   assert.equal(p.tutti('.mp-nodo').length, 16);
-  assert.equal(p.tutti('.mp-legame').length, 15);
-  assert.equal(p.tutti('.mp-trasversale').length, 1);
+  assert.equal(p.q('[data-forma-mappa="riquadri"]').getAttribute('aria-pressed'), 'true');
+  // L'argomento è il riquadro grande, le 5 parti sono le sue colonne: tra le parti nessuna freccia.
+  assert.equal(p.tutti('.mp-cornice').length, 1);
+  assert.equal(p.tutti('.mp-colonna').length, 5);
   assert.equal(p.tutti('.mp-nodo.l0').length, 1);
   assert.equal(p.q('.mp-nodo.l0').getAttribute('aria-label'), 'L\'Impero da Augusto a Nerone');
-  assert.equal(p.q('[data-forma-mappa="albero"]').getAttribute('aria-pressed'), 'true');
-  // Ogni freccia ha la punta e il suo verbo.
-  assert.ok(p.tutti('.mp-legame').every((l) => /^url\(#mp-punta-\d+\)$/.test(l.getAttribute('marker-end'))));
-  assert.ok(p.tutti('.mp-verbo text').some((t) => t.textContent === 'lascia Roma a'));
+  assert.equal(p.tutti('.mp-nodo.mp-capo').length, 5);
+  assert.ok(!p.tutti('.mp-legame').some((l) => l.getAttribute('data-da') === '1'), 'niente frecce dall\'argomento');
+  // Sotto ogni nome la sua frase.
+  assert.match(p.q('.mp-nodo[data-id="3"] text.frase').textContent, /figlio adottivo/);
+  // Le frecce solo tra due concetti col verbo: 1 in catena, 1 rientrata; più una linea guida senza punta. Dalle parti
+  // ai loro concetti niente.
+  assert.equal(p.tutti('.mp-legame').length, 3);
+  assert.equal(p.tutti('.mp-legame[marker-end]').length, 2);
+  assert.deepEqual(p.tutti('.mp-legame.catena').map((l) => l.getAttribute('data-a')), ['16']);
+  assert.deepEqual(p.tutti('.mp-verbo text').map((t) => t.textContent), ['tiene in piedi le', 'fa accusare i']);
 
-  // Clic su Tiberio: a destra chi è, i vicini e "Apri nello schema".
+  // Clic su Tiberio: a destra chi è, la frase, la spiegazione, i vicini e "Apri nello schema".
   p.clic(p.q('.mp-nodo[data-id="3"]'));
   await p.aspetta(() => p.q('[data-mappa-pannello].aperto'));
   assert.equal(p.q('.mp-p-titolo').textContent, 'Tiberio');
-  assert.match(p.q('.mp-p-testo').textContent, /figlio adottivo/);
+  assert.equal(p.q('.mp-p-corpo .etichetta').textContent, 'Parte');
+  assert.match(p.q('.mp-p-frase').textContent, /figlio adottivo/);
+  assert.match(p.q('.mp-p-testo').textContent, /Capri/);
+  assert.equal(p.q('.mp-p-vicino[data-vicino="1"]').textContent, 'Tiberio fa parte di L\'Impero da Augusto a Nerone');
+  assert.equal(p.q('.mp-p-vicino[data-vicino="8"]').textContent, 'Tiberio comprende Seiano');
   assert.deepEqual(p.tutti('.mp-p-vicino .t').map((x) => x.textContent), ['L\'Impero da Augusto a Nerone', 'Seiano', 'Processi per lesa maestà']);
   assert.ok(p.q('.mp-tela').classList.contains('con-scelta'));
   assert.ok(p.q('.mp-nodo[data-id="8"]').classList.contains('acceso'), 'Seiano acceso');
@@ -82,6 +94,10 @@ test('la mappa dei concetti: titolo, domanda, cerchi e frecce; albero o raggiera
   p.clic(p.q('[data-forma-mappa="raggiera"]'));
   await p.aspetta(() => p.q('.mp-scheda[data-forma="raggiera"]'));
   assert.equal(p.tutti('.mp-nodo').length, 16);
+  assert.equal(p.tutti('.mp-legame').length, 15);
+  assert.equal(p.tutti('.mp-cornice').length, 0);
+  // Dall'argomento e dalle parti niente verbo, nemmeno a raggiera.
+  assert.equal(p.tutti('.mp-verbo').length, 2);
   assert.equal(p.A.memoriaStudio.leggi('lectio.mappa.forma.7'), 'raggiera');
 
   // "Apri nello schema · parte 2" porta lo schema a quella parte.
@@ -124,7 +140,9 @@ test('Mettiti alla prova: pezzi nascosti, un clic li scopre, Rimescola e Basta c
   const nascosti = p.tutti('.mp-nodo.coperto');
   assert.ok(nascosti.length >= 4, 'circa un terzo dei concetti');
   assert.ok(!p.q('.mp-nodo.l0').classList.contains('coperto'), 'mai la radice');
-  assert.ok(nascosti.every((g) => g.textContent === '?'));
+  // Del concetto nascosto resta la frase: da indovinare c'è il nome.
+  assert.ok(nascosti.every((g) => g.querySelector('.mp-buco') && !g.querySelector('text.vero')));
+  assert.ok(nascosti.some((g) => g.querySelector('text.frase')));
   const totale = Number(/su (\d+)/.exec(p.q('.mp-conta').textContent)[1]);
   assert.equal(p.q('.mp-conta').textContent, 'Scoperti 0 su ' + totale);
   const id = nascosti[0].getAttribute('data-id');
@@ -137,7 +155,8 @@ test('Mettiti alla prova: pezzi nascosti, un clic li scopre, Rimescola e Basta c
   p.clic(scoperto);
   await p.aspetta(() => p.q('[data-mappa-pannello].aperto'));
   p.clic(p.q('[data-azione="rimescola"]'));
-  await p.aspetta(() => p.q('.mp-conta').textContent === 'Scoperti 0 su ' + totale);
+  // Con un altro giro i pezzi cambiano (e quanti verbi si nascondono dipende da quali concetti sono nascosti).
+  await p.aspetta(() => /^Scoperti 0 su \d+$/.test(p.q('.mp-conta').textContent));
   p.clic(p.q('[data-azione="fine-prova"]'));
   await p.aspetta(() => !p.q('[data-prova="si"]') && !p.q('.mp-nodo.coperto'));
   // Sulla linea del tempo si nascondono date o fatti.
@@ -217,18 +236,23 @@ test('Modifica: niente "Dove?" (la mappa è una parte sola), gli spunti del tipo
   await voceMenu(p, 'scambia-versione');
 });
 
-test('Correggi a mano: un campo per concetto e per verbo, Salva manda solo i testi', opz, async () => {
+test('Correggi a mano: un campo per concetto, per frase e per verbo, Salva manda solo i testi', opz, async () => {
   const p = await apriMappa(7);
   p.clic(await voceMenu(p, 'correggi-a-mano'));
   await p.aspetta(() => p.q('[data-correggi="mappa"]'));
   const campi = p.tutti('[data-correggi="mappa"] .mp-c-voce [aria-label^="Concetto "]');
   assert.equal(campi.length, 16);
   assert.equal(campi[2].value, 'Tiberio');
+  // Una frase per ogni concetto tranne l'argomento; il verbo solo dove c'è, mai per le parti.
+  assert.equal(p.tutti('[data-correggi="mappa"] [aria-label="Frase sotto il nome"]').length, 15);
+  assert.equal(p.tutti('[data-correggi="mappa"] [aria-label="Verbo della freccia"]').length, 2);
   p.scrivi(campi[2], 'Tiberio Claudio Nerone');
+  p.scrivi(p.q('[data-correggi="mappa"] [data-parte="3"] [aria-label="Frase sotto il nome"]'), 'Il figlio adottivo di Augusto.');
   p.clic(p.q('[data-azione="salva-correzioni"]'));
   await p.aspetta(() => p.q('.mp-scheda') && p.tutti('.mp-nodo').some((g) => g.getAttribute('aria-label') === 'Tiberio Claudio Nerone'));
   const put = p.s.chiamate('PUT', '/server/api/mappe/7/testo')[0];
   assert.equal(put.corpo.contenuto.concetti[2].testo, 'Tiberio Claudio Nerone');
+  assert.equal(put.corpo.contenuto.concetti[2].frase, 'Il figlio adottivo di Augusto.');
   assert.equal(put.corpo.contenuto.concetti[2].genitore, 1, 'chi sta sotto a chi non cambia');
 });
 

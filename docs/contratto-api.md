@@ -775,9 +775,11 @@ anche qui.
 ## 29. Mappe (v1.8, richiesta di Andrea del 17/11)
 
 Da uno schema `pronto` il server prepara una **mappa**: `tipo` `date` (la linea del tempo, solo le date e a cosa si
-riferiscono) oppure `concetti` (i concetti fondamentali con le frecce). Una mappa per tipo e per schema. La fonte è solo
-lo schema (già controllato sui documenti); il disegno (albero, raggiera, linea del tempo) lo fanno le app. Il programma
-PC le mostra dalla 1.3.7; il telefono per ora no. Aspetto: `docs/aspetto.md` §45.
+riferiscono) oppure `concetti` (i concetti fondamentali divisi per parti). Una mappa per tipo e per schema. La fonte è
+solo lo schema (già controllato sui documenti); il disegno (riquadri, raggiera, linea del tempo) lo fanno le app. Il
+programma PC le mostra dalla 1.3.7 (a riquadri dalla 1.3.8); il telefono per ora no. Aspetto: `docs/aspetto.md` §45.
+**Server 1.4.1 (21/11):** ogni concetto ha la `frase`; `forma` `riquadri` | `raggiera`; niente più `collegamenti`
+nuovi; il `verbo` c'è solo tra due concetti (mai sotto l'argomento o sotto una parte).
 
 ### 29.1 Indirizzi
 
@@ -810,21 +812,31 @@ cambiato dopo la mappa (le app offrono Rifalla). `firma`: la riga che il PC stam
 
 ### 29.3 Il contenuto
 
-**Concetti** (al massimo 25 concetti, 5 collegamenti):
+**Concetti** (al massimo 25 concetti):
 
 ```json
-{"domanda": "Come passa il potere da un imperatore all'altro?", "forma": "albero",
+{"domanda": "Come passa il potere da un imperatore all'altro?", "forma": "riquadri",
  "concetti": [
-   {"id": 1, "testo": "Dinastia giulio-claudia", "genitore": null, "verbo": null, "spiegazione": "…", "sezione": 1},
-   {"id": 2, "testo": "Augusto", "genitore": 1, "verbo": "comincia con", "spiegazione": "…", "sezione": 2}],
- "collegamenti": [{"da": 10, "a": 5, "verbo": "mettono sul trono", "spiegazione": "…"}]}
+   {"id": 1, "testo": "Dinastia giulio-claudia", "genitore": null, "verbo": null, "frase": null, "spiegazione": "…", "sezione": 1},
+   {"id": 2, "testo": "Augusto", "genitore": 1, "verbo": null, "frase": "Nel 27 a.C. il senato dà a Ottaviano il titolo di Augusto.",
+    "spiegazione": "…", "sezione": 2},
+   {"id": 7, "testo": "Principato", "genitore": 2, "verbo": null, "frase": "…", "spiegazione": "…", "sezione": 2},
+   {"id": 14, "testo": "Istituzioni della Repubblica", "genitore": 7, "verbo": "tiene in piedi le", "frase": "…",
+    "spiegazione": "…", "sezione": 2}],
+ "collegamenti": []}
 ```
 
-Un albero solo: il concetto con `genitore: null` è la radice; gli `id` vanno da 1 in ordine dall'alto (in larghezza).
-`verbo` è la frase sulla freccia dal genitore ("Augusto *comincia con*…" si legge dal genitore al figlio).
-`collegamenti` sono frecce trasversali tra rami diversi (mai una che c'è già nell'albero). `forma`: `albero` |
-`raggiera` (quella consigliata dal modello; l'utente può cambiarla). `sezione`: il numero della sezione dello schema da
-cui viene (per "Apri nello schema"), o `null`. `domanda`: la domanda focale, o `null`.
+Un albero solo: il concetto con `genitore: null` è l'**argomento**; i suoi figli sono le **parti** (di solito 3-7); sotto
+le parti i concetti (1-4 per parte, al massimo un livello in più). Gli `id` vanno da 1 in ordine dall'alto (in
+larghezza). `testo`: il nome, 1-5 parole. `frase`: una frase di 8-20 parole che spiega il concetto con nomi e date
+esatti, senza ripetere il nome (`null` per l'argomento; qualcuna può mancare). `verbo`: la frase sulla freccia dal
+genitore, quasi sempre `null`; c'è solo tra due concetti (il genitore non è l'argomento né una parte), per una causa, una
+conseguenza o un passaggio vero, e si legge "genitore + verbo + concetto" ("Istituzioni della Repubblica" sotto
+"Principato": "Principato *tiene in piedi le* Istituzioni della Repubblica"). Sotto l'argomento e sotto le parti il
+server lo mette a `null`, e le app non lo disegnano nemmeno nelle mappe di prima. `collegamenti`: dalla 1.4.1 sempre `[]`; le mappe fatte prima possono averne (frecce tra rami), le app non
+li disegnano più. `forma`: `riquadri` | `raggiera` (quella consigliata dal modello; l'utente può cambiarla; le mappe di
+prima possono dire `albero`: si leggono come `riquadri`). `sezione`: il numero della sezione dello schema da cui viene
+(per "Apri nello schema"), o `null`. `domanda`: la domanda focale, o `null`.
 
 **Date** (da 3 a 40 date, in ordine di tempo):
 
@@ -849,9 +861,11 @@ nello schema ci sono almeno 3 date (se no la linea del tempo non si propone).
 
 Una chiamata al modello di scrittura con lo schema numerato (al massimo 90.000 caratteri) chiede i pezzi; poi, senza AI,
 si controllano le date nel testo dello schema (numeri, secoli in romani o in lettere, a.C.): una data che non c'è si fa
-correggere una volta, poi si toglie. Poi il solito controllo dei fatti (17.1) su ogni legame letto come frase ("Peste
-nera *provoca* Calo della popolazione") e su ogni spiegazione, con una riscrittura possibile; quello che resta fuori
-dallo schema si toglie. Se restano meno di 4 concetti o meno di 3 date la mappa va in `errore`. Costa circa 1 centesimo
+correggere una volta, poi si toglie. Poi il solito controllo dei fatti (17.1) su ogni concetto dentro il suo genitore
+("Crisi del Trecento: Peste nera."), su ogni verbo a parte ("Peste nera *provoca* Calo della popolazione."), su ogni
+frase e su ogni spiegazione, con una riscrittura possibile; quello che resta fuori dallo schema si toglie (un verbo
+sbagliato toglie solo la freccia, una frase sbagliata solo la frase). Se mancano le frasi a più di un quarto dei
+concetti, o una frase supera le 32 parole, si fa riscrivere. Se restano meno di 4 concetti o meno di 3 date la mappa va in `errore`. Costa circa 1 centesimo
 (`stima_eur`), aspetta in coda con schemi e riassunti. Novità (sezione 11): `mappa_pronta` ("La mappa dei concetti di
 Storia è pronta", "La linea del tempo di Storia è pronta") e `mappa_errore` ("La mappa di Storia si è fermata: tocca
 Riprova"), con `materia_id`.
@@ -860,8 +874,9 @@ Riprova"), con `materia_id`.
 
 `PUT /api/mappe/{id}/testo` `{"titolo": "…", "contenuto": {…}}` → `Mappa`. Il `contenuto` ha la forma ricevuta: contano
 solo i testi, chi sta sotto a chi e l'ordine restano quelli del server. Stessi elementi nello stesso ordine (se no 422).
-- Concetti: `concetti[].testo` (al massimo 80; vuoto = resta quello di prima), `concetti[].verbo` (40),
-  `concetti[].spiegazione` (600), `collegamenti[].verbo` (40) e `.spiegazione` (600), `domanda` (160).
+- Concetti: `concetti[].testo` (al massimo 80; vuoto = resta quello di prima), `concetti[].frase` (300; vuota = niente
+  frase), `concetti[].verbo` (40; sotto l'argomento e sotto le parti si ignora), `concetti[].spiegazione` (600), `domanda` (160). Le mappe di
+  prima della 1.4.1: anche `collegamenti[].verbo` (40) e `.spiegazione` (600); se mancano restano come sono.
 - Date: `eventi[].data` (40), `eventi[].cosa` (120; vuoto = la data si toglie), `eventi[].spiegazione` (600). Una data
   riscritta con un anno diverso ("41-54", "XV secolo", "12 ottobre 1492") si sposta sulla linea: il server ricalcola
   `anno`, `fine`, `mese`, `x`, `x_fine` e riordina.

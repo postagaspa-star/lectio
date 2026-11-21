@@ -79,20 +79,48 @@ def test_concetti_un_albero_solo():
     assert "frase" in " ".join(mappe.valida_concetti({"concetti": [
         {"id": 1, "testo": "Roma", "genitore": None}, {"id": 2, "testo": "uno due tre quattro cinque sei sette otto nove", "genitore": 1},
         {"id": 3, "testo": "C", "genitore": 1}, {"id": 4, "testo": "D", "genitore": 1}]}))
-    o = {"forma": "nuvola", "concetti": [{"id": "r", "testo": "Roma", "genitore": None}, {"id": "b", "testo": "Impero.", "genitore": "r", "verbo": "diventa"},
-                                         {"id": "c", "testo": "Caduta", "genitore": "b", "verbo": "subisce"}, {"id": "d", "testo": "Senato", "genitore": "r", "verbo": "ha"},
+    o = {"forma": "nuvola", "concetti": [{"id": "r", "testo": "Roma", "genitore": None},
+                                         {"id": "b", "testo": "Impero.", "genitore": "r", "verbo": "diventa", "frase": "Augusto lo fonda nel 27 a.C."},
+                                         {"id": "c", "testo": "Crisi", "genitore": "b", "verbo": "subisce", "frase": "Tasse e guerre lo indeboliscono."},
+                                         {"id": "e", "testo": "Caduta", "genitore": "c", "verbo": "porta alla", "frase": "Arriva nel 476 d.C."},
+                                         {"id": "d", "testo": "Senato", "genitore": "r", "verbo": "ha"},
                                          {"id": "x", "testo": "Isolato", "genitore": "z"}],
-         "collegamenti": [{"da": "c", "a": "d", "verbo": "indebolisce"}, {"da": "r", "a": "b", "verbo": "doppione"}, {"da": "c", "a": "c"}]}
+         "collegamenti": [{"da": "c", "a": "d", "verbo": "indebolisce"}]}
     n = mappe.normalizza_concetti(o, set())
-    assert n["forma"] == "albero"
-    assert [(c["id"], c["testo"], c["genitore"], c["verbo"]) for c in n["concetti"]] == [
-        (1, "Roma", None, None), (2, "Impero", 1, "diventa"), (3, "Senato", 1, "ha"), (4, "Caduta", 2, "subisce")]
-    assert n["collegamenti"] == [{"da": 4, "a": 3, "verbo": "indebolisce", "spiegazione": ""}]
-    # Il controllo trova fuori "Impero subisce Caduta" e "Roma diventa Impero": Caduta sale a Roma senza verbo.
+    # 1.4.1: a riquadri, niente frecce tra rami; il verbo solo tra due concetti (mai dall'argomento o da una parte).
+    assert n["forma"] == "riquadri" and n["collegamenti"] == []
+    assert [(c["id"], c["testo"], c["genitore"], c["verbo"], c["frase"]) for c in n["concetti"]] == [
+        (1, "Roma", None, None, None), (2, "Impero", 1, None, "Augusto lo fonda nel 27 a.C."), (3, "Senato", 1, None, None),
+        (4, "Crisi", 2, None, "Tasse e guerre lo indeboliscono."), (5, "Caduta", 4, "porta alla", "Arriva nel 476 d.C.")]
+    assert mappe.normalizza_concetti({**o, "forma": "raggiera"}, set())["forma"] == "raggiera"
+    # Le mappe di prima date al modello per una Modifica: i verbi dei gruppi non si ricopiano.
+    vecchia = {"forma": "albero", "concetti": [dict(c, verbo="ha") if c["genitore"] else c for c in n["concetti"]]}
+    assert [c["verbo"] for c in mappe.per_modello("concetti", "T", vecchia)["concetti"]] == [None, None, None, None, "ha"]
     oggetto, da_dove = mappe.frasi_da_controllare("concetti", n)
-    assert oggetto["voci"] == ["Roma diventa Impero.", "Roma ha Senato.", "Impero subisce Caduta.", "Caduta indebolisce Senato."]
-    tolto = mappe.togli_fuori("concetti", n, [(oggetto["voci"], 0, 0, "")], da_dove)
-    assert [(c["id"], c["genitore"], c["verbo"]) for c in tolto["concetti"]] == [(1, None, None), (3, 1, "ha"), (4, 1, None)]
+    voci = oggetto["voci"]
+    assert voci == ["Roma: Impero.", "Impero: Augusto lo fonda nel 27 a.C.", "Roma: Senato.", "Impero: Crisi.",
+                    "Crisi: Tasse e guerre lo indeboliscono.", "Crisi: Caduta.", "Crisi porta alla Caduta.", "Caduta: Arriva nel 476 d.C."]
+    # Un verbo sbagliato toglie solo la freccia; una frase sbagliata solo la frase.
+    tolto = mappe.togli_fuori("concetti", n, [(voci, 6, 0, ""), (voci, 7, 0, "")], da_dove)
+    assert [(c["id"], c["genitore"], c["verbo"], c["frase"]) for c in tolto["concetti"]] == [
+        (1, None, None, None), (2, 1, None, "Augusto lo fonda nel 27 a.C."), (3, 1, None, None),
+        (4, 2, None, "Tasse e guerre lo indeboliscono."), (5, 4, None, None)]
+    # Un concetto che non c'è si toglie: chi stava sotto sale, senza verbo.
+    tolto = mappe.togli_fuori("concetti", n, [(voci, 3, 0, "")], da_dove)
+    assert [(c["id"], c["genitore"], c["verbo"]) for c in tolto["concetti"]] == [(1, None, None), (2, 1, None), (3, 1, None), (5, 2, None)]
+
+
+def test_concetti_senza_frasi_o_con_frasi_lunghe():
+    radice = {"id": 1, "testo": "Roma", "genitore": None}
+    senza = [radice] + [{"id": k, "testo": f"Parte {k}", "genitore": 1} for k in range(2, 6)]
+    assert any("manca la" in e for e in mappe.valida_concetti({"concetti": senza}))
+    con = [radice] + [{"id": k, "testo": f"Parte {k}", "genitore": 1, "frase": "Una frase giusta."} for k in range(2, 6)]
+    assert mappe.valida_concetti({"concetti": con}) == []
+    con[1] = {**con[1], "frase": " ".join(["parola"] * 40)}
+    assert any("troppo lunga" in e for e in mappe.valida_concetti({"concetti": con}))
+    # Qualche frase mancante si accetta.
+    con[1] = {"id": 2, "testo": "Parte 2", "genitore": 1}
+    assert mappe.valida_concetti({"concetti": con}) == []
 
 
 def test_correggi_a_mano_sposta_le_date():
@@ -178,11 +206,19 @@ def test_modifica_correggi_e_torna_a_prima(client, auth, servizi):
 
     corretto = json.loads(json.dumps(z["contenuto"]))
     corretto["concetti"][1]["testo"] = "Concetto mio"
-    corretto["concetti"][1]["verbo"] = "porta a"
+    corretto["concetti"][1]["frase"] = "La mia frase."
+    corretto["concetti"][1]["verbo"] = "porta a"  # sotto l'argomento la freccia non c'è: si ignora
     corretto["concetti"][0]["testo"] = ""  # vuoto: resta quello di prima
     w = client.put(f"/api/mappe/{x['id']}/testo", json={"titolo": "La mia mappa", "contenuto": corretto}, headers=auth).json()
     assert w["titolo"] == "La mia mappa" and w["contenuto"]["concetti"][1]["testo"] == "Concetto mio"
-    assert w["contenuto"]["concetti"][1]["verbo"] == "porta a" and w["contenuto"]["concetti"][0]["testo"] == z["contenuto"]["concetti"][0]["testo"]
+    assert w["contenuto"]["concetti"][1]["frase"] == "La mia frase." and w["contenuto"]["concetti"][1]["verbo"] is None
+    assert w["contenuto"]["concetti"][0]["testo"] == z["contenuto"]["concetti"][0]["testo"]
+    sotto = next((k for k, c in enumerate(w["contenuto"]["concetti"]) if c["genitore"] not in (None, 1)), None)
+    if sotto is not None:  # nemmeno sotto una parte
+        corretto = json.loads(json.dumps(w["contenuto"]))
+        corretto["concetti"][sotto]["verbo"] = "porta a"
+        v = client.put(f"/api/mappe/{x['id']}/testo", json={"contenuto": corretto}, headers=auth).json()
+        assert v["contenuto"]["concetti"][sotto]["verbo"] is None
     assert w["versione_da_parte"]["perche"] == "a_mano"
     corretto["concetti"] = corretto["concetti"][:1]
     assert client.put(f"/api/mappe/{x['id']}/testo", json={"contenuto": corretto}, headers=auth).status_code == 422
@@ -228,15 +264,18 @@ def test_linea_del_tempo_vera_senza_date_inventate(client, auth, servizi, server
 def test_mappa_dei_concetti_vera_e_modifica(client, auth, servizi, server):
     _, d = schema_pronto(client, auth, servizi)
     r = client.post(f"/api/schemi/{d['id']}/mappe", json={"tipo": "concetti"}, headers=auth).json()
-    server.fuori_coda = [[{"n": 2, "motivo": "non c'è"}], [{"n": 2, "motivo": "non c'è"}]]  # "Augusto tiene Potere vero."
+    server.fuori_coda = [[{"n": 2, "motivo": "non c'è"}], [{"n": 2, "motivo": "non c'è"}]]  # "Augusto: Potere vero."
     studio_tutto(servizi)
     x = client.get(f"/api/mappe/{r['id']}", headers=auth).json()
     assert x["stato"] == "pronta" and x["contenuto"]["domanda"] == "Come governò Augusto?"
+    assert x["contenuto"]["forma"] == "riquadri"
     concetti = x["contenuto"]["concetti"]
-    # "Potere vero" è tolto: le Legioni salgono ad Augusto, senza verbo; il collegamento resta.
+    # "Potere vero" è tolto: le Legioni salgono ad Augusto, senza verbo. Il verbo resta solo tra due concetti (Facciata e
+    # Consoli); le frecce tra rami non ci sono.
     assert [(c["testo"], c["genitore"], c["verbo"]) for c in concetti] == [
-        ("Augusto", None, None), ("Senato", 1, "lascia in piedi"), ("Legioni", 1, None), ("Facciata", 3, "resta di")]
-    assert x["contenuto"]["collegamenti"] == [{"da": 4, "a": 3, "verbo": "pesano più del", "spiegazione": ""}]
+        ("Augusto", None, None), ("Senato", 1, None), ("Legioni", 1, None), ("Facciata", 3, None), ("Consoli", 5, "tiene i")]
+    assert concetti[1]["frase"] == "Si riunisce ancora ma conta poco."
+    assert x["contenuto"]["collegamenti"] == []
     m = client.post("/api/modifiche", json={"tipo": "mappa", "id": x["id"], "richiesta": "Aggiungi le legioni"}, headers=auth).json()
     studio_tutto(servizi)
     assert client.get(f"/api/modifiche/{m['id']}", headers=auth).json()["stato"] == "pronta"

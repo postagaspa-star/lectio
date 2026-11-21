@@ -337,12 +337,20 @@ class ServerFinto:
             oggetto = self.mappa or {"titolo": "Le date dell'impero", "eventi": eventi}
         elif "Fai la mappa dei CONCETTI" in primo:
             oggetto = self.mappa or {
-                "titolo": "Il potere di Augusto", "domanda": "Come governò Augusto?", "forma": "albero",
-                "concetti": [{"id": 1, "testo": "Augusto", "genitore": None, "verbo": None, "spiegazione": "Il primo imperatore.", "sezione": 1},
-                             {"id": 2, "testo": "Potere vero", "genitore": 1, "verbo": "tiene", "spiegazione": "Comanda l'esercito.", "sezione": 1},
-                             {"id": 3, "testo": "Senato", "genitore": 1, "verbo": "lascia in piedi", "spiegazione": "Si riunisce ancora.", "sezione": 2},
-                             {"id": 4, "testo": "Facciata", "genitore": 3, "verbo": "resta di", "spiegazione": "", "sezione": 2},
-                             {"id": 5, "testo": "Legioni", "genitore": 2, "verbo": "passa per", "spiegazione": "", "sezione": 1}],
+                "titolo": "Il potere di Augusto", "domanda": "Come governò Augusto?", "forma": "riquadri",
+                "concetti": [{"id": 1, "testo": "Augusto", "genitore": None, "verbo": None, "frase": None,
+                              "spiegazione": "Il primo imperatore.", "sezione": 1},
+                             {"id": 2, "testo": "Potere vero", "genitore": 1, "verbo": "tiene", "frase": "Comanda l'esercito e decide lui.",
+                              "spiegazione": "Comanda l'esercito.", "sezione": 1},
+                             {"id": 3, "testo": "Senato", "genitore": 1, "verbo": "lascia in piedi", "frase": "Si riunisce ancora ma conta poco.",
+                              "spiegazione": "Si riunisce ancora.", "sezione": 2},
+                             {"id": 4, "testo": "Facciata", "genitore": 3, "verbo": "resta di", "frase": "Le cariche della repubblica restano.",
+                              "spiegazione": "", "sezione": 2},
+                             {"id": 5, "testo": "Legioni", "genitore": 2, "verbo": "passa per", "frase": "Sono fedeli ad Augusto.",
+                              "spiegazione": "", "sezione": 1},
+                             {"id": 6, "testo": "Consoli", "genitore": 4, "verbo": "tiene i", "frase": "Ogni anno se ne eleggono ancora due.",
+                              "spiegazione": "", "sezione": 2}],
+                # Le frecce tra rami non si disegnano più (1.4.1): se il modello le manda, si lasciano fuori.
                 "collegamenti": [{"da": 5, "a": 3, "verbo": "pesano più del", "spiegazione": ""}]}
         elif "Lo studente non ha capito il passaggio" in primo:
             oggetto = self.chiarimento or {"trovato": True, "risposta": "Vuol dire che comandava Augusto.", "fonti": ids[:1], "cosa_manca": None}

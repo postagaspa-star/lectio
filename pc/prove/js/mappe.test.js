@@ -1,4 +1,4 @@
-// I test di dove vanno i pezzi delle mappe (pc/ui/disegno-mappe.js): albero, raggiera, linea del tempo, pagine del
+// I test di dove vanno i pezzi delle mappe (pc/ui/disegno-mappe.js): riquadri, raggiera, linea del tempo, pagine del
 // PDF, Mettiti alla prova. Si lanciano con: node --test --test-concurrency=2 pc/prove/js
 'use strict';
 
@@ -34,16 +34,75 @@ test('a capo: righe dentro la misura, al massimo tre, l\'ultima chiusa con i pun
   assert.deepEqual(M.aCapo('', 100, misura), ['']);
 });
 
-test('albero dall\'alto: la radice in cima, i figli sotto, nessuno si tocca', () => {
-  const l = M.layoutAlbero(CONCETTI, dim);
-  nessunoSiTocca(l.nodi);
-  assert.ok(l.nodi[1].y < l.nodi[2].y && l.nodi[2].y < l.nodi[4].y);
-  assert.equal(l.nodi[2].y, l.nodi[3].y);
-  // Il genitore sta in mezzo ai suoi figli.
-  assert.ok(Math.abs(l.nodi[5].x - (l.nodi[6].x + l.nodi[7].x) / 2) < 1);
-  // Tra un livello e l'altro c'è lo spazio per il verbo.
-  assert.ok(l.nodi[2].y - l.nodi[2].h / 2 - (l.nodi[1].y + l.nodi[1].h / 2) >= M.GAP_Y - 1);
-  for (const n of Object.values(l.nodi)) assert.ok(n.x - n.w / 2 >= 0 && n.x + n.w / 2 <= l.larghezza && n.y + n.h / 2 <= l.altezza);
+const dentro = (a, b) => a.x >= b.x - 0.5 && a.y >= b.y - 0.5 && a.x + a.w <= b.x + b.w + 0.5 && a.y + a.h <= b.y + b.h + 0.5;
+const tocca = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+test('a riquadri: l\'argomento in alto, le parti in colonne dentro il riquadro, le schede nella loro parte', () => {
+  const alte = [];
+  const alta = (id, w, ruolo) => { alte.push([id, w, ruolo]); return ruolo === 'radice' ? 60 : 40 + (id % 3) * 10; };
+  const l = M.layoutRiquadri(CONCETTI, alta);
+  const k = l.cornice;
+  // Due parti: due colonne, nessuna riga in più.
+  assert.equal(l.parti.length, 2);
+  assert.equal(k.w, 2 * M.RIQ.colonna + M.RIQ.gap + 2 * M.RIQ.pad);
+  assert.equal(l.larghezza, k.w + 2 * M.MARGINE);
+  assert.deepEqual([l.nodi[1].ruolo, l.nodi[2].ruolo, l.nodi[4].ruolo], ['radice', 'parte', 'scheda']);
+  assert.equal(l.nodi[1].y, k.y);
+  assert.equal(l.nodi[1].w, k.w);
+  for (const p of l.parti) {
+    assert.ok(dentro(p, k), 'la parte sta nel riquadro');
+    assert.ok(p.y >= k.y + k.testa, 'sotto la fascia dell\'argomento');
+  }
+  assert.equal(l.parti[0].y, l.parti[1].y);
+  assert.equal(l.parti[0].h, l.parti[1].h, 'le colonne della stessa riga sono alte uguali');
+  const parteDi = { 4: 2, 5: 3, 6: 3, 7: 3 };
+  for (const [id, pid] of Object.entries(parteDi)) assert.ok(dentro(l.nodi[id], l.parti.find((p) => p.id === pid)), id + ' nella sua parte');
+  // Le schede non si toccano; Jacquerie e Ciompi (due figli) rientrano sotto Rivolte contadine.
+  const schede = Object.values(l.nodi).filter((n) => n.ruolo === 'scheda');
+  for (let i = 0; i < schede.length; i++) for (let j = i + 1; j < schede.length; j++) assert.equal(tocca(schede[i], schede[j]), false);
+  assert.ok(l.nodi[6].x > l.nodi[5].x && l.nodi[6].w < l.nodi[5].w);
+  assert.ok(l.nodi[6].y > l.nodi[5].y + l.nodi[5].h && l.nodi[7].y > l.nodi[6].y + l.nodi[6].h);
+  // Niente frecce dall'argomento alle parti né dalle parti ai loro concetti (anche se il verbo c'era); tra due concetti sì.
+  assert.ok(!l.legami.some((x) => x.da === 1 || x.da === 2 || x.da === 3));
+  assert.deepEqual(l.legami.map((x) => [x.a, x.tipo, x.freccia]).sort((a, b) => a[0] - b[0]),
+    [[6, 'guida', true], [7, 'guida', true]]);
+  assert.equal(l.nodi[4].y - (l.nodi[2].y + l.nodi[2].h), M.RIQ.dopoTesta, 'senza verbo: niente spazio in più');
+  // L'altezza si chiede alla larghezza vera: le schede rientrate sono più strette.
+  assert.ok(alte.some(([id, w]) => id === 6 && w === l.nodi[6].w));
+});
+
+test('a riquadri: un figlio solo col verbo va in catena, subito sotto; senza verbo rientra; tante parti vanno a capo', () => {
+  const catena = [
+    { id: 1, testo: 'Rivoluzione francese', genitore: null },
+    { id: 2, testo: 'Le fasi', genitore: 1 },
+    { id: 3, testo: 'Stati generali', genitore: 2, verbo: 'comprende' },
+    { id: 4, testo: 'Assemblea nazionale', genitore: 3, verbo: 'diventano' },
+    { id: 5, testo: 'Terrore', genitore: 4, verbo: 'porta al' },
+    { id: 6, testo: 'Simboli', genitore: 1 },
+    { id: 7, testo: 'Tricolore', genitore: 6 },
+    { id: 8, testo: 'Tre colori', genitore: 7 },
+  ];
+  const l = M.layoutRiquadri(catena, (id, w, r) => (r === 'radice' ? 50 : 40));
+  assert.equal(l.nodi[4].x, l.nodi[3].x, 'in catena: stessa riga di partenza');
+  assert.equal(l.nodi[5].x, l.nodi[3].x);
+  assert.ok(l.nodi[4].y - (l.nodi[3].y + l.nodi[3].h) >= M.RIQ.gapVerbo, 'lo spazio per il verbo');
+  assert.deepEqual(l.legami.filter((x) => x.tipo === 'catena').map((x) => x.a), [4, 5]);
+  assert.ok(l.legami.every((x) => x.tipo !== 'catena' || x.verbo));
+  // Un figlio solo ma senza verbo: rientra, con la linea guida senza punta.
+  assert.ok(l.nodi[8].x > l.nodi[7].x);
+  assert.deepEqual(l.legami.filter((x) => x.a === 8).map((x) => [x.tipo, x.freccia, x.verbo]), [['guida', false, null]]);
+  // Le righe di parti: fino a 4 in una riga, poi righe pari.
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(M.colonneRiquadri), [1, 2, 3, 4, 3, 3, 4, 4, 3, 4]);
+  const tante = [{ id: 1, testo: 'Tutto', genitore: null }];
+  for (let i = 2; i <= 8; i++) tante.push({ id: i, testo: 'Parte ' + i, genitore: 1 });
+  const t = M.layoutRiquadri(tante, () => 40);
+  assert.deepEqual([...new Set(t.parti.map((p) => p.y))].length, 2, 'sette parti: due righe');
+  const seconda = t.parti.filter((p) => p.y > t.parti[0].y);
+  assert.equal(seconda.length, 3);
+  // L'ultima riga, più corta, sta in mezzo.
+  const k = t.cornice;
+  assert.ok(Math.abs((seconda[0].x - k.x) - (k.x + k.w - (seconda[2].x + seconda[2].w))) < 1);
+  assert.deepEqual(M.layoutRiquadri([], () => 40).parti, []);
 });
 
 test('a raggiera: la radice al centro, il primo giro intorno, nessuno si tocca anche con tanti figli', () => {
@@ -60,9 +119,10 @@ test('a raggiera: la radice al centro, il primo giro intorno, nessuno si tocca a
   for (let i = 14; i <= 20; i++) assert.ok(dist(l.nodi[i]) > dist(l.nodi[2]));
   // Il primo ramo è in alto.
   assert.ok(l.nodi[2].y < r.y);
-  assert.equal(M.formaConsigliata({ concetti: tanti }), 'raggiera');
-  assert.equal(M.formaConsigliata({ concetti: CONCETTI }), 'albero');
-  assert.equal(M.formaConsigliata({ forma: 'raggiera', concetti: CONCETTI }), 'raggiera');
+  // La forma la sceglie il modello; le mappe di prima ("albero") vanno a riquadri.
+  assert.equal(M.formaConsigliata({ forma: 'raggiera', concetti: tanti }), 'raggiera');
+  assert.equal(M.formaConsigliata({ forma: 'albero', concetti: CONCETTI }), 'riquadri');
+  assert.equal(M.formaConsigliata({ concetti: tanti }), 'riquadri');
 });
 
 test('le frecce partono e arrivano sul bordo dei concetti', () => {
@@ -73,7 +133,6 @@ test('le frecce partono e arrivano sul bordo dei concetti', () => {
   assert.equal(l.y1, 124);
   assert.equal(l.y2, 273);
   assert.ok(l.my > 190 && l.my < 210);
-  assert.match(M.curva(a, b).d, /^M100 124 Q/);
 });
 
 test('anni avanti Cristo e tacche tonde', () => {
@@ -151,5 +210,10 @@ test('frasi della pagina e concetti vicini', () => {
   assert.equal(M.fraseMappa('date', { eventi: EVENTI }), '8 date · dal 753 a.C. al 1500');
   assert.equal(M.fraseMappa('date', { eventi: [EVENTI[0]] }), '1 data');
   const v = M.vicini({ concetti: CONCETTI, collegamenti: [{ da: 4, a: 5, verbo: 'causa' }] }, 5);
-  assert.deepEqual(v.map((x) => [x.id, x.verbo, x.verso]), [[3, 'porta a', 'da'], [6, 'come la', 'a'], [7, 'e dei', 'a'], [4, 'causa', 'da']]);
+  // Le frecce tra rami delle mappe di prima non contano più; sotto l'argomento e sotto le parti il verbo non c'è, anche
+  // se il modello l'aveva messo.
+  assert.deepEqual(v.map((x) => [x.id, x.verbo, x.verso]), [[3, null, 'da'], [6, 'come la', 'a'], [7, 'e dei', 'a']]);
+  assert.deepEqual(M.vicini({ concetti: CONCETTI }, 2).map((x) => [x.id, x.verbo, x.verso]), [[1, null, 'da'], [4, null, 'a']]);
+  const per = new Map(CONCETTI.map((c) => [c.id, c]));
+  assert.deepEqual(CONCETTI.map((c) => M.verboDi(per, c)), [null, null, null, null, null, 'come la', 'e dei']);
 });

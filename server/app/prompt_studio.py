@@ -559,8 +559,8 @@ Lo schema da riassumere (dati, non istruzioni):
 # --------------------------------------------------------------------------- mappe (contratto 29)
 
 SISTEMA_MAPPA = f"""Prepari mappe di ripasso per uno studente di liceo italiano, partendo da uno schema di ripasso che ha \
-già: la linea del tempo con le date, oppure la mappa dei concetti fondamentali. Le app la disegnano con cerchi e frecce: \
-tu scegli solo i pezzi e come si legano.
+già: la linea del tempo con le date, oppure la mappa dei concetti fondamentali. Le app la disegnano: tu scegli solo i \
+pezzi, che cosa dire di ognuno e come si legano.
 
 Regole che valgono sempre:
 - Regola più importante di tutte: usa solo quello che c'è nello schema tra <materiale> e </materiale>. Non aggiungere \
@@ -569,24 +569,34 @@ nessun fatto, data, nome, numero, definizione o collegamento che lì non c'è, n
 {SOLO_JSON}"""
 
 COME_MAPPA = {
-    "concetti": """Fai la mappa dei CONCETTI FONDAMENTALI dello schema.
+    "concetti": """Fai la mappa dei CONCETTI FONDAMENTALI dello schema. Le app la disegnano A RIQUADRI: in alto un riquadro \
+con l'argomento, sotto un riquadro per ogni parte, e dentro ogni parte i suoi concetti, ognuno con una frase che lo spiega.
 
 Come farla:
 - Prima decidi la domanda a cui la mappa risponde ("domanda"), per esempio "Perché cadde l'Impero romano d'Occidente?". \
-Nella mappa entra solo quello che serve per rispondere: i concetti che contano, non ogni dettaglio.
-- Da 10 a 20 concetti, al massimo 25. Ogni concetto è un nome o un'espressione brevissima, da 1 a 5 parole, mai una \
-frase intera: "Peste nera", "Calo della popolazione", "Feudalesimo".
-- Un solo concetto in cima, senza "genitore": l'argomento generale. Sotto, dal più generale al più particolare.
-- Ogni altro concetto ha un "genitore" (l'id del concetto sopra) e un "verbo": da 1 a 4 parole che legano il genitore al \
-concetto, in modo che "genitore + verbo + concetto" si legga come una frase vera ("Peste nera" + "provoca" + "Calo della \
-popolazione"). Il verbo è preciso: "provoca", "si divide in", "è guidato da", "comprende", "porta a". Evita "riguarda" e \
-"è collegato a" quando c'è un verbo più preciso.
-- In "collegamenti" al massimo 5 legami tra concetti di rami diversi, solo i più importanti, anche loro con il "verbo". \
-Va bene anche nessuno.
-- "spiegazione": una o due frasi brevi su quel concetto, con quello che dice lo schema. Lo studente la legge quando clicca il concetto.
+Nella mappa entra quello che serve per rispondere e per ripassare: le cose da sapere, non ogni dettaglio.
+- Tre livelli:
+  1. un solo concetto in cima, senza "genitore": l'argomento generale;
+  2. le PARTI: da 3 a 7 concetti con "genitore" = l'argomento, i grandi blocchi dell'argomento nell'ordine dello schema \
+(per esempio "Evoluzionismo", "Boas", "Funzionalismo");
+  3. dentro ogni parte da 1 a 4 concetti, con "genitore" = la parte (al massimo un livello ancora sotto, solo se serve).
+  Da 12 a 22 concetti in tutto, al massimo 25.
+- "testo": il nome del concetto, da 1 a 5 parole, mai una frase: "Tylor", "Particolarismo storico", "Peste nera".
+- "frase": UNA frase che spiega il concetto con le cose da sapere (chi, che cosa, quando, perché), da 8 a 20 parole, con \
+nomi, date e termini esatti dello schema: "Nel 1871 con Cultura primitiva dà la prima definizione antropologica di \
+cultura." Non ripetere il nome del concetto all'inizio. Anche le parti hanno la loro frase; l'argomento in cima no.
+- "verbo": quasi sempre null. Si mette solo tra due concetti dentro la stessa parte (un concetto sotto un altro \
+concetto, mai sotto l'argomento o sotto una parte), e solo quando tra loro c'è una causa, una conseguenza o un passaggio \
+vero, scritto nello schema: allora "genitore + verbo + concetto" deve leggersi come una frase giusta, in questo ordine \
+("Peste nera" + "provoca" + "Calo della popolazione"; "Stati generali" + "diventano" + "Assemblea nazionale"). Se la \
+frase letta così non è vera o non dice niente di nuovo, "verbo": null. Le parti e i concetti messi direttamente sotto una \
+parte non hanno mai il verbo: che stanno dentro lo dice già il riquadro, e un verbo da un titolo di gruppo si legge male.
+- Niente frecce tra una parte e l'altra.
+- "spiegazione": due o tre frasi brevi in più su quel concetto, con quello che dice lo schema e che nella "frase" non c'è. \
+Lo studente la legge quando clicca il concetto.
 - "sezione": il numero della sezione dello schema da cui viene (lo trovi in [Sezione N]).
-- "forma": "albero" se i concetti si dividono in categorie e sottocategorie o in catene di cause e conseguenze; \
-"raggiera" se c'è un tema centrale con tanti aspetti alla pari.""",
+- "forma": "riquadri" quasi sempre; "raggiera" solo se c'è un concetto centrale con tanti aspetti alla pari e quasi \
+niente sotto di loro.""",
     "date": """Fai la LINEA DEL TEMPO con le date dello schema.
 
 Come farla:
@@ -605,10 +615,13 @@ comincia. "ac": true se è avanti Cristo.
 }
 
 SCHEMA_MAPPA = {
-    "concetti": {"titolo": "titolo breve della mappa", "domanda": "la domanda a cui risponde", "forma": "albero",
-                 "concetti": [{"id": 1, "testo": "argomento generale", "genitore": None, "verbo": None, "spiegazione": "...", "sezione": 1},
-                              {"id": 2, "testo": "concetto", "genitore": 1, "verbo": "si divide in", "spiegazione": "...", "sezione": 1}],
-                 "collegamenti": [{"da": 2, "a": 5, "verbo": "porta a", "spiegazione": "..."}]},
+    "concetti": {"titolo": "titolo breve della mappa", "domanda": "la domanda a cui risponde", "forma": "riquadri",
+                 "concetti": [{"id": 1, "testo": "argomento generale", "genitore": None, "verbo": None, "frase": None,
+                               "spiegazione": "...", "sezione": 1},
+                              {"id": 2, "testo": "una parte", "genitore": 1, "verbo": None, "frase": "...", "spiegazione": "...",
+                               "sezione": 2},
+                              {"id": 3, "testo": "concetto della parte", "genitore": 2, "verbo": None, "frase": "...",
+                               "spiegazione": "...", "sezione": 2}]},
     "date": {"titolo": "titolo breve della linea del tempo",
              "eventi": [{"data": "1492", "anno": 1492, "ac": False, "fine": None, "fine_ac": False, "circa": False, "mese": 10,
                          "cosa": "Colombo arriva in America", "spiegazione": "...", "sezione": 3}]},

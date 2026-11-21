@@ -1237,8 +1237,8 @@
   }
 
   /**
-   * Contratto §29.6 La mappa corretta a mano: dal `corretto` si prendono SOLO i testi (concetti: testo, verbo,
-   * spiegazione; collegamenti: verbo; date: data, cosa, spiegazione); ordine, legami e sezioni restano quelli di
+   * Contratto §29.6 La mappa corretta a mano: dal `corretto` si prendono SOLO i testi (concetti: testo, frase, verbo,
+   * spiegazione; collegamenti delle mappe di prima: verbo; date: data, cosa, spiegazione); ordine, legami e sezioni restano quelli di
    * `originale`. Il resto (anni, posizione sulla linea) lo ricalcola il server dalla data scritta.
    */
   function contenutoMappaCorretto(originale, corretto) {
@@ -1248,7 +1248,7 @@
       const n = (nuovi || []).find((y) => y && y.id === x.id) || (nuovi || [])[i] || {};
       for (const k of campi) if (typeof n[k] === 'string' && (typeof x[k] === 'string' || x[k] == null)) x[k] = pulito(n[k]);
     });
-    if (Array.isArray(fuori.concetti)) testi(fuori.concetti, c.concetti, ['testo', 'verbo', 'spiegazione']);
+    if (Array.isArray(fuori.concetti)) testi(fuori.concetti, c.concetti, ['testo', 'frase', 'verbo', 'spiegazione']);
     if (Array.isArray(fuori.collegamenti)) {
       fuori.collegamenti.forEach((k, i) => {
         const n = (c.collegamenti || [])[i];

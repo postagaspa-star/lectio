@@ -584,7 +584,7 @@
       }));
     }
 
-    /** §45.8 La mappa: una scheda per concetto (testo, verbo della freccia che arriva, spiegazione) o per data. */
+    /** §45.8 La mappa: una scheda per concetto (testo, frase, verbo della freccia che arriva, spiegazione) o per data. */
     function testoMappa() {
       const conc = Array.isArray(corretto.concetti);
       const per = new Map((corretto.concetti || []).map((c) => [c.id, c]));
@@ -596,17 +596,14 @@
           conc
             ? [h('div', { class: 'mp-c-riga' }, h('span', { class: 'mod-n', 'aria-hidden': 'true' }, String(i + 1)),
               campo(v.testo, (t) => { v.testo = t; }, { classe: 'mod-titolo-parte', etichetta: 'Concetto ' + (i + 1), unaRiga: true, max: 80 })),
-            v.genitore != null && typeof v.verbo === 'string' ? h('div', { class: 'mp-c-riga piccola' },
+            v.genitore != null ? campo(typeof v.frase === 'string' ? v.frase : '', (t) => { v.frase = t; }, { classe: 'mp-c-frase', etichetta: 'Frase sotto il nome', unaRiga: true, max: 300 }) : null,
+            v.genitore != null && typeof v.verbo === 'string' && window.LectioMappe && window.LectioMappe.verboDi(per, v) ? h('div', { class: 'mp-c-riga piccola' },
               h('span', { class: 'mp-c-da' }, 'Freccia da ' + ((per.get(v.genitore) || {}).testo || '')),
               campo(v.verbo, (t) => { v.verbo = t; }, { classe: 'mp-c-verbo', etichetta: 'Verbo della freccia', unaRiga: true, max: 40 })) : null]
             : [h('div', { class: 'mp-c-riga' },
               campo(v.data, (t) => { v.data = t; }, { classe: 'mod-titolo-parte mp-c-data', etichetta: 'Data ' + (i + 1), unaRiga: true, max: 40 }),
               campo(v.cosa, (t) => { v.cosa = t; }, { classe: 'mod-titolo-parte', etichetta: 'Che cosa', unaRiga: true, max: 120 }))],
-          typeof v.spiegazione === 'string' ? campo(v.spiegazione, (t) => { v.spiegazione = t; }, { etichetta: 'Spiegazione', max: 600 }) : null)),
-        (corretto.collegamenti || []).length ? h('section', { class: 'mp-c-voce' }, h('span', { class: 'mod-etichetta' }, 'Frecce in più'),
-          corretto.collegamenti.map((k, i) => (typeof k.verbo === 'string' ? h('div', { class: 'mp-c-riga piccola' },
-            h('span', { class: 'mp-c-da' }, ((per.get(k.da) || {}).testo || '') + ' → ' + ((per.get(k.a) || {}).testo || '')),
-            campo(k.verbo, (t) => { k.verbo = t; }, { classe: 'mp-c-verbo', etichetta: 'Verbo della freccia ' + (i + 1), unaRiga: true, max: 40 })) : null))) : null);
+          typeof v.spiegazione === 'string' ? campo(v.spiegazione, (t) => { v.spiegazione = t; }, { etichetta: 'Spiegazione', max: 600 }) : null)));
     }
 
     const testa = h('div', { class: 'sch-testa' }, A.frecciaIndietro(o.indietro), A.pillolaMateria(m));

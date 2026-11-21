@@ -382,27 +382,27 @@
     ];
   }
 
-  /** §45 Le due mappe dello schema 3: i concetti (ad albero) e le date (linea del tempo). */
+  /** §45 Le due mappe dello schema 3: i concetti (a riquadri) e le date (linea del tempo). */
   function mappe() {
     const base = { schema_id: 3, materia_id: 1, titolo: 'L\'Impero romano da Augusto a Nerone', frase: null, errore: null, nota: null, stima_eur: 0.01, creato_il: '2026-10-26T18:10:00+01:00', pronto_il: '2026-10-26T18:11:00+01:00', schema_cambiato: false };
-    const c = (id, testo, genitore, verbo, sezione, spiegazione) => ({ id, testo, genitore, verbo, sezione, spiegazione });
+    const c = (id, testo, genitore, verbo, sezione, frase, spiegazione) => ({ id, testo, genitore, verbo, frase, sezione, spiegazione });
     const concetti = [
-      c(1, 'L\'Impero da Augusto a Nerone', null, null, null, 'Cento anni in cui Roma passa dalla Repubblica al governo di un solo uomo, sempre della stessa famiglia.'),
-      c(2, 'Augusto', 1, 'comincia con', 1, 'Nel 27 a.C. Ottaviano riceve il titolo di Augusto dal senato.'),
-      c(3, 'Tiberio', 1, 'continua con', 2, 'Il figlio adottivo di Augusto: tiene bene i conti dello Stato.'),
-      c(4, 'Caligola', 1, 'poi', 3, 'Governa da padrone assoluto e umilia il senato.'),
-      c(5, 'Claudio', 1, 'poi', 3, 'Sembra debole, ma organizza bene lo Stato.'),
-      c(6, 'Nerone', 1, 'finisce con', 4, 'L\'ultimo della dinastia giulio-claudia.'),
-      c(7, 'Principato', 2, 'crea il', 1, 'Un modo di governare in cui Augusto è il primo cittadino, non un re.'),
-      c(8, 'Seiano', 3, 'lascia Roma a', 2, 'Il prefetto del pretorio: governa Roma mentre Tiberio sta a Capri.'),
-      c(9, 'Processi per lesa maestà', 3, 'fa i', 2, 'Processi contro chi offende l\'imperatore: riempiono Roma di paura.'),
-      c(10, 'Pretoriani', 4, 'è ucciso dai', 3, 'La guardia dell\'imperatore: nel 41 uccidono Caligola.'),
-      c(11, 'Uffici con i liberti', 5, 'organizza', 3, 'Claudio affida gli uffici dello Stato a ex schiavi di fiducia.'),
-      c(12, 'Britannia', 5, 'conquista la', 3, 'Nel 43 Claudio ne conquista una parte e ne fa una provincia.'),
-      c(13, 'Incendio di Roma', 6, 'dopo l\'', 4, 'Nel 64 Roma brucia per giorni.'),
-      c(14, 'Istituzioni della Repubblica', 7, 'tiene in piedi le', 1, 'Senato e magistrati restano, almeno di nome.'),
-      c(15, 'Potere di uno solo', 7, 'ma dà il', 1, 'Esercito, province e leggi dipendono da Augusto.'),
-      c(16, 'Cristiani', 13, 'accusa i', 4, 'Nerone dà la colpa dell\'incendio ai cristiani di Roma.'),
+      c(1, 'L\'Impero da Augusto a Nerone', null, null, null, null, 'Cento anni in cui Roma passa dalla Repubblica al governo di un solo uomo, sempre della stessa famiglia.'),
+      c(2, 'Augusto', 1, null, 1, 'Nel 27 a.C. il senato dà a Ottaviano il titolo di Augusto.', 'Comincia la dinastia giulio-claudia: il potere passa ai suoi eredi.'),
+      c(3, 'Tiberio', 1, null, 2, 'Il figlio adottivo di Augusto tiene in ordine i conti dello Stato.', 'Negli ultimi anni si chiude a Capri e governa da lontano.'),
+      c(4, 'Caligola', 1, null, 3, 'Governa da padrone assoluto e umilia il senato.', 'Regna solo quattro anni, dal 37 al 41.'),
+      c(5, 'Claudio', 1, null, 3, 'Sembra debole, ma organizza bene lo Stato e lo allarga.', 'Lo mettono sul trono i pretoriani dopo la morte di Caligola.'),
+      c(6, 'Nerone', 1, null, 4, 'L\'ultimo imperatore della dinastia giulio-claudia.', 'All\'inizio governa bene, guidato dal filosofo Seneca.'),
+      c(7, 'Principato', 2, null, 1, 'Augusto è il primo cittadino, non un re.', 'Un modo di governare che tiene la forma della Repubblica.'),
+      c(8, 'Seiano', 3, null, 2, 'Il prefetto del pretorio governa mentre Tiberio sta a Capri.', 'Nel 31 Tiberio scopre la sua congiura e lo fa uccidere.'),
+      c(9, 'Processi per lesa maestà', 3, null, 2, 'Processi contro chi offende l\'imperatore riempiono Roma di paura.', ''),
+      c(10, 'Pretoriani', 4, null, 3, 'La guardia dell\'imperatore uccide Caligola nel 41.', ''),
+      c(11, 'Uffici con i liberti', 5, null, 3, 'Claudio affida gli uffici dello Stato a ex schiavi di fiducia.', ''),
+      c(12, 'Britannia', 5, null, 3, 'Nel 43 una parte dell\'isola diventa provincia romana.', ''),
+      c(13, 'Incendio di Roma', 6, null, 4, 'Nel 64 Roma brucia per giorni.', ''),
+      c(14, 'Istituzioni della Repubblica', 7, 'tiene in piedi le', 1, 'Senato e magistrati restano, almeno di nome.', ''),
+      c(15, 'Potere di uno solo', 7, null, 1, 'Esercito, province e leggi dipendono da Augusto.', ''),
+      c(16, 'Cristiani', 13, 'fa accusare i', 4, 'Nerone dà a loro la colpa dell\'incendio.', 'Molti sono uccisi nelle persecuzioni del 64.'),
     ];
     const e = (id, data, anno, ac, fine, cosa, sezione, spiegazione) => ({ id, data, anno, ac, fine, fine_ac: fine ? false : null, x: ac ? 1 - anno : anno, x_fine: fine || null, circa: false, mese: null, cosa, sezione, spiegazione });
     const eventi = [
@@ -417,7 +417,7 @@
       e(9, '68', 68, false, null, 'Nerone si uccide', 5, 'Il senato lo dichiara nemico pubblico: finisce la dinastia giulio-claudia.'),
     ];
     return [
-      Object.assign({}, base, { id: 7, tipo: 'concetti', stato: 'pronta', elementi: 16, contenuto: { forma: 'albero', domanda: 'Come passa il potere da Augusto a Nerone?', concetti, collegamenti: [{ da: 10, a: 5, verbo: 'mettono sul trono', spiegazione: null }] } }),
+      Object.assign({}, base, { id: 7, tipo: 'concetti', stato: 'pronta', elementi: 16, contenuto: { forma: 'riquadri', domanda: 'Come passa il potere da Augusto a Nerone?', concetti, collegamenti: [] } }),
       Object.assign({}, base, { id: 8, tipo: 'date', stato: 'pronta', elementi: 9, nota: 'Di Tiberio i tuoi documenti non dicono quando diventa imperatore.', contenuto: { eventi } }),
     ];
   }
@@ -730,7 +730,7 @@
         const c = x.contenuto || {};
         if (x.tipo === 'concetti') {
           const id = (c.concetti || []).reduce((mx, q) => Math.max(mx, q.id), 0) + 1;
-          c.concetti = (c.concetti || []).concat([{ id, testo: 'Capri', genitore: 3, verbo: 'si ritira a', sezione: 2, spiegazione: 'Dal 26 Tiberio vive sull\'isola di Capri.' }]);
+          c.concetti = (c.concetti || []).concat([{ id, testo: 'Capri', genitore: 3, verbo: null, frase: 'Dal 26 Tiberio vive sull\'isola e governa da lontano.', sezione: 2, spiegazione: '' }]);
         } else if (!(c.eventi || []).some((q) => q.data === '14')) {
           c.eventi = [{ data: '14', anno: 14, ac: false, fine: null, fine_ac: null, x: 14, x_fine: null, circa: false, mese: null, cosa: 'Muore Augusto', sezione: 1, spiegazione: 'Tiberio diventa imperatore.' }]
             .concat(c.eventi || []).sort((a, b) => a.x - b.x).map((q, i) => Object.assign(q, { id: i + 1 }));
@@ -1198,7 +1198,7 @@
         mettiDaParte('mappa', r, 'a_mano', null);
         r.titolo = titolo;
         const c = copia(r.contenuto);
-        const campi = r.tipo === 'date' ? ['data', 'cosa', 'spiegazione'] : ['testo', 'verbo', 'spiegazione'];
+        const campi = r.tipo === 'date' ? ['data', 'cosa', 'spiegazione'] : ['testo', 'frase', 'verbo', 'spiegazione'];
         c[chiave].forEach((v, i) => { const n = nuovo[chiave][i] || {}; for (const k of campi) if (typeof n[k] === 'string' && pulisci(n[k])) v[k] = pulisci(n[k]); });
         (c.collegamenti || []).forEach((v, i) => { const n = (nuovo.collegamenti || [])[i] || {}; if (typeof n.verbo === 'string') v.verbo = pulisci(n.verbo) || null; });
         if (typeof nuovo.domanda === 'string' && 'domanda' in c) c.domanda = pulisci(nuovo.domanda) || null;

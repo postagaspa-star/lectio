@@ -20,8 +20,10 @@ NOME_TIPO = {"date": "Le date", "concetti": "I concetti"}
 CARATTERI_SCHEMA = 90_000
 CONCETTI_MINIMI = 4
 CONCETTI_MASSIMI = 25
-COLLEGAMENTI_MASSIMI = 5
 PAROLE_CONCETTO = 8  # il prompt ne chiede 5: oltre 8 è una frase, si fa correggere
+PAROLE_FRASE = 32  # 1.4.1: la "frase" sotto il nome (il prompt ne chiede al massimo 20); oltre, si fa accorciare
+CARATTERI_FRASE = 240
+FORME = ("riquadri", "raggiera")  # 1.4.1 (richiesta di Andrea del 21/11): i riquadri prendono il posto dell'albero
 EVENTI_MASSIMI = 40
 DATE_MINIME = 3  # sotto, la linea del tempo non ha senso: si propone quella dei concetti
 ANNO_MASSIMO_DC = 2100
@@ -182,6 +184,7 @@ def valida_concetti(o: dict) -> list[str]:
     if len(radici) != 1:
         errori.append(f'serve un solo concetto senza "genitore" (quello in cima), ne hai messi {len(radici)}')
     presenti = set(ids)
+    senza_frase = []
     for c in concetti:
         if not _vuoto(c.get("genitore")) and _chiave(c.get("genitore")) not in presenti:
             errori.append(f'il concetto {c.get("id")} ha un "genitore" che non c\'è')
@@ -189,7 +192,15 @@ def valida_concetti(o: dict) -> list[str]:
         if not testo:
             errori.append(f'il concetto {c.get("id")} non ha il "testo"')
         elif len(testo.split()) > PAROLE_CONCETTO:
-            errori.append(f'"{testo[:60]}" è una frase: un concetto ha al massimo 5 parole')
+            errori.append(f'"{testo[:60]}" è una frase: un concetto ha al massimo 5 parole (la frase va in "frase")')
+        frase = str(c.get("frase") or "").strip()
+        if not _vuoto(c.get("genitore")) and not frase:
+            senza_frase.append(str(c.get("id")))
+        elif len(frase.split()) > PAROLE_FRASE:
+            errori.append(f'la "frase" del concetto {c.get("id")} è troppo lunga: al massimo 20 parole')
+    # Qualche frase mancante si accetta (resta solo il nome); se mancano quasi tutte, si chiede di scriverle.
+    if len(senza_frase) > max(2, len(concetti) // 4):
+        errori.append('ai concetti ' + ", ".join(senza_frase[:8]) + ' manca la "frase" che li spiega')
     if not errori and _ha_giri(concetti):
         errori.append("i genitori formano un giro chiuso: ogni concetto deve scendere da quello in cima")
     return errori[:6]
@@ -244,6 +255,7 @@ def normalizza_concetti(o: dict, sezioni: set[int]) -> dict:
         g = None if k == radice else nuovi.get(_chiave(c.get("genitore")))
         testo = _breve(c.get("testo"), 80) or ("Argomento" if g is None else "")
         tutti.append({"id": nuovi[k], "testo": testo, "genitore": g, "verbo": (_breve(c.get("verbo"), 40) or None) if g else None,
+                      "frase": _testo(c.get("frase"), CARATTERI_FRASE) or None,
                       "spiegazione": _testo(c.get("spiegazione")), "sezione": _sezione(c.get("sezione"), sezioni)})
     # Un concetto rimasto senza testo si salta: i suoi figli salgono al concetto sopra, senza verbo.
     per_id = {c["id"]: c for c in tutti}
@@ -255,19 +267,24 @@ def normalizza_concetti(o: dict, sezioni: set[int]) -> dict:
                 g = per_id[g]["genitore"]
             c["genitore"], c["verbo"] = g, None
     uscita = [c for c in tutti if c["id"] not in saltati]
-    tenuti = {c["id"] for c in uscita}
-    coppie = {(c["genitore"], c["id"]) for c in uscita if c["genitore"]}
-    collegamenti = []
-    for leg in o.get("collegamenti") or []:
-        if not isinstance(leg, dict) or len(collegamenti) >= COLLEGAMENTI_MASSIMI:
-            continue
-        da, a = nuovi.get(_chiave(leg.get("da"))), nuovi.get(_chiave(leg.get("a")))
-        if da not in tenuti or a not in tenuti or da == a or (da, a) in coppie or (a, da) in coppie:
-            continue
-        coppie.add((da, a))
-        collegamenti.append({"da": da, "a": a, "verbo": _breve(leg.get("verbo"), 40) or None, "spiegazione": _testo(leg.get("spiegazione"), 300)})
-    return {"domanda": _breve(o.get("domanda"), 160) or None, "forma": o.get("forma") if o.get("forma") in ("albero", "raggiera") else "albero",
-            "concetti": uscita, "collegamenti": collegamenti}
+    # 1.4.1 (Andrea, 21/11): non ci sono più frecce tra rami diversi ("è chiaro che sono collegate, ma quelle frecce non
+    # servono a nulla") e il verbo c'è solo tra due concetti: mai dall'argomento o da una parte (sono titoli di gruppo,
+    # e la prova vera ha dato frasi come "Bachofen e Frazer ordina il pensiero in Frazer").
+    togli_verbi_dei_gruppi(uscita)
+    return {"domanda": _breve(o.get("domanda"), 160) or None, "forma": o.get("forma") if o.get("forma") in FORME else "riquadri",
+            "concetti": uscita, "collegamenti": []}
+
+
+def senza_verbo(concetti: list[dict], c: dict) -> bool:
+    """Il concetto sta sotto l'argomento o sotto una parte: lì il verbo non c'è (lo dice il riquadro)."""
+    per_id = {x.get("id"): x for x in concetti}
+    g = per_id.get(c.get("genitore"))
+    return g is None or g.get("genitore") is None or (per_id.get(g.get("genitore")) or {}).get("genitore", 0) is None
+
+
+def togli_verbi_dei_gruppi(concetti: list[dict]) -> None:
+    for c in [x for x in concetti if senza_verbo(concetti, x)]:
+        c["verbo"] = None
 
 
 def _anni_evento(e: dict) -> tuple[int, bool, int | None, bool] | None:
@@ -336,8 +353,11 @@ def elementi(tipo: str, contenuto: dict) -> int:
 def per_modello(tipo: str, titolo: str, contenuto: dict) -> dict:
     """La mappa salvata, nella forma che il modello conosce (per Modifica)."""
     if tipo == "concetti":
-        return {"titolo": titolo, "domanda": contenuto.get("domanda"), "forma": contenuto.get("forma"),
-                "concetti": contenuto.get("concetti") or [], "collegamenti": contenuto.get("collegamenti") or []}
+        forma = contenuto.get("forma") if contenuto.get("forma") in FORME else "riquadri"
+        tenuti = ("id", "testo", "genitore", "verbo", "frase", "spiegazione", "sezione")
+        concetti = [{k: c.get(k) for k in tenuti} for c in contenuto.get("concetti") or []]
+        togli_verbi_dei_gruppi(concetti)  # le mappe di prima: il modello non deve ricopiare i verbi dei gruppi
+        return {"titolo": titolo, "domanda": contenuto.get("domanda"), "forma": forma, "concetti": concetti}
     tenute = ("data", "anno", "ac", "fine", "fine_ac", "circa", "mese", "cosa", "spiegazione", "sezione")
     return {"titolo": titolo, "eventi": [{k: e.get(k) for k in tenute} for e in contenuto.get("eventi") or []]}
 
@@ -394,9 +414,15 @@ def frasi_da_controllare(tipo: str, contenuto: dict) -> tuple[dict, list[tuple]]
         per_id = {c["id"]: c for c in contenuto["concetti"]}
         for c in contenuto["concetti"]:
             if c["genitore"] in per_id:
-                legame = f" {c['verbo']} " if c["verbo"] else ": "
-                voci.append(f"{per_id[c['genitore']]['testo']}{legame}{c['testo']}.")
+                # Il concetto dentro il suo genitore; il verbo a parte, così un verbo sbagliato toglie solo la freccia.
+                voci.append(f"{per_id[c['genitore']]['testo']}: {c['testo']}.")
                 da_dove.append(("concetto", c["id"]))
+                if c.get("verbo"):
+                    voci.append(f"{per_id[c['genitore']]['testo']} {c['verbo']} {c['testo']}.")
+                    da_dove.append(("verbo", c["id"]))
+            if c.get("frase"):
+                voci.append(f"{c['testo']}: {c['frase']}")
+                da_dove.append(("frase", c["id"]))
             if c["spiegazione"]:
                 voci.append(c["spiegazione"])
                 da_dove.append(("spiegazione", c["id"]))
@@ -441,6 +467,10 @@ def togli_fuori(tipo: str, contenuto: dict, fuori: list[tuple], da_dove: list[tu
         for x in c["concetti"]:
             if ("spiegazione", x["id"]) in frasi:
                 x["spiegazione"] = _senza_frasi(x["spiegazione"], frasi[("spiegazione", x["id"])])
+            if ("frase", x["id"]) in frasi:
+                x["frase"] = _senza_frasi(x.get("frase") or "", frasi[("frase", x["id"])]) or None
+            if ("verbo", x["id"]) in frasi:
+                x["verbo"] = None
         tolti = {k for (t, k) in via if t == "concetto"}
         for x in c["concetti"]:
             g = x["genitore"]
@@ -626,10 +656,15 @@ def pulisci(tipo: str, attuale: dict, nuovo: dict) -> dict:
             if not isinstance(n, dict):
                 raise FormaSbagliata("un concetto non va bene")
             c["testo"] = _campo(n.get("testo"), 80) or c["testo"]
-            if c.get("genitore") is not None:
-                c["verbo"] = _campo(n.get("verbo"), 40) or None
+            if c.get("genitore") is not None and "verbo" in n:
+                # Sotto l'argomento o sotto una parte la freccia non c'è: stanno dentro il riquadro.
+                c["verbo"] = None if senza_verbo(concetti, c) else (_campo(n.get("verbo"), 40) or None)
+            if "frase" in n:
+                c["frase"] = _campo(n.get("frase"), 300) or None
             c["spiegazione"] = _campo(n.get("spiegazione"), 600)
-        collegamenti, nuovi = uscita.get("collegamenti") or [], nuovo.get("collegamenti") or []
+        # Le mappe fatte prima della 1.4.1 possono avere frecce tra rami: se il PC non le manda, restano come sono.
+        collegamenti = uscita.get("collegamenti") or []
+        nuovi = nuovo.get("collegamenti") if "collegamenti" in nuovo else [dict(x) for x in collegamenti]
         if not isinstance(nuovi, list) or len(nuovi) != len(collegamenti):
             raise FormaSbagliata("i collegamenti non sono gli stessi")
         for leg, n in zip(collegamenti, nuovi):

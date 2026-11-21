@@ -1,6 +1,6 @@
 /*
  * Lectio per il computer: le mappe di ripasso (docs/aspetto.md §45, contratto §29). Da uno schema pronto: la linea del
- * tempo con le date oppure la mappa dei concetti, ad albero o a raggiera. Si guarda con lo zoom e trascinando, un clic
+ * tempo con le date oppure la mappa dei concetti, a riquadri o a raggiera. Si guarda con lo zoom e trascinando, un clic
  * apre la spiegazione, "Mettiti alla prova" nasconde dei pezzi da scoprire, Scarica PDF stampa quello che si vede.
  * Dove va ogni pezzo lo calcola disegno-mappe.js; qui si disegna (SVG) e si risponde ai gesti.
  */
@@ -19,7 +19,7 @@
   /** §45.2 I due tipi, nell'ordine in cui si vedono. */
   const TIPI = [
     { tipo: 'date', nome: 'Le date', frase: 'Una linea del tempo: quando e che cosa', icona: 'linea' },
-    { tipo: 'concetti', nome: 'I concetti', frase: 'Cerchi e frecce con le idee principali', icona: 'mappa' },
+    { tipo: 'concetti', nome: 'I concetti', frase: 'Le idee principali, divise per parti', icona: 'mappa' },
   ];
   A.TIPI_MAPPA = TIPI;
   const nomeTipo = (t) => (TIPI.find((x) => x.tipo === t) || TIPI[1]).nome;
@@ -51,120 +51,179 @@
     if (!caratteriPronti) {
       const f = document.fonts;
       caratteriPronti = !f || !f.load ? Promise.resolve()
-        : Promise.race([Promise.all(['800 17px Figtree', '700 15px Figtree', '600 14px Figtree', '700 12px Figtree'].map((x) => f.load(x).catch(() => null))),
+        : Promise.race([Promise.all(['800 21px Figtree', '800 16px Figtree', '700 14.5px Figtree', '500 13px Figtree', '700 12px Figtree'].map((x) => f.load(x).catch(() => null))),
           new Promise((r) => setTimeout(r, 900))]);
     }
     return caratteriPronti;
   }
 
-  /** §45.4 Le misure dei concetti per livello: radice, primo giro, gli altri. */
-  const STILI = [
-    { font: '800 17px Figtree', px: 17, lh: 21, padX: 22, padY: 13, max: 230 },
-    { font: '700 15px Figtree', px: 15, lh: 19, padX: 18, padY: 11, max: 196 },
-    { font: '600 14px Figtree', px: 14, lh: 18, padX: 16, padY: 10, max: 176 },
+  /**
+   * §45.4 Le misure dei testi dei concetti: il nome sopra, la frase sotto. A riquadri: l'argomento (la fascia in alto),
+   * le parti (le colonne), le schede; a raggiera: la radice, il primo giro, gli altri.
+   */
+  const STILI_RIQ = {
+    radice: { nome: '800 21px Figtree', px: 21, lh: 26, padX: 24, padY: 17, centro: true, righe: 2 },
+    parte: { nome: '800 16px Figtree', px: 16, lh: 20, frase: '500 13.5px Figtree', fpx: 13.5, flh: 18, padX: 6, padY: 4, righe: 2 },
+    scheda: { nome: '700 14.5px Figtree', px: 14.5, lh: 19, frase: '500 13px Figtree', fpx: 13, flh: 17.5, padX: 13, padY: 10, righe: 3 },
+  };
+  const STILI_GIRO = [
+    { nome: '800 17px Figtree', px: 17, lh: 21, padX: 22, padY: 13, max: 230, centro: true, righe: 3 },
+    { nome: '700 15px Figtree', px: 15, lh: 19, frase: '500 13px Figtree', fpx: 13, flh: 17, padX: 16, padY: 11, max: 210, centro: true, righe: 3 },
+    { nome: '700 14px Figtree', px: 14, lh: 18, frase: '500 12.5px Figtree', fpx: 12.5, flh: 16.5, padX: 14, padY: 10, max: 190, centro: true, righe: 3 },
   ];
-  const stile = (livello) => STILI[Math.min(2, livello)];
   const misuraVerbo = misura('700 12px Figtree', 12);
+  const SPAZIO_FRASE = 5;
 
-  /** Righe di testo centrate in un riquadro largo `w`, prima riga a `cima`. */
-  function righeTesto(righe, w, cima, lh, classe) {
-    return s('text', { class: classe, x: r1(w / 2), y: r1(cima), 'text-anchor': 'middle' },
-      righe.map((r, i) => s('tspan', { x: r1(w / 2), dy: i ? lh : 0 }, r)));
+  /** Le righe del nome e della frase dentro `larghezza` px di testo, e l'altezza del pezzo. */
+  function testiConcetto(c, st, larghezza) {
+    const mn = misura(st.nome, st.px);
+    const nome = M.aCapo(c.testo, larghezza, mn, st.righe);
+    const mf = st.frase ? misura(st.frase, st.fpx) : null;
+    const frase = mf && c.frase ? M.aCapo(c.frase, larghezza, mf, 5) : [];
+    const w = Math.max(...nome.map(mn), ...frase.map(mf || (() => 0)));
+    return { nome, frase, w: Math.ceil(w), h: 2 * st.padY + nome.length * st.lh + (frase.length ? SPAZIO_FRASE + frase.length * st.flh : 0) };
+  }
+
+  /** Il nome (o il buco da scoprire) e la frase, dentro un pezzo largo `w`. */
+  function scritteConcetto(t, st, w, nascosto) {
+    const x = st.centro ? r1(w / 2) : st.padX;
+    const anchor = st.centro ? 'middle' : 'start';
+    const cima = st.padY + st.px * 0.8;
+    const altoNome = t.nome.length * st.lh;
+    const nome = nascosto
+      ? s('g', { class: 'mp-buco' }, s('rect', { x: st.centro ? r1(w / 2 - 30) : st.padX, y: st.padY, width: 60, height: Math.max(18, altoNome - 2), rx: 9 }),
+        s('text', { x: st.centro ? r1(w / 2) : st.padX + 30, y: r1(st.padY + altoNome / 2 + 5), 'text-anchor': 'middle' }, '?'))
+      : s('text', { class: 'vero', x, y: r1(cima), 'text-anchor': anchor }, t.nome.map((r, i) => s('tspan', { x, dy: i ? st.lh : 0 }, r)));
+    const frase = t.frase.length
+      ? s('text', { class: 'frase', x, y: r1(st.padY + altoNome + SPAZIO_FRASE + st.fpx * 0.82), 'text-anchor': anchor }, t.frase.map((r, i) => s('tspan', { x, dy: i ? st.flh : 0 }, r)))
+      : null;
+    return [nome, frase];
   }
 
   function definizioni(uid) {
     return s('defs', null,
       s('marker', { id: 'mp-punta-' + uid, viewBox: '0 0 10 10', refX: 8.5, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' },
-        s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mp-punta' })),
-      s('marker', { id: 'mp-punta-x-' + uid, viewBox: '0 0 10 10', refX: 8.5, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' },
-        s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mp-punta-x' })));
+        s('path', { d: 'M0 0 L10 5 L0 10 z', class: 'mp-punta' })));
   }
   let contaUid = 0;
 
   // --- §45.4 la mappa dei concetti ---------------------------------------------------------------------------------
 
   /**
-   * Il disegno dei concetti: { mondo (g), larghezza, altezza, nodi: Map(id → g), legami, verbi }. `prova` = la scelta di
-   * Mettiti alla prova (o null) con gli scoperti; `uid` distingue le frecce di due disegni nella stessa pagina.
+   * Il disegno dei concetti: { mondo (g), larghezza, altezza, nodi: Map(id → g), legami, fuoco }. `forma` = 'riquadri'
+   * o 'raggiera'. `prova` = la scelta di Mettiti alla prova (o null) con gli scoperti: di un concetto nascosto resta la
+   * frase, da indovinare c'è il nome. `uid` distingue le frecce di due disegni nella stessa pagina.
    */
   function disegnaConcetti(contenuto, forma, prova, uid, conEntrata) {
     const concetti = contenuto.concetti || [];
     const t = M.albero(concetti);
-    const dim = {};
-    const righe = {};
-    for (const c of concetti) {
-      const st = stile(t.per.has(c.id) ? t.per.get(c.id).livello : 2);
-      const m = misura(st.font, st.px);
-      righe[c.id] = M.aCapo(c.testo, st.max, m, 3);
-      dim[c.id] = { w: Math.max(64, Math.ceil(Math.max(...righe[c.id].map(m))) + 2 * st.padX), h: righe[c.id].length * st.lh + 2 * st.padY };
-    }
-    const l = forma === 'raggiera' ? M.layoutRaggiera(concetti, dim) : M.layoutAlbero(concetti, dim);
     const per = new Map(concetti.map((c) => [c.id, c]));
     const nascosti = prova ? prova.scelta.concetti : new Set();
     const verbiNascosti = prova ? prova.scelta.verbi : new Set();
     const scoperto = (k) => !!prova && prova.scoperti.has(k);
-
+    const gSotto = s('g', { class: 'mp-cornici' });
     const gLegami = s('g', { class: 'mp-legami' });
     const gVerbi = s('g', { class: 'mp-verbi' });
     const gNodi = s('g', { class: 'mp-nodi' });
     const nodi = new Map();
     const legami = [];
-    const verbo = (testo, x, y, attr, nascosto) => {
-      const scritta = nascosto ? '?' : testo;
+
+    /** Il verbo su una freccia: `x` è il centro (raggiera) o il bordo sinistro (riquadri). */
+    const verbo = (c, x, y, daSinistra) => {
+      const chiave = 'v' + c.id;
+      const nasc = verbiNascosti.has(c.id) && !scoperto(chiave);
+      const scritta = nasc ? '?' : c.verbo;
       const w = Math.ceil(misuraVerbo(scritta)) + 14;
-      const g = s('g', Object.assign({ class: 'mp-verbo' + (nascosto ? ' coperto' : ''), transform: 'translate(' + r1(x - w / 2) + ' ' + r1(y - 10) + ')' }, attr),
+      const sx = daSinistra ? x : x - w / 2;
+      const g = s('g', { class: 'mp-verbo' + (nasc ? ' coperto' : ''), transform: 'translate(' + r1(sx) + ' ' + r1(y - 10) + ')', 'data-da': c.genitore, 'data-a': c.id, 'data-chiave': verbiNascosti.has(c.id) ? chiave : null },
         s('rect', { width: w, height: 20, rx: 10 }),
         s('text', { x: r1(w / 2), y: 14, 'text-anchor': 'middle' }, scritta));
       gVerbi.append(g);
       return g;
     };
 
-    for (const c of concetti) {
-      const n = l.nodi[c.id];
-      if (!n) continue;
-      if (c.genitore != null && l.nodi[c.genitore]) {
-        const p = M.legame(l.nodi[c.genitore], n, forma === 'raggiera' ? 0.5 : 0.52);
+    /** Un concetto: un gruppo che si clicca, con il fondo e le scritte. */
+    const pezzo = (c, n, st, testi, classi, livello) => {
+      const nasc = nascosti.has(c.id) && !scoperto('c' + c.id);
+      const g = s('g', {
+        class: 'mp-nodo ' + classi + (nasc ? ' coperto' : '') + (nascosti.has(c.id) && !nasc ? ' scoperto' : '') + (conEntrata ? ' mp-entra' : ''),
+        transform: 'translate(' + r1(n.x) + ' ' + r1(n.y) + ')', 'data-id': c.id, 'data-chiave': nascosti.has(c.id) ? 'c' + c.id : null,
+        tabindex: '0', role: 'button', 'aria-label': nasc ? 'Concetto nascosto: fai clic per scoprirlo' : c.testo,
+      },
+      s('rect', { class: 'fondo', width: r1(n.w), height: r1(n.h), rx: classi.includes('mp-capo') ? 10 : classi.includes('mp-carta') ? 12 : (testi.nome.length === 1 && !testi.frase.length ? r1(n.h / 2) : 18) }),
+      scritteConcetto(testi, st, n.w, nasc));
+      if (conEntrata) g.style.setProperty('--ritardo', Math.min(8, livello) * 70 + 'ms');
+      gNodi.append(g);
+      nodi.set(c.id, g);
+      return g;
+    };
+
+    if (forma === 'raggiera') {
+      const dim = {};
+      const testi = {};
+      for (const c of concetti) {
+        const st = STILI_GIRO[Math.min(2, t.per.has(c.id) ? t.per.get(c.id).livello : 2)];
+        testi[c.id] = testiConcetto(c, st, st.max);
+        dim[c.id] = { w: Math.max(64, testi[c.id].w + 2 * st.padX), h: testi[c.id].h };
+      }
+      const l = M.layoutRaggiera(concetti, dim);
+      for (const c of concetti) {
+        const n = l.nodi[c.id];
+        if (!n || c.genitore == null || !l.nodi[c.genitore]) continue;
+        const p = M.legame(l.nodi[c.genitore], n, 0.5);
         const linea = s('line', { class: 'mp-legame', x1: r1(p.x1), y1: r1(p.y1), x2: r1(p.x2), y2: r1(p.y2), 'marker-end': 'url(#mp-punta-' + uid + ')', 'data-da': c.genitore, 'data-a': c.id });
         gLegami.append(linea);
-        const chiave = 'v' + c.id;
-        const vNasc = verbiNascosti.has(c.id) && !scoperto(chiave);
-        const v = c.verbo ? verbo(c.verbo, p.mx, p.my, { 'data-da': c.genitore, 'data-a': c.id, 'data-chiave': verbiNascosti.has(c.id) ? chiave : null }, vNasc) : null;
-        legami.push({ da: c.genitore, a: c.id, linea, verbo: v });
+        // Il verbo solo tra due concetti (§45.4): mai dall'argomento o da una parte.
+        legami.push({ da: c.genitore, a: c.id, linea, verbo: M.verboDi(per, c) ? verbo(c, p.mx, p.my, false) : null });
       }
+      for (const id of t.ordine) {
+        const c = per.get(id);
+        const n = l.nodi[id];
+        if (!c || !n) continue;
+        const st = STILI_GIRO[Math.min(2, n.livello)];
+        pezzo(c, { x: n.x - n.w / 2, y: n.y - n.h / 2, w: n.w, h: n.h }, st, testi[id], 'l' + Math.min(2, n.livello), n.livello);
+      }
+      const mondo = s('g', { class: 'mp-mondo' }, gLegami, gVerbi, gNodi);
+      const r = t.radice != null ? l.nodi[t.radice] : null;
+      return { mondo, larghezza: l.larghezza, altezza: l.altezza, nodi, legami, fuoco: r ? { x: r.x, y: r.y, h: r.h, alto: false } : null };
     }
-    (contenuto.collegamenti || []).forEach((k, i) => {
-      if (!l.nodi[k.da] || !l.nodi[k.a]) return;
-      const cu = M.curva(l.nodi[k.da], l.nodi[k.a]);
-      const path = s('path', { class: 'mp-trasversale', d: cu.d, 'marker-end': 'url(#mp-punta-x-' + uid + ')', 'data-da': k.da, 'data-a': k.a });
-      gLegami.append(path);
-      const v = k.verbo ? verbo(k.verbo, cu.mx, cu.my, { 'data-da': k.da, 'data-a': k.a, 'data-collegamento': i }, false) : null;
-      if (v) v.classList.add('trasversale');
-      legami.push({ da: k.da, a: k.a, linea: path, verbo: v, trasversale: true });
-    });
 
+    // A riquadri: le altezze dipendono dalla larghezza, che decide il disegno (le schede rientrate sono più strette).
+    const testi = {};
+    const ruoli = {};
+    const alta = (id, larghezza, ruolo) => {
+      const st = STILI_RIQ[ruolo];
+      ruoli[id] = ruolo;
+      testi[id] = testiConcetto(per.get(id), st, larghezza - 2 * st.padX);
+      return testi[id].h;
+    };
+    const l = M.layoutRiquadri(concetti, alta);
+    if (l.cornice) {
+      const k = l.cornice;
+      const raggio = 22;
+      gSotto.append(s('rect', { class: 'mp-cornice', x: k.x, y: k.y, width: r1(k.w), height: r1(k.h), rx: raggio }));
+      gSotto.append(s('path', { class: 'mp-fascia-testa', d: 'M' + k.x + ' ' + r1(k.y + k.testa) + ' V' + (k.y + raggio) + ' Q' + k.x + ' ' + k.y + ' ' + (k.x + raggio) + ' ' + k.y
+        + ' H' + r1(k.x + k.w - raggio) + ' Q' + r1(k.x + k.w) + ' ' + k.y + ' ' + r1(k.x + k.w) + ' ' + (k.y + raggio) + ' V' + r1(k.y + k.testa) + ' Z' }));
+      gSotto.append(s('line', { class: 'mp-riga-testa', x1: k.x, y1: r1(k.y + k.testa), x2: r1(k.x + k.w), y2: r1(k.y + k.testa) }));
+      for (const p of l.parti) gSotto.append(s('rect', { class: 'mp-colonna', x: r1(p.x), y: r1(p.y), width: p.w, height: r1(p.h), rx: 16, 'data-parte': p.id }));
+    }
+    for (const leg of l.legami) {
+      const linea = s('path', { class: 'mp-legame ' + leg.tipo, d: leg.d, 'marker-end': leg.freccia ? 'url(#mp-punta-' + uid + ')' : null, 'data-da': leg.da, 'data-a': leg.a });
+      gLegami.append(linea);
+      const c = per.get(leg.a);
+      legami.push({ da: leg.da, a: leg.a, linea, verbo: leg.verbo && M.verboDi(per, c) ? verbo(c, leg.verbo.x, leg.verbo.y, true) : null });
+    }
     for (const id of t.ordine) {
       const c = per.get(id);
       const n = l.nodi[id];
       if (!c || !n) continue;
-      const st = stile(n.livello);
-      const nasc = nascosti.has(id) && !scoperto('c' + id);
-      const r = righe[id];
-      const cima = st.padY + st.px * 0.8;
-      const g = s('g', {
-        class: 'mp-nodo l' + Math.min(2, n.livello) + (nasc ? ' coperto' : '') + (nascosti.has(id) && !nasc ? ' scoperto' : '') + (conEntrata ? ' mp-entra' : ''),
-        transform: 'translate(' + r1(n.x - n.w / 2) + ' ' + r1(n.y - n.h / 2) + ')', 'data-id': id, 'data-chiave': nascosti.has(id) ? 'c' + id : null,
-        tabindex: '0', role: 'button', 'aria-label': nasc ? 'Concetto nascosto: fai clic per scoprirlo' : c.testo,
-      },
-      s('rect', { width: r1(n.w), height: r1(n.h), rx: r.length === 1 ? r1(n.h / 2) : 18 }),
-      nasc ? s('text', { class: 'punto', x: r1(n.w / 2), y: r1(n.h / 2 + 6), 'text-anchor': 'middle' }, '?') : righeTesto(r, n.w, cima, st.lh, 'vero'));
-      if (conEntrata) g.style.setProperty('--ritardo', Math.min(8, n.livello) * 60 + 'ms');
-      gNodi.append(g);
-      nodi.set(id, g);
+      const ruolo = ruoli[id] || 'scheda';
+      const classi = ruolo === 'radice' ? 'l0 mp-testa' : ruolo === 'parte' ? 'l1 mp-capo' : 'l2 mp-carta';
+      pezzo(c, n, STILI_RIQ[ruolo], testi[id], classi, n.livello);
     }
-    const mondo = s('g', { class: 'mp-mondo' }, gLegami, gVerbi, gNodi);
+    const mondo = s('g', { class: 'mp-mondo' }, gSotto, gLegami, gVerbi, gNodi);
     const r = t.radice != null ? l.nodi[t.radice] : null;
-    const fuoco = r ? { x: r.x, y: r.y, h: r.h, alto: forma !== 'raggiera' } : null;
-    return { mondo, larghezza: l.larghezza, altezza: l.altezza, nodi, legami, fuoco };
+    return { mondo, larghezza: l.larghezza, altezza: l.altezza, nodi, legami, fuoco: r ? { x: r.x + r.w / 2, y: r.y + r.h / 2, h: r.h, alto: true } : null };
   }
 
   // --- §45.5 la linea del tempo ------------------------------------------------------------------------------------
@@ -318,14 +377,13 @@
 
   // --- §45.2 il foglio di scelta -------------------------------------------------------------------------------------
 
-  /** La miniatura del tipo: una linea con i pallini oppure un piccolo albero. */
+  /** La miniatura del tipo: una linea con i pallini oppure un riquadro diviso in colonne. */
   function miniatura(tipo) {
     const g = tipo === 'date'
       ? [s('line', { x1: 8, y1: 28, x2: 48, y2: 28, class: 'mm-linea' }), [14, 26, 42].map((x, i) => s('circle', { cx: x, cy: 28, r: 4, class: 'mm-punto' + (i === 1 ? ' pieno' : '') })),
         s('rect', { x: 8, y: 10, width: 14, height: 8, rx: 3, class: 'mm-scheda' }), s('rect', { x: 34, y: 38, width: 16, height: 8, rx: 3, class: 'mm-scheda' })]
-      : [s('line', { x1: 28, y1: 18, x2: 15, y2: 36, class: 'mm-linea' }), s('line', { x1: 28, y1: 18, x2: 41, y2: 36, class: 'mm-linea' }),
-        s('rect', { x: 17, y: 10, width: 22, height: 11, rx: 5.5, class: 'mm-scheda pieno' }), s('rect', { x: 6, y: 34, width: 18, height: 10, rx: 5, class: 'mm-scheda' }),
-        s('rect', { x: 32, y: 34, width: 18, height: 10, rx: 5, class: 'mm-scheda' })];
+      : [s('rect', { x: 6, y: 9, width: 44, height: 38, rx: 6, class: 'mm-scheda' }), s('rect', { x: 6, y: 9, width: 44, height: 10, rx: 5, class: 'mm-scheda pieno' }),
+        [10, 24, 38].map((x) => s('rect', { x, y: 23, width: 10, height: 20, rx: 3, class: 'mm-scheda' }))];
     return h('span', { class: 'mp-mini', 'aria-hidden': 'true' }, s('svg', { viewBox: '0 0 56 56', width: 56, height: 56 }, g));
   }
 
@@ -397,7 +455,8 @@
     const delTipo = (t) => L.mappaDelTipo(elenco, t);
     const formaDi = (x) => {
       const salvata = A.memoriaStudio.leggi(chiaveForma(x.id));
-      if (x.tipo === 'concetti') return salvata === 'albero' || salvata === 'raggiera' ? salvata : M.formaConsigliata(x.contenuto);
+      // Prima della 1.3.8 c'era l'albero: chi l'aveva scelto ora vede i riquadri.
+      if (x.tipo === 'concetti') return salvata === 'raggiera' ? 'raggiera' : salvata === 'riquadri' ? 'riquadri' : M.formaConsigliata(x.contenuto);
       if (salvata === 'scala' || salvata === 'fila') return salvata;
       const { dim } = schedeDate((x.contenuto && x.contenuto.eventi) || []);
       return M.modoConsigliato((x.contenuto && x.contenuto.eventi) || [], dim, 1000);
@@ -589,18 +648,24 @@
         const x = (c.concetti || []).find((y) => y.id === id);
         if (!x) return null;
         const vicini = M.vicini(c, id);
+        const genitore = (c.concetti || []).find((y) => y.id === x.genitore);
+        const etichetta = x.genitore == null ? 'Argomento' : genitore && genitore.genitore == null ? 'Parte' : 'Concetto';
         return [
-          h('span', { class: 'etichetta' }, x.genitore == null ? 'Argomento' : 'Concetto'),
+          h('span', { class: 'etichetta' }, etichetta),
           h('h3', { class: 'mp-p-titolo' }, x.testo),
+          x.frase ? h('p', { class: 'mp-p-frase' }, x.frase) : null,
           x.spiegazione ? h('p', { class: 'mp-p-testo' }, x.spiegazione) : null,
           vicini.length ? h('div', { class: 'mp-p-vicini' }, vicini.map((v) => {
-            const verbo = h('span', { class: 'v' }, ' ' + (v.verbo || '→') + ' ');
             const altro = h('strong', { class: 't' }, v.testo);
             const questo = h('span', { class: 'q' }, x.testo);
+            // Senza verbo il legame è "sta dentro": la parte contiene i suoi concetti.
+            const righe = v.verbo
+              ? (v.verso === 'a' ? [questo, h('span', { class: 'v' }, ' ' + v.verbo + ' '), altro] : [altro, h('span', { class: 'v' }, ' ' + v.verbo + ' '), questo])
+              : (v.verso === 'a' ? [questo, h('span', { class: 'v' }, ' comprende '), altro] : [questo, h('span', { class: 'v' }, ' fa parte di '), altro]);
             return h('button', {
-              type: 'button', class: 'mp-p-vicino' + (v.trasversale ? ' trasversale' : ''), 'data-vicino': String(v.id),
+              type: 'button', class: 'mp-p-vicino', 'data-vicino': String(v.id),
               'aria-label': 'Vai a ' + v.testo, onclick: () => seleziona(v.id, true),
-            }, v.verso === 'a' ? [questo, verbo, altro] : [altro, verbo, questo]);
+            }, righe);
           })) : null,
           sezione(x.sezione),
         ];
@@ -703,7 +768,7 @@
     function barraVista(tipi) {
       const concetti = attuale.tipo === 'concetti';
       const forma = formaDi(attuale);
-      const scelte = concetti ? [['albero', 'Albero'], ['raggiera', 'A raggiera']] : [['scala', 'In scala'], ['fila', 'In fila']];
+      const scelte = concetti ? [['riquadri', 'A riquadri'], ['raggiera', 'A raggiera']] : [['scala', 'In scala'], ['fila', 'In fila']];
       const seg2 = h('div', { class: 'segmenti mp-forma', role: 'group', 'aria-label': concetti ? 'Forma della mappa' : 'Come mettere le date' });
       seg2.style.setProperty('--n', '2');
       scelte.forEach(([k, t]) => seg2.append(h('button', {

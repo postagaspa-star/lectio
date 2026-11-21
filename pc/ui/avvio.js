@@ -369,7 +369,7 @@
         break;
       }
       case 'riassunto-vecchio': await vai('#riassunto/5', '[data-vecchio]'); break;
-      // §45 Le mappe: la scelta, i concetti (albero e raggiera), la spiegazione, le date, la prova, Correggi, il PDF.
+      // §45 Le mappe: la scelta, i concetti (riquadri e raggiera), la spiegazione, le date, la prova, Correggi, il PDF.
       case 'mappa-scelta': await vai('#schema/3', '.sch-parte'); document.querySelector('[data-azione="mappa"]').click(); await aspetta('[data-tipo-mappa]'); break;
       case 'mappa-concetti': await vai('#mappa/7', '.mp-nodo'); await attendi(350); break;
       case 'mappa-raggiera': await vai('#mappa/7', '.mp-nodo'); document.querySelector('[data-forma-mappa="raggiera"]').click(); await aspetta('[data-forma="raggiera"] .mp-nodo'); await attendi(350); break;

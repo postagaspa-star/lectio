@@ -362,17 +362,20 @@ class TestoFinto:
                                    "mese": None, "cosa": " ".join(riga.split()[:10]), "spiegazione": riga.strip()[:200], "sezione": s["n"]})
             return {"titolo": f"Le date: {d.get('titolo') or ''}".strip(), "eventi": eventi}
         concetti = [{"id": 1, "testo": " ".join(str(d.get("titolo") or "Argomento").split()[:5]), "genitore": None, "verbo": None,
-                     "spiegazione": "", "sezione": None}]
-        for s in sezioni[:8]:
+                     "frase": None, "spiegazione": "", "sezione": None}]
+        for s in sezioni[:7]:
             righe = [r for r in s["testo"].splitlines()[1:] if r.strip()]
             nuovo = len(concetti) + 1
-            concetti.append({"id": nuovo, "testo": " ".join(s["titolo"].split()[:5]), "genitore": 1, "verbo": "comprende",
+            concetti.append({"id": nuovo, "testo": " ".join(s["titolo"].split()[:5]), "genitore": 1, "verbo": None,
+                             "frase": " ".join(righe[0].split()[:20]) if righe else None,
                              "spiegazione": righe[0][:200] if righe else "", "sezione": s["n"]})
-            if len(righe) > 1 and len(concetti) < 14:
-                concetti.append({"id": len(concetti) + 1, "testo": " ".join(righe[1].split()[:4]), "genitore": nuovo, "verbo": "parla di",
-                                 "spiegazione": righe[1][:200], "sezione": s["n"]})
-        return {"titolo": f"Mappa: {d.get('titolo') or ''}".strip(), "domanda": None, "forma": "raggiera" if len(sezioni) > 5 else "albero",
-                "concetti": concetti, "collegamenti": []}
+            for riga in righe[1:3]:
+                if len(concetti) >= 22:
+                    break
+                concetti.append({"id": len(concetti) + 1, "testo": " ".join(riga.split()[:4]), "genitore": nuovo, "verbo": None,
+                                 "frase": " ".join(riga.split()[:20]), "spiegazione": riga[:200], "sezione": s["n"]})
+        return {"titolo": f"Mappa: {d.get('titolo') or ''}".strip(), "domanda": None, "forma": "riquadri",
+                "concetti": concetti}
 
     def _mappa_modifica(self, d: dict) -> dict:
         attuale = json.loads(json.dumps(d.get("attuale") or {}))

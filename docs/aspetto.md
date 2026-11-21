@@ -1431,17 +1431,29 @@ chiedi di cambiare qualcosa senza rifare tutto. Se non ti piace, Torna a prima �
 ## 45. Mappe: le date e i concetti (v1.3.7 PC, richiesta di Andrea del 17/11)
 
 Da uno schema pronto Lectio disegna una **mappa**: la **linea del tempo** con solo le date e a cosa si riferiscono,
-oppure la **mappa dei concetti** fondamentali con cerchi e frecce. Campi e indirizzi: `docs/contratto-api.md` §29.
-Solo PC per ora. Scelte di Andrea: si parte da uno schema pronto; i concetti si vedono **ad albero o a raggiera** (si
+oppure la **mappa dei concetti** fondamentali. Campi e indirizzi: `docs/contratto-api.md` §29.
+Solo PC per ora. Scelte di Andrea: si parte da uno schema pronto; i concetti si vedono **a riquadri o a raggiera** (si
 passa dall'uno all'altro, "per certi argomenti uno schema ad albero non funziona"); un clic su un pezzo dà la
 spiegazione, poi Mettiti alla prova, Scarica PDF, Modifica e Correggi a mano.
+
+**Dalla 1.3.8 (21/11, Andrea: "sono veramente scarne, oltre che a volte confusionarie... mette le frecce tra diversi
+macro-titoli che non servono... meglio mettere un riquadro sopra prima e poi dividerlo in più parti"):** l'albero
+diventa **a riquadri** (45.4); ogni concetto ha sotto il nome **una frase** che lo spiega (8-20 parole, con nomi e date
+esatti); niente frecce dall'argomento alle parti, dalle parti ai loro concetti né tra rami diversi: le frecce col
+verbo restano solo tra due concetti, dove c'è una causa, una conseguenza o un passaggio vero. Scelte sue: "Riquadri +
+raggiera", "Una frase di spiegazione", "Solo dove servono". La regola "mai dalle parti" viene dalla prima mappa vera
+rifatta (Antropologia, 21/11): i verbi dalle parti, che sono titoli di gruppo, si leggevano male ("Bachofen e Frazer
+*ordina il pensiero in* Frazer").
 
 ### 45.0 Perché è fatta così (dalla ricerca del 17/11)
 
 1. **Una mappa vera ha frasi sulle frecce.** Nella mappa concettuale di Novak ogni freccia porta un verbo e due
    concetti con il loro verbo si leggono come una frase ("Tiberio *lascia Roma a* Seiano"); sono queste frasi che fanno
    capire, non i cerchi da soli. Si parte da una **domanda focale** e da 10-20 concetti (al massimo 25), dal generale
-   al particolare; pochi collegamenti trasversali (al massimo 5), tratteggiati.
+   al particolare. *Dalla 1.3.8*: la prova vera (la mappa di Antropologia del 21/11) ha mostrato che i verbi obbligati
+   su ogni legame diventano frecce che non dicono niente ("comprende", "ha"); il legame "fa parte di" lo dice meglio il
+   riquadro che contiene. Le frecce restano per le cause e i passaggi; il resto della spiegazione va nella frase sotto
+   il nome.
 2. **Fatta dall'AI si guarda, poi si ricostruisce.** Le ricerche sul recupero dalla memoria (Karpicke 2011) dicono che
    leggere una mappa pronta aiuta poco: aiuta provare a ricordarla. Per questo c'è **Mettiti alla prova** (45.6): si
    nascondono circa un terzo dei pezzi e si scoprono con un clic, come le schede del Ripasso lampo.
@@ -1458,7 +1470,7 @@ spiegazione, poi Mettiti alla prova, Scarica PDF, Modifica e Correggi a mano.
 6. **Si legge prima di tutto.** All'apertura la mappa si vede intera solo se il testo resta leggibile; se no si parte
    leggibili dalla radice (zoom 0,74) e si trascina. Lo zoom sta nella tela, a sinistra; a destra si apre la spiegazione.
 7. **Disegno nostro, niente librerie.** dagre, elkjs, cytoscape, d3-force e React Flow fanno grafi generici e pesano;
-   un albero e una raggiera di 25 concetti e una linea del tempo di 40 date si dispongono con poche righe
+   i riquadri e una raggiera di 25 concetti e una linea del tempo di 40 date si dispongono con poche righe
    (`ui/disegno-mappe.js`, provate in `prove/js/mappe.test.js`), con la CSP di sempre.
 
 Fonti: Novak e Cañas, *The Theory Underlying Concept Maps* (cmap.ihmc.us/docs/theory-of-concept-maps.php); Cult of
@@ -1500,7 +1512,8 @@ Larga fino a 1280 (`.pagina.mp-pagina-larga`). Dall'alto:
    al 68". Se lo schema è cambiato: "Lo schema è cambiato dopo questa mappa." con **Rifalla**. Se c'è una `nota`, il
    riquadro "Non ho trovato tutto" come il riassunto.
 3. Una riga sola: segmenti **Le date | I concetti** (280, alti 36, scelto in accento tenue), segmenti della forma
-   (**Albero | A raggiera** oppure **In scala | In fila**, 240, la scelta si ricorda per ogni mappa), a destra
+   (**A riquadri | A raggiera** oppure **In scala | In fila**, 240, la scelta si ricorda per ogni mappa; chi aveva
+   scelto "Albero" prima della 1.3.8 vede i riquadri), a destra
    **Mettiti alla prova** (o la barra della prova).
 4. La **tela**: Superficie, raggio 22, alta `100vh - 236` (minimo 460), fondo a puntini (riga, 22 px). Rotella = zoom
    intorno al puntatore (da 0,25 a 3), trascinare = spostare (5 px prima di partire), tastiera + − 0 e frecce. In
@@ -1510,20 +1523,30 @@ con i segnaposto; in errore il messaggio con Riprova ed Elimina.
 
 ### 45.4 La mappa dei concetti
 
-- **Concetti**: rettangoli arrotondati (una riga = pillola, più righe raggio 18), testo centrato, al massimo 3 righe.
-  Radice 17/800, fondo materia tenue, bordo materia pieno 2,5, testo materia; primo giro 15/700, bordo materia 2;
-  gli altri 14/600, bordo `--bordo` 1,5. Misure col carattere vero (canvas) dopo che Figtree è caricato.
-- **Frecce** grigie 1,6 con la punta; il **verbo** a metà in una pillolina (12/700 tenue su Superficie). Collegamenti
-  trasversali tratteggiati nel colore della materia, curvi, col verbo in colore materia.
-- **Albero**: dall'alto in basso, 104 px tra i livelli (spazio per il verbo), 28 tra fratelli, il genitore in mezzo ai
-  figli. **Raggiera**: radice al centro, ogni ramo una fetta grande quanto le sue foglie, il primo ramo in alto; i giri
-  lontani quanto serve nella direzione di ogni concetto. Se il modello non dice la forma: raggiera da 6 figli della
-  radice in su.
+- **A riquadri** (la forma di partenza): un **riquadro grande** (Superficie, bordo materia pieno 2, raggio 22) con in
+  alto la **fascia dell'argomento** (fondo materia tenue, nome 21/800 materia testo, centrato, una riga sottile sotto).
+  Dentro, le **parti** in colonne larghe 292 con 16 tra l'una e l'altra (fino a 4 per riga; 5 e 6 parti = 3 per riga,
+  7 e 8 = 4; l'ultima riga più corta sta in mezzo), fondo `--fondo-blocco`, bordo `--riga` 1, raggio 16; le colonne della
+  stessa riga sono alte uguali. In cima alla colonna il **nome della parte** 16/800 materia testo e la sua **frase**
+  13,5/500 testo. Sotto, le **schede** dei concetti (Superficie, bordo `--bordo` 1,2, raggio 12): nome 14,5/700, frase
+  13/500 tenue, a sinistra, 10 tra una scheda e l'altra. I concetti più in basso **rientrano** di 24 con una linea guida
+  grigia dal lato del genitore (al massimo 3 rientri). **Niente frecce** tra l'argomento e le parti né tra le parti.
+- **Frecce col verbo** solo **tra due concetti** dove il modello l'ha messo, mai dall'argomento o da una parte (anche
+  se una mappa di prima ce l'ha, non si disegna): la linea guida prende la punta. Se un concetto ha **un solo figlio col
+  verbo**, il figlio va subito sotto, senza rientro, con una freccia dritta: una **catena** ("Stati generali →
+  *diventano* → Assemblea nazionale"). Il verbo sta in una pillolina (12/700 tenue su Superficie) nei 34 px sopra la
+  scheda.
+- **A raggiera**: radice al centro (pillola 17/800, fondo materia tenue), ogni ramo una fetta grande quanto le sue
+  foglie, il primo ramo in alto; schede con nome (15/700 il primo giro, 14/700 gli altri) e frase (13 e 12,5/500
+  tenue) centrati, larghe al massimo 210 e 190; frecce grigie 1,6 con la punta, verbo a metà solo tra due concetti. Misure col carattere vero (canvas) dopo che Figtree è caricato.
 - **Clic** su un concetto: lui, i vicini e le loro frecce restano accesi, il resto va al 30%; a destra entra il
-  **pannello** (320, raggio 18, ombra della finestra, 260 ms da destra): "CONCETTO" (o "ARGOMENTO"), titolo 20/800, la
-  spiegazione 16, poi i legami come **frasi** ("Tiberio *lascia Roma a* **Seiano**", l'altro concetto in grassetto,
-  un clic porta a lui) e **Apri nello schema · parte 2**, che apre lo schema a quella parte. X o Esc chiudono; un clic
-  sul vuoto pure.
+  **pannello** (320, raggio 18, ombra della finestra, 260 ms da destra): "ARGOMENTO", "PARTE" o "CONCETTO", titolo
+  20/800, la **frase** 16/700, la spiegazione 16, poi i legami come **frasi** ("Tiberio *lascia Roma a* **Seiano**";
+  senza verbo "Tiberio *fa parte di* **L'Impero…**" e "Tiberio *comprende* **Processi…**", l'altro concetto in
+  grassetto, un clic porta a lui) e **Apri nello schema · parte 2**, che apre lo schema a quella parte. X o Esc
+  chiudono; un clic sul vuoto pure.
+- **Mettiti alla prova** sui concetti nasconde il **nome** (un buco tratteggiato con "?") e lascia la **frase**: si
+  indovina il nome dalla frase.
 
 ### 45.5 La linea del tempo
 
@@ -1566,7 +1589,7 @@ server).
 | `meno` | `M5 12h14` |
 | `adatta` | `M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5` |
 
-Esempio: lo schema 3 ha la mappa dei concetti (16, ad albero, un collegamento trasversale) e la linea del tempo (9 date
+Esempio: lo schema 3 ha la mappa dei concetti (16, a riquadri: 5 parti, 2 frecce col verbo, una in catena) e la linea del tempo (9 date
 dal 27 a.C. al 68, due periodi, una nota). Visita guidata, giro 3 delle novità: "Mappa" sulla pillola dello schema
 ("Le date su una linea del tempo, oppure i concetti con cerchi e frecce.") e "Mettiti alla prova" sulla mappa ("Un
 clic su un cerchio e leggi la spiegazione. Da qui nascondi dei pezzi e provi a ricordarli."). Chi aveva già visto le
