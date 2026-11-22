@@ -81,6 +81,10 @@ def _titolo_da(frase: str, riserva: str) -> str:
     return " ".join(parole[:6]).capitalize() if parole else riserva
 
 
+_TOGLI = re.compile(r"(?:togli|elimina|rimuovi)\w*\s+(?:la |il |lo )?(?:parte|capitolo|sezione)\s+(\d+)")
+_DOVE = re.compile(r"(?:nella|nel|in)\s+(?:parte|capitolo|sezione)\s+(\d+)")
+
+
 def _segna_modifica(oggetto, richiesta: str) -> None:
     """Modalità prova: una modifica cambia davvero il testo (si vede e si può controllare), senza AI."""
     segno = f" (Cambiato in prova: {richiesta[:80]})"
@@ -382,10 +386,26 @@ class TestoFinto:
         attuale["titolo"] = f"{attuale.get('titolo') or 'Mappa'} (cambiata in prova: {str(d.get('modifica') or '')[:40]})"
         return {**attuale, "nota": None}
 
-    def _modifica_scelta(self, d: dict) -> dict:
-        return {"parti": list(d.get("numeri") or [])}
+    def _modifica_piano(self, d: dict) -> dict:
+        """Modalità prova: capisce "togli la parte 3" e "togli la parte 3 e mettila nella parte 2"; per il resto
+        riscrive le parti che ha ricevuto, con la richiesta come compito."""
+        numeri = list(d.get("numeri") or [])
+        richiesta = str(d.get("modifica") or "").lower()
+        fisse = set(d.get("fisse") or [])
+        togli = [int(x) for x in _TOGLI.findall(richiesta) if int(x) in numeri and int(x) not in fisse]
+        dove = _DOVE.search(richiesta)
+        parti: list[dict] = [{"n": n, "azione": "togli"} for n in togli]
+        if dove and int(dove.group(1)) in numeri and int(dove.group(1)) not in togli:
+            parti.append({"n": int(dove.group(1)), "azione": "riscrivi", "compito": f"Metti qui il contenuto delle parti {togli}",
+                          "unisci": togli})
+        elif not parti:
+            parti = [{"n": n, "azione": "riscrivi", "compito": None, "unisci": []} for n in numeri]
+        return {"parti": parti, "nota": None}
 
     def _riassunto_modifica(self, d: dict) -> dict:
+        togli = [int(x) for x in _TOGLI.findall(str(d.get("modifica") or "").lower())]
+        if togli:
+            return {"parti": [], "togli": togli, "nota": None}
         scelte = d.get("scelte") or [p["n"] for p in d["parti"]]
         uscita = []
         for p in d["parti"]:

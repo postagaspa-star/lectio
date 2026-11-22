@@ -318,12 +318,16 @@ def test_modifica_vera_registra_le_spese_e_usa_la_richiesta(client, auth, serviz
     m = modifica(client, auth, "schema", d["id"], "Aggiungi le date")
     studio_tutto(servizi)
     m = client.get(f"/api/modifiche/{m['id']}", headers=auth).json()
-    assert m["stato"] == "pronta" and m["cambiate"] == [1]  # il server finto sceglie la parte 1
-    assert server.richieste_modifica and "Aggiungi le date" in server.richieste_modifica[0]
+    assert m["stato"] == "pronta" and m["cambiate"] == [1]  # il piano finto riscrive la parte 1
+    # Il piano vede il testo di tutte le parti; la parte riceve il suo compito, con la richiesta come sfondo.
+    assert server.piani_modifica and "Aggiungi le date" in server.piani_modifica[0]
+    assert all(f"PARTE {s['n']} — {s['titolo']}" in server.piani_modifica[0] for s in d["contenuto"]["sezioni"])
+    assert server.richieste_modifica and "Aggiungi le date qui" in server.richieste_modifica[0]
+    assert "Aggiungi le date" in server.richieste_modifica[0].split("La richiesta intera")[1]
     dopo = client.get(f"/api/schemi/{d['id']}", headers=auth).json()
     assert "Cambiato in prova: prova vera" in json_di(dopo["contenuto"]["sezioni"][0])
     with db.aperta(servizi.settings.db_path) as conn:
         spese = [dict(x) for x in conn.execute("SELECT cosa, costo_eur FROM spese WHERE riferimento = ?", (f"modifica:{m['id']}",))]
-    assert any(x["cosa"] == "Modifica · scelta delle parti" for x in spese)
+    assert any(x["cosa"] == "Modifica · piano" for x in spese)
     assert any(x["cosa"].startswith("Modifica · schema · parte 1") for x in spese)
     assert sum(x["costo_eur"] for x in spese) > 0

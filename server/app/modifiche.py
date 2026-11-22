@@ -2,14 +2,19 @@
 si cambiano senza rifarli da capo.
 
 Come lavora una modifica con l'AI:
-1. le parti da cambiare: quelle scelte da Andrea, oppure (con "Tutto") le sceglie il modello di scrittura con una
-   richiesta breve (riassunti e verifiche no: lì il modello risponde direttamente solo con le parti che cambia; una
-   mappa è un pezzo solo e si riscrive intera);
+1. schemi e lezioni: il piano della modifica. Il modello di scrittura legge TUTTE le parti (testo compreso) e la
+   richiesta e dice che cosa fare di ognuna: riscriverla con un compito preciso, toglierla, oppure unirci il contenuto
+   di altre parti (che di solito si tolgono). Se lo studente ha indicato delle parti, si toccano solo quelle.
+   Riassunti e verifiche no: lì il modello vede tutto e risponde con le parti che cambia e quelle da togliere; una
+   mappa è un pezzo solo e si riscrive intera;
 2. ogni parte si riscrive con il modello di scrittura partendo dalla STESSA richiesta della prima volta (stessi
-   documenti, stesse regole), poi la versione di adesso come risposta del modello, poi la richiesta di Andrea;
+   documenti, stesse regole), poi la versione di adesso come risposta del modello, poi il suo compito (con il testo
+   delle parti da unire);
 3. il solito controllo sui documenti (controllo.rivedi);
-4. la versione di adesso si mette da parte (versioni) e si scrive quella nuova, tutto in una transazione.
-Ogni parte riscritta si salva subito in /data/modifiche/<id>/: Riprova non la ripaga.
+4. la versione di adesso si mette da parte (versioni) e si scrive quella nuova, tutto in una transazione: le parti
+   tolte spariscono e le altre si rinumerano. La nota per lo studente comincia con quello che Lectio ha fatto davvero
+   (parti tolte e unite), poi le note del modello.
+Il piano e ogni parte riscritta si salvano subito in /data/modifiche/<id>/: Riprova non li ripaga.
 
 Lezioni: la voce si rifà solo per i capitoli cambiati; quelli uguali si tagliano dall'audio di prima. Le domande uguali
 tengono il loro id (e le risposte date); quelle che non ci sono più restano nel database con `tolta = 1`."""
@@ -42,11 +47,14 @@ VERSIONI_MASSIME = {"lezione": 1, "schema": 3, "riassunto": 3, "simulata": 3, "m
 MODIFICABILI = {"lezione": ("pronta",), "schema": ("pronto",), "riassunto": ("pronto",),
                 "simulata": ("pronta", "in_corso", "corretta"), "mappa": ("pronta",)}
 FINALI = (CAPITOLO_FINALE, CAPITOLO_FINALE_RIPASSO, CAPITOLO_FINALE_INTERROGAZIONE)
-FILE_LEZIONE = ("capitoli.json", "copione.json", "lezione.mp3")
+# piano.json c'è perché una modifica può togliere capitoli (cioè blocchi del piano): Torna a prima lo rimette.
+FILE_LEZIONE = ("capitoli.json", "copione.json", "lezione.mp3", "piano.json")
 FRASE_VECCHIA = "Questa cosa è stata fatta con una versione vecchia di Lectio e non si può modificare: fanne una nuova."
 FRASE_CAMBIATA = "Nel frattempo è cambiata: la modifica non si può più mettere. Tocca Lascia stare e riprova."
 CARATTERI_SEZIONE = 16_000
 MARGINE_TAGLIO = 0.05
+CARATTERI_PARTE_PIANO = 2_500  # quanto testo di ogni parte vede il piano della modifica
+CARATTERI_PIANO = 40_000
 
 
 def cartella(dati_dir: str, modifica_id: int) -> Path:
@@ -245,6 +253,80 @@ def dove_sono(brani: list[dict]) -> str:
     return f"Li trovi tra i documenti della prima richiesta: {elenco}."
 
 
+# --------------------------------------------------------------------------- il piano della modifica
+
+def pulisci_piano(o: dict, numeri: list[int], scelte: list[int], fisse=()) -> dict:
+    """La risposta del piano, ripulita: solo parti che esistono (e, se lo studente ne ha indicate, solo quelle), una
+    azione per parte, mai tutte tolte, mai tolta una parte fissa. Le parti da unire diventano numeri validi."""
+    ammesse = set(scelte or numeri)
+    riscrivi: dict[str, dict] = {}
+    togli: list[int] = []
+    note: list[str] = []
+    for x in o.get("parti") or []:
+        if not isinstance(x, dict):
+            continue
+        try:
+            n = int(x.get("n"))
+        except (TypeError, ValueError):
+            continue
+        if n not in ammesse or str(n) in riscrivi or n in togli:
+            continue
+        azione = str(x.get("azione") or "").strip().lower()
+        if azione == "togli":
+            if n in fisse:
+                note.append(f"La parte {n} non si può togliere: l'ho lasciata.")
+            else:
+                togli.append(n)
+            continue
+        unisci = []
+        for m in x.get("unisci") or []:
+            try:
+                m = int(m)
+            except (TypeError, ValueError):
+                continue
+            if m != n and m in ammesse and m not in unisci:
+                unisci.append(m)
+        compito = " ".join(str(x.get("compito") or "").split())[:1200] or None
+        riscrivi[str(n)] = {"compito": compito, "unisci": unisci}
+    togli = [n for n in togli if str(n) not in riscrivi]
+    if len(togli) >= len(numeri):
+        raise ErroreLezione("Con questa modifica non resterebbe nessuna parte: scrivi la richiesta in un altro modo.")
+    nota = " ".join(str(o.get("nota") or "").split())
+    if nota and nota.lower() not in ("null", "none", "nessuna"):
+        note.append(nota[:300])
+    return {"riscrivi": riscrivi, "togli": togli, "note": note}
+
+
+def frase_fatti(titoli: dict[int, str], togli: list[int], riscrivi: dict[int, dict]) -> str | None:
+    """Quello che Lectio ha fatto davvero con le parti (lo scrive il codice, non il modello)."""
+    if not togli:
+        return None
+    dove = {m: n for n, a in riscrivi.items() for m in a.get("unisci") or []}
+    frasi = []
+    for m in sorted(togli):
+        nome = f"«{titoli.get(m) or f'parte {m}'}»"
+        if m in dove:
+            frasi.append(f"Ho tolto la parte {nome} e ho messo il suo contenuto in «{titoli.get(dove[m]) or f'parte {dove[m]}'}».")
+        else:
+            frasi.append(f"Ho tolto la parte {nome}.")
+    return " ".join(frasi)
+
+
+def rinumera(togli: list[int], numeri: list[int]) -> dict[int, int]:
+    """Numero di prima → numero nuovo delle parti che restano."""
+    rimaste = [n for n in numeri if n not in set(togli)]
+    return {n: i for i, n in enumerate(rimaste, start=1)}
+
+
+def rinumera_modifiche(conn: sqlite3.Connection, tipo: str, oggetto_id: int, mappa: dict[int, int], tranne: int) -> None:
+    """Le modifiche di prima dello stesso oggetto seguono i numeri nuovi (i file aggiunti restano legati alla parte giusta)."""
+    for m in conn.execute("SELECT id, parti, cambiate FROM modifiche WHERE tipo = ? AND oggetto_id = ? AND id <> ?",
+                          (tipo, oggetto_id, tranne)).fetchall():
+        parti = [mappa[n] for n in json.loads(m["parti"] or "[]") if n in mappa]
+        cambiate = [mappa[n] for n in json.loads(m["cambiate"] or "[]") if n in mappa]
+        conn.execute("UPDATE modifiche SET parti = ?, cambiate = ? WHERE id = ?", (json.dumps(parti), json.dumps(cambiate), m["id"]))
+
+
 # --------------------------------------------------------------------------- versioni
 
 def _dati_di(conn: sqlite3.Connection, tipo: str, r) -> dict:
@@ -414,8 +496,9 @@ def stima(s, conn: sqlite3.Connection, tipo: str, r, parti: list[int], file_aggi
                 costo += prezzi.costo_testo(medium, int(min(extra, CARATTERI_SEZIONE) / t), 0)
                 costo += prezzi.costo_testo(small, int(min(extra, CARATTERI_SEZIONE) / t), 0)
             minuti += 0.5
-        if not parti and len(tutte) > 1:
-            costo += prezzi.costo_testo(medium, 3_000 + int(min(extra, 4_000) / t), 200)
+        if len(tutte) > 1 or extra:  # il piano della modifica legge tutte le parti
+            leggere = min(CARATTERI_PIANO, len(tutte) * CARATTERI_PARTE_PIANO) + 3_000 + min(extra, 4_000)
+            costo += prezzi.costo_testo(medium, int(leggere / t), 600)
         costo *= 1.3  # una riscrittura dopo il controllo, a volte
     elif tipo == "mappa":
         schema = conn.execute("SELECT contenuto FROM schemi WHERE id = ?", (r["schema_id"],)).fetchone()
@@ -582,40 +665,40 @@ class PreparazioneModifica:
             titoli[b["materiale_id"]] = b.get("titolo") or "file"
         return "\n".join(f"«{titoli[m]}»: {_inizio(' '.join(t), 700)}" for m, t in per_file.items())
 
-    def _scegli(self, disponibili: list[dict], cosa: str) -> list[int]:
-        numeri = [p["n"] for p in disponibili]
-        if self.parti:
-            scelte = [n for n in numeri if n in self.parti]
-            if not scelte:
-                raise ErroreLezione("Le parti scelte non ci sono più: riapri e scegli di nuovo.")
-            return scelte
-        if len(numeri) <= 1:
-            return numeri
-        fatto = self.c.leggi("scelta.json")
+    def _piano(self, parti: list[dict], cosa: str, fisse: tuple[int, ...] = ()) -> dict:
+        """Che cosa fare di ogni parte (schemi e lezioni): {"riscrivi": {n: {"compito", "unisci"}}, "togli": [n]}.
+        Lo decide il modello di scrittura leggendo TUTTE le parti, testo compreso, e la richiesta: così "togli la 11 e
+        mettila nella 5" si può fare, e ogni parte riceve il suo compito invece della richiesta intera. Si salva (Riprova
+        non lo ripaga). Se il modello non risponde bene si fa come prima: le parti scelte (o tutte), con la richiesta."""
+        numeri = [p["n"] for p in parti]
+        scelte = [n for n in numeri if n in self.parti] if self.parti else []
+        if self.parti and not scelte:
+            raise ErroreLezione("Le parti scelte non ci sono più: riapri e scegli di nuovo.")
+        fatto = self.c.leggi("piano-modifica.json")
         if fatto is None:
-            self.avanza("scelta", frase="Scelgo le parti da cambiare")
-            elenco = [(p["n"], p["titolo"], p["inizio"]) for p in disponibili]
+            base = {"riscrivi": {str(n): {"compito": None, "unisci": []} for n in (scelte or numeri)}, "togli": [], "note": []}
+            fatto = base
+            if len(numeri) > 1 or self.file:
+                self.avanza("scelta", frase="Decido che cosa cambiare")
+                quanto = max(400, min(CARATTERI_PARTE_PIANO, CARATTERI_PIANO // max(1, len(parti))))
+                per_modello = [{"n": p["n"], "titolo": p["titolo"], "testo": _inizio(p["testo"], quanto)} for p in parti]
 
-            def valida(o: dict) -> list[str]:
-                v = o.get("parti")
-                return [] if isinstance(v, list) else ['serve "parti", la lista dei numeri']
+                def valida(o: dict) -> list[str]:
+                    return [] if isinstance(o.get("parti"), list) else ['serve "parti", la lista delle azioni']
 
-            try:
-                o = self._chiedi("modifica_scelta", prompt_studio.messaggi_scelta_parti(cosa, elenco, self.richiesta, self._inizio_file()),
-                                 valida, 400, "Modifica · scelta delle parti", {"numeri": numeri})
-                scelte = []
-                for x in o["parti"]:
-                    try:
-                        n = int(x)
-                    except (TypeError, ValueError):
-                        continue
-                    if n in numeri and n not in scelte:
-                        scelte.append(n)
-            except ai.RispostaNonUsabile:
-                scelte = []
-            fatto = {"parti": sorted(scelte) or numeri}  # se non ha saputo scegliere, tutte
-            self.c.scrivi("scelta.json", fatto)
-        return fatto["parti"]
+                try:
+                    o = self._chiedi("modifica_piano", prompt_studio.messaggi_piano_modifica(
+                        cosa, per_modello, self.richiesta, self._inizio_file(), scelte, list(fisse)), valida, 1500,
+                        "Modifica · piano", {"numeri": scelte or numeri, "fisse": list(fisse)})
+                    pulito = pulisci_piano(o, numeri, scelte, fisse)
+                    if pulito["riscrivi"] or pulito["togli"]:
+                        fatto = pulito
+                except ai.RispostaNonUsabile:
+                    pass
+            self.c.scrivi("piano-modifica.json", fatto)
+        for nota in fatto.get("note") or []:
+            self._segna_nota(nota)
+        return {"riscrivi": {int(k): v for k, v in fatto["riscrivi"].items()}, "togli": [int(n) for n in fatto["togli"]]}
 
     # --- il giro
 
@@ -629,10 +712,11 @@ class PreparazioneModifica:
             raise ErroreLezione(FRASE_CAMBIATA)
         return r
 
-    def _chiudi(self, conn: sqlite3.Connection, cambiate: list[int], titolo: str) -> None:
+    def _chiudi(self, conn: sqlite3.Connection, cambiate: list[int], titolo: str, fatti: str | None = None) -> None:
+        nota = " ".join(x for x in (fatti, self._nota_finale()) if x) or None
         cur = conn.execute("UPDATE modifiche SET stato = 'pronta', fase = NULL, frase = NULL, errore = NULL, nota = ?,"
                            " cambiate = ?, pronta_il = ? WHERE id = ? AND stato = 'in_preparazione'",
-                           (self._nota_finale(), json.dumps(sorted(set(cambiate))), clock.adesso(), self.id))
+                           (nota, json.dumps(sorted(set(cambiate))), clock.adesso(), self.id))
         if cur.rowcount == 0:
             raise Annullata()
         db.aggiungi_novita(conn, "modifica_pronta", f"Ho modificato {NOMI[self.tipo]} «{titolo[:60]}»",
@@ -653,17 +737,22 @@ class PreparazioneModifica:
         if nuovi_brani:  # i file aggiunti diventano documenti dello schema (anche per le modifiche dopo)
             lettura = {**lettura, "brani": lettura["brani"] + nuovi_brani}
         sezioni = {s["n"]: s for s in contenuto.get("sezioni") or []}
-        scelte = self._scegli(parti_di("schema", r), "uno schema di ripasso")
+        parti = [{"n": s["n"], "titolo": s["titolo"], "testo": schema_ripasso.testo_di([s])[len(s["titolo"]):]}
+                 for s in contenuto.get("sezioni") or []]
+        mod = self._piano(parti, "uno schema di ripasso")
+        da_rifare = sorted(mod["riscrivi"])
         nuove = {}
-        for j, n in enumerate(scelte):
-            self.avanza("scrittura", j, len(scelte), f"Riscrivo la parte {n}")
+        for j, n in enumerate(da_rifare):
+            self.avanza("scrittura", j, len(da_rifare), f"Riscrivo la parte {n}")
             fatto = self.c.leggi(f"parti/{n:02d}.json")
             if fatto is None:
-                fatto = self._schema_parte(r, lettura, piano, sezioni[n], contenuto)
+                azione = mod["riscrivi"][n]
+                fatto = self._schema_parte(r, lettura, piano, sezioni[n], contenuto, compito=azione["compito"],
+                                           unite=[sezioni[m] for m in azione["unisci"] if m in sezioni], tolte=mod["togli"])
                 self.c.scrivi(f"parti/{n:02d}.json", fatto)
             self._segna_nota(fatto.get("nota"))
             nuove[n] = fatto
-        self.avanza("chiusura", len(scelte), len(scelte), "Metto insieme lo schema")
+        self.avanza("chiusura", len(da_rifare), len(da_rifare), "Metto insieme lo schema")
         per_id = {b["id"]: b for b in lettura["brani"]}
         with db.aperta(self.ctx.settings.db_path) as conn, db.transazione(conn):
             self.controlla()
@@ -672,6 +761,7 @@ class PreparazioneModifica:
                 raise ErroreLezione(FRASE_CAMBIATA)
             metti_da_parte(conn, self.ctx.settings.dati_dir, "schema", attuale, "prima", "modifica", self.richiesta)
             fonti = dict(contenuto.get("fonti") or {})
+            titoli_prima = {s["n"]: s["titolo"] for s in contenuto["sezioni"]}
             for s in contenuto["sezioni"]:
                 if s["n"] not in nuove:
                     continue
@@ -681,21 +771,43 @@ class PreparazioneModifica:
                     for i in b.get("fonti") or []:
                         if i in per_id:
                             fonti[i] = memoria.fonte(per_id[i])
-                conn.execute("DELETE FROM carte WHERE chiave LIKE ?", (f"schema:{r['id']}:{s['n']}:%",))
-                ids = [i for b in nuova["blocchi"] for i in b.get("fonti") or []]
-                for i, c in enumerate(nuove[s["n"]]["carte"], start=1):
-                    lampo.aggiungi(conn, r["materia_id"], "schema", f"schema:{r['id']}:{s['n']}:{i}", c["domanda"], c["risposta"],
+            # Le parti tolte spariscono (con le loro carte), le altre si rinumerano: le carte seguono il numero nuovo.
+            # In ordine crescente il numero nuovo è sempre già libero (è di una parte tolta o già spostata).
+            numeri = [s["n"] for s in contenuto["sezioni"]]
+            mappa = rinumera(mod["togli"], numeri)
+            prefisso = f"schema:{r['id']}:"
+            for n in set(mod["togli"]) | set(nuove):
+                conn.execute("DELETE FROM carte WHERE chiave LIKE ?", (f"{prefisso}{n}:%",))
+            for vecchio, nuovo in sorted(mappa.items()):
+                if vecchio != nuovo:
+                    conn.execute("UPDATE carte SET chiave = ? || substr(chiave, ?) WHERE chiave LIKE ?",
+                                 (f"{prefisso}{nuovo}:", len(f"{prefisso}{vecchio}:") + 1, f"{prefisso}{vecchio}:%"))
+            contenuto["sezioni"] = [s for s in contenuto["sezioni"] if s["n"] in mappa]
+            for s in contenuto["sezioni"]:
+                s["n"] = mappa[s["n"]]
+            for vecchio, x in nuove.items():
+                ids = [i for b in x["sezione"]["blocchi"] for i in b.get("fonti") or []]
+                for i, c in enumerate(x["carte"], start=1):
+                    lampo.aggiungi(conn, r["materia_id"], "schema", f"{prefisso}{mappa[vecchio]}:{i}", c["domanda"], c["risposta"],
                                    memoria.fonti_di(ids, lettura["brani"]))
             contenuto["fonti"] = fonti
-            carte = conn.execute("SELECT COUNT(*) FROM carte WHERE chiave LIKE ?", (f"schema:{r['id']}:%",)).fetchone()[0]
+            carte = conn.execute("SELECT COUNT(*) FROM carte WHERE chiave LIKE ?", (f"{prefisso}%",)).fetchone()[0]
             conn.execute("UPDATE schemi SET contenuto = ?, carte = ?, cambiato_il = ? WHERE id = ?",
                          (json.dumps(contenuto, ensure_ascii=False), carte, clock.adesso(), r["id"]))
-            self._chiudi(conn, list(nuove), titolo_di("schema", r))
+            if mod["togli"]:
+                rinumera_modifiche(conn, "schema", r["id"], mappa, self.id)
+            self._chiudi(conn, [mappa[n] for n in nuove], titolo_di("schema", r),
+                         frase_fatti(titoli_prima, mod["togli"], mod["riscrivi"]))
             if nuovi_brani:
                 sc.scrivi("lettura.json", lettura)
 
-    def _schema_parte(self, r: dict, lettura: dict, piano: dict | None, s: dict, contenuto: dict) -> dict:
+    def _schema_parte(self, r: dict, lettura: dict, piano: dict | None, s: dict, contenuto: dict, compito: str | None = None,
+                      unite: list[dict] | None = None, tolte: list[int] | None = None) -> dict:
+        """Riscrive una parte. `compito`: che cosa cambiare (dal piano); `unite`: le parti da mettere dentro questa."""
         n = s["n"]
+        unite = unite or []
+        da_unire = "\n\n".join(schema_ripasso.testo_di([u]) for u in unite) or None
+        fonti_unite = [i for u in unite for b in u.get("blocchi") or [] for i in b.get("fonti") or []]
         forma = contenuto.get("forma") or (piano or {}).get("forma") or "capitoli"
         immagini = [(i, b) for i, b in enumerate(s["blocchi"]) if b.get("tipo") == "immagine"]
         blocchi = [b for b in s["blocchi"] if b.get("tipo") != "immagine"]
@@ -707,7 +819,8 @@ class PreparazioneModifica:
             x["titolo"] == s["titolo"] for x in (piano or {}).get("sezioni") or [])
         cosa = f"Modifica · schema · parte {n}"
         if quadro:
-            altre = [x for x in contenuto["sezioni"] if x["n"] != n]
+            # Il quadro riassume le parti che restano (quelle tolte da questa modifica non ci vanno più).
+            altre = [x for x in contenuto["sezioni"] if x["n"] != n and x["n"] not in (tolte or [])]
             testo = schema_ripasso.testo_di(altre)[:40_000]
             b = blocchi[0]
             attuale = {"titolo": s["titolo"], "intestazione": b.get("intestazione") or [], "righe": b.get("righe") or []}
@@ -717,7 +830,7 @@ class PreparazioneModifica:
 
             messaggi = prompt_studio.messaggi_schema_tabella(lettura, testo) + [
                 {"role": "assistant", "content": json.dumps(attuale, ensure_ascii=False)},
-                {"role": "user", "content": prompt_studio.richiesta_modifica(self.richiesta, "il quadro d'insieme")}]
+                {"role": "user", "content": prompt_studio.richiesta_modifica(self.richiesta, "il quadro d'insieme", compito=compito)}]
             dati = {"sezioni": [{"titolo": x["titolo"], "primo": next((y.get("testo") for y in x["blocchi"] if y.get("testo")), "")}
                                 for x in altre]}
             grezzo = self._chiedi("schema_tabella", messaggi, valida, 3000, cosa, dati)
@@ -738,16 +851,22 @@ class PreparazioneModifica:
                 break
         if sp is None:
             sp = {"titolo": s["titolo"], "concetti": [], "fonti": []}
-        cerca = " ".join([sp["titolo"], *sp.get("concetti", []), self.richiesta])
-        brani = memoria.scegli(self.ctx, cerca, lettura["brani"], CARATTERI_SEZIONE, self._ids_file() + list(sp.get("fonti") or []),
+        cerca = " ".join([sp["titolo"], *sp.get("concetti", []), *(u["titolo"] for u in unite), compito or self.richiesta])
+        # Prima i file aggiunti, poi i documenti delle parti da unire (le loro fonti), poi quelli della parte.
+        validi = {b["id"] for b in lettura["brani"]}
+        forzati = list(dict.fromkeys(self._ids_file() + [i for i in fonti_unite if i in validi] + list(sp.get("fonti") or [])))
+        brani = memoria.scegli(self.ctx, cerca, lettura["brani"], CARATTERI_SEZIONE, forzati,
                                materia_id=r["materia_id"], prima=self.controlla)
         parole = schema_ripasso.parole_sezione(r["livello"], max(1, len(sp.get("concetti") or [])))
+        if da_unire:  # una parte che ne accoglie altre diventa più lunga
+            parole += len(da_unire.split())
         piano_per_prompt = piano or {"titolo": r["titolo"], "forma": forma, "sezioni": [sp], "concetti": [], "immagini": []}
         attuale = {"campi": s.get("campi") or [], "blocchi": blocchi, "carte": carte}
         messaggi = prompt_studio.messaggi_schema_sezione(lettura, piano_per_prompt, k, sp, brani, parole, forma) + [
             {"role": "assistant", "content": json.dumps(attuale, ensure_ascii=False)},
             {"role": "user", "content": prompt_studio.richiesta_modifica(self.richiesta, "questa parte dello schema",
-                                                                         allegati=self._dove_file(brani))}]
+                                                                         allegati=self._dove_file(brani), compito=compito,
+                                                                         da_unire=da_unire)}]
         max_token = min(12_000, int(schema_ripasso.token_per(parole) * 1.6))
         dati = {"lettura": lettura, "sezione": sp, "brani": brani, "forma": forma}
         grezzo = self._chiedi("schema_sezione", messaggi, schema_ripasso.valida_sezione, max_token, cosa, dati)
@@ -797,9 +916,9 @@ class PreparazioneModifica:
             ammesse = set(scelte or numeri)
 
             def valida(o: dict) -> list[str]:
-                v = o.get("parti")
-                if not isinstance(v, list) or not v:
-                    return ['servono le "parti" cambiate, ognuna con il suo "n"']
+                v, via = o.get("parti"), o.get("togli") or []
+                if not isinstance(v, list) or not isinstance(via, list) or (not v and not via):
+                    return ['servono le "parti" cambiate, ognuna con il suo "n", e "togli" (una lista, anche vuota)']
                 errori = []
                 for p in v:
                     try:
@@ -828,11 +947,22 @@ class PreparazioneModifica:
                 norm = riassunti.normalizza({"parti": [p]}, forma)
                 if n in ammesse and norm:
                     nuove[str(n)] = norm[0]
-            fatto = {"parti": nuove, "nota": riveduto.get("nota")}
+            togli = []
+            for x in riveduto.get("togli") or []:
+                try:
+                    x = int(x)
+                except (TypeError, ValueError):
+                    continue
+                if x in ammesse and str(x) not in nuove and x not in togli:
+                    togli.append(x)
+            fatto = {"parti": nuove, "togli": togli, "nota": riveduto.get("nota")}
             self.c.scrivi("riassunto.json", fatto)
         self._segna_nota(fatto.get("nota"))
-        if not fatto["parti"]:
+        togli = fatto.get("togli") or []
+        if not fatto["parti"] and not togli:
             raise ErroreLezione("Il riassunto nuovo è venuto vuoto: tocca Riprova o scrivi la richiesta in un altro modo.")
+        if len(togli) >= len(parti):
+            raise ErroreLezione("Con questa modifica il riassunto resterebbe vuoto: scrivi la richiesta in un altro modo.")
         self.avanza("chiusura", 1, 1, "Metto insieme il riassunto")
         with db.aperta(self.ctx.settings.db_path) as conn, db.transazione(conn):
             self.controlla()
@@ -840,10 +970,15 @@ class PreparazioneModifica:
             if attuale["contenuto"] != r["contenuto"]:
                 raise ErroreLezione(FRASE_CAMBIATA)
             metti_da_parte(conn, self.ctx.settings.dati_dir, "riassunto", attuale, "prima", "modifica", self.richiesta)
-            nuove_parti = [fatto["parti"].get(str(i), p) for i, p in enumerate(parti, start=1)]
+            nuove_parti = [fatto["parti"].get(str(i), p) for i, p in enumerate(parti, start=1) if i not in togli]
+            mappa = rinumera(togli, numeri)
             conn.execute("UPDATE riassunti SET contenuto = ?, parole = ? WHERE id = ?",
                          (json.dumps({"parti": nuove_parti}, ensure_ascii=False), riassunti.conta_parole(nuove_parti), r["id"]))
-            self._chiudi(conn, [int(n) for n in fatto["parti"]], titolo_di("riassunto", r))
+            if togli:
+                rinumera_modifiche(conn, "riassunto", r["id"], mappa, self.id)
+            titoli = {i: p.get("titolo") or f"Parte {i}" for i, p in enumerate(parti, start=1)}
+            self._chiudi(conn, [mappa[int(n)] for n in fatto["parti"] if int(n) in mappa], titolo_di("riassunto", r),
+                         frase_fatti(titoli, togli, {}))
 
     # --- mappa
 
@@ -1030,22 +1165,53 @@ class PreparazioneModifica:
         if any(v is None for v in scritti_vecchi.values()):
             raise ErroreLezione(FRASE_VECCHIA)
         tempi = {c["n"]: c for c in json.loads(r["capitoli"] or "[]")}
-        scelte = self._scegli(parti_di("lezione", r), "una lezione da ascoltare")
+        testi = {t["capitolo"]: " ".join(t.get("paragrafi") or []) for t in json.loads(r["testo"] or "[]")}
+        parti = [{"n": c["n"], "titolo": c["titolo"], "testo": testi.get(c["n"], "")} for c in capitoli_vecchi]
+        numeri = [p["n"] for p in parti]
+        # Il primo capitolo (con l'apertura) e l'ultimo (la parte finale) non si tolgono: si possono riscrivere.
+        mod = self._piano(parti, "una lezione da ascoltare", (numeri[0], numeri[-1]) if numeri else ())
         mappa = _capitoli_in_parti(capitoli_vecchi, piano)
-        nomi = []
-        for c in capitoli_vecchi:
-            if c["n"] in scelte:
-                nomi += [x for x in mappa[c["n"]] if x not in nomi]
+        # Capitoli tolti = blocchi tolti dal piano; i blocchi che restano si rinumerano (e i loro file con loro).
+        tolti = [n for n in mod["togli"] if len(mappa.get(n) or []) == 1 and mappa[n][0].startswith("blocco_")]
+        via = {int(mappa[n][0].split("_")[1]) for n in tolti}
+        tenuti = [k for k in range(1, n_blocchi + 1) if k not in via]
+        rinomina = {"apertura": "apertura", "finale": "finale", **{f"blocco_{k:02d}": f"blocco_{i:02d}" for i, k in enumerate(tenuti, start=1)}}
+        piano_nuovo = {**piano, "blocchi": [dict(piano["blocchi"][k - 1]) for k in tenuti]} if via else piano
+        nomi_nuovi = ["apertura"] + [f"blocco_{i:02d}" for i in range(1, len(tenuti) + 1)] + ["finale"]
+        base = {rinomina[nome]: v for nome, v in scritti_vecchi.items() if nome in rinomina}
+        nomi, compiti = [], {}
+        for n in sorted(mod["riscrivi"]):
+            if n not in mappa:
+                continue
+            azione = mod["riscrivi"][n]
+            unite = [m for m in azione["unisci"] if m in testi]
+            da_unire = "\n\n".join(f"{next(c['titolo'] for c in capitoli_vecchi if c['n'] == m)}: {testi[m]}" for m in unite) or None
+            for vecchio in mappa[n]:
+                nome = rinomina[vecchio]
+                if nome in nomi:
+                    continue
+                nomi.append(nome)
+                compiti[nome] = (azione["compito"], None if nome == "apertura" else da_unire)
+                if nome.startswith("blocco_") and unite and via:
+                    # Il blocco che accoglie altri capitoli prende anche i loro punti e i loro documenti.
+                    blocco = piano_nuovo["blocchi"][int(nome.split("_")[1]) - 1]
+                    for m in unite:
+                        if len(mappa.get(m) or []) == 1 and mappa[m][0].startswith("blocco_"):
+                            altro = piano["blocchi"][int(mappa[m][0].split("_")[1]) - 1]
+                            blocco["punti"] = list(dict.fromkeys([*blocco.get("punti", []), *altro.get("punti", [])]))
+                            blocco["fonti"] = list(dict.fromkeys([*blocco.get("fonti", []), *altro.get("fonti", [])]))
         prep = _LezioneDaCambiare(self.ctx, r["id"], self)
         for j, nome in enumerate(nomi):
             self.avanza("scrittura", j, len(nomi), f"Riscrivo la parte {j + 1} di {len(nomi)}")
             if self.c.leggi(f"scrittura/{nome}.json") is not None:
                 continue
-            s = prep._richiesta(nome, lettura, piano)
+            s = prep._richiesta(nome, lettura, piano_nuovo)
+            compito, da_unire = compiti[nome]
             messaggi = s["messaggi"] + [
-                {"role": "assistant", "content": json.dumps(scritti_vecchi[nome], ensure_ascii=False)},
+                {"role": "assistant", "content": json.dumps(base[nome], ensure_ascii=False)},
                 {"role": "user", "content": prompt_studio.richiesta_modifica(self.richiesta, "questa parte della lezione",
-                                                                             allegati=self._dove_file(s["brani"]))}]
+                                                                             allegati=self._dove_file(s["brani"]),
+                                                                             compito=compito, da_unire=da_unire)}]
             cosa = f"Modifica · {s['cosa']}"
             grezzo = self._chiedi(s["compito"], messaggi, s["struttura"], s["max_token"], cosa, s["dati"], lezione_id=r["id"])
             riveduto = self._rivedi(grezzo, s["brani"], compito=s["compito"], messaggi=messaggi, valida=s["struttura"],
@@ -1053,13 +1219,21 @@ class PreparazioneModifica:
                                     lezione_id=r["id"])
             self._segna_nota(riveduto.pop("nota", None))
             self.c.scrivi(f"scrittura/{nome}.json", riveduto)
-        scritti = {nome: (self.c.leggi(f"scrittura/{nome}.json") if nome in nomi else scritti_vecchi[nome]) for nome in nomi_tutti}
-        capitoli = componi(lettura, piano, scritti)
-        self._voce_e_montaggio(r, L, capitoli, capitoli_vecchi, tempi, vecchie_domande, scritti, nomi,
-                               lettura if nuovi_brani else None)
+        if not nomi and not via:
+            raise ErroreLezione("Non ho trovato niente da cambiare: scrivi la richiesta in un altro modo.")
+        scritti = {nome: (self.c.leggi(f"scrittura/{nome}.json") if nome in nomi else base[nome]) for nome in nomi_nuovi}
+        capitoli = componi(lettura, piano_nuovo, scritti)
+        titoli = {c["n"]: c["titolo"] for c in capitoli_vecchi}
+        self._voce_e_montaggio(r, L, capitoli, capitoli_vecchi, tempi, vecchie_domande, scritti,
+                               nomi_nuovi if via else nomi, lettura if nuovi_brani else None,
+                               piano_nuovo=piano_nuovo if via else None, blocchi_prima=n_blocchi,
+                               mappa_capitoli=rinumera(tolti, numeri) if tolti else None,
+                               frase=frase_fatti(titoli, tolti, mod["riscrivi"]))
 
     def _voce_e_montaggio(self, r: dict, L: Path, capitoli: list[dict], capitoli_vecchi: list[dict], tempi: dict,
-                          vecchie_domande: list[dict], scritti: dict, nomi: list[str], lettura: dict | None = None) -> None:
+                          vecchie_domande: list[dict], scritti: dict, nomi: list[str], lettura: dict | None = None,
+                          piano_nuovo: dict | None = None, blocchi_prima: int = 0, mappa_capitoli: dict | None = None,
+                          frase: str | None = None) -> None:
         def firma(c: dict) -> tuple:
             return tuple((s["voce"], s["emozione"], bool(s["lento"])) for s in c["segmenti"])
 
@@ -1180,10 +1354,18 @@ class PreparazioneModifica:
                          (json.dumps(uscita_capitoli, ensure_ascii=False), json.dumps(testo, ensure_ascii=False),
                           int(round(risultato.durata)), mp3.stat().st_size, h.hexdigest(), posizione, r["id"]))
             imposta_domande(conn, r["id"], domande)
-            self._chiudi(conn, cambiate, titolo_di("lezione", r))
+            if mappa_capitoli:
+                rinumera_modifiche(conn, "lezione", r["id"], mappa_capitoli, self.id)
+            self._chiudi(conn, cambiate, titolo_di("lezione", r), frase)
             # I file nuovi al loro posto (dentro la transazione: se non si spostano, il database non cambia).
             for nome in nomi:
                 Cartella(L).scrivi(f"scrittura/{nome}.json", scritti[nome])
+            if piano_nuovo is not None:  # capitoli tolti: piano nuovo e via i file dei blocchi in più
+                Cartella(L).scrivi("piano.json", piano_nuovo)
+                for k in range(len(piano_nuovo["blocchi"]) + 1, blocchi_prima + 1):
+                    (L / "scrittura" / f"blocco_{k:02d}.json").unlink(missing_ok=True)
+                for vecchio in (L / "scrittura").glob("*.grezzo.json"):  # bozze della prima stesura, numeri vecchi
+                    vecchio.unlink(missing_ok=True)
             Cartella(L).scrivi("capitoli.json", capitoli)
             Cartella(L).scrivi("copione.json", copione(capitoli))
             if lettura is not None:  # i file aggiunti diventano documenti della lezione

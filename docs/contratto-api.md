@@ -101,7 +101,7 @@ montata `/apk`).
   server (qualità 90, lato lungo al massimo 3000 px, girate come vanno viste; `nome_file` e `formato` diventano
   `.jpg`); l'app del telefono le converte già lei prima di mandarle. Massimo 20 MB a file e
   200.000 caratteri letti. PDF con testo: letto gratis; PDF scansionato o immagine: OCR Mistral a pagamento
-  (stima prima: se sfora il tetto → 402). Dal 22/11/2026 una foto piccola (lato lungo fino a 1600 px, per esempio da
+  (stima prima: se sfora il tetto → 402). Dal server 1.4.3 una foto piccola (lato lungo fino a 1600 px, per esempio da
   WhatsApp) la legge `gpt-6-luna` quando c'è la chiave OpenAI, al massimo 0,001 € a foto: il `testo` comincia con una
   riga che spiega i segni (`[[ ]]` sottolineato, «Appunto a mano (letto così, da controllare…)», `[?]`, `[tagliato]`) e la
   spesa si chiama «Lettura di «…» (foto piccola)». Se luna non riesce si legge con l'OCR come prima. Titolo predefinito: dal file (per i testi di Gemini, la riga
@@ -696,7 +696,7 @@ scrive cosa vuole), a mano (schemi e riassunti, gratis) e tornando alla versione
 
 `tipo`: `lezione` | `schema` | `riassunto` | `simulata` | `mappa` (29). `id` = l'id della lezione, dello schema, del riassunto o della
 verifica. `parti`: i numeri delle parti da cambiare (vedi `parti_modificabili` in 28.3); lista vuota = "Tutto": Lectio
-sceglie da solo quali parti toccano la richiesta. `richiesta`: 1-600 caratteri.
+decide da solo che cosa fare in ogni parte (piano qui sotto). `richiesta`: 1-600 caratteri.
 
 - `POST /api/modifiche/stima` `{"tipo": "schema", "id": 12, "richiesta": "Aggiungi le date", "parti": [2, 3]}` → gli
   stessi campi della stima degli schemi (`costo_eur`, `spesa_mese_eur`, `impegnato_eur`, `tetto_eur`, `dopo_eur`,
@@ -721,11 +721,22 @@ sceglie da solo quali parti toccano la richiesta. `richiesta`: 1-600 caratteri.
 quelle non le ho aggiunte." Novità (sezione 11): `modifica_pronta` ("Ho modificato lo schema «…»") e `modifica_errore`
 ("La modifica dello schema «…» si è fermata: tocca Riprova"), con `materia_id` e, per le lezioni, `lezione_id`.
 
-Come lavora il server: riscrive con il modello di scrittura (Medium) solo le parti scelte, una alla volta, partendo dal
+Come lavora il server: riscrive con il modello di scrittura solo le parti scelte, una alla volta, partendo dal
 testo di adesso, dalla richiesta e dagli stessi documenti e regole della prima volta; poi il solito controllo sui
-documenti (17.1). Se la richiesta chiede cose che i documenti non dicono, non le inventa e lo scrive nella `nota`. Con
-"Tutto" prima una richiesta breve sceglie le parti. Si fa una modifica alla volta per oggetto; quelle delle lezioni
-aspettano in coda con le lezioni, le altre con gli schemi.
+documenti (17.1). Se la richiesta chiede cose che i documenti non dicono, non le inventa e lo scrive nella `nota`. Si fa
+una modifica alla volta per oggetto; quelle delle lezioni aspettano in coda con le lezioni, le altre con gli schemi.
+
+Il piano della modifica (server 1.4.3): quando le parti in gioco sono più di una (o ci sono file aggiunti), prima una
+richiesta breve legge il testo intero di tutte quelle parti insieme alla richiesta e decide per ognuna un'azione:
+- `riscrivi` con un `compito` preciso (che cosa cambiare in quella parte) ed eventualmente `unisci`: le parti il cui
+  contenuto va messo dentro questa (che poi si tolgono);
+- `togli`: la parte sparisce. Il primo e l'ultimo capitolo di una lezione non si tolgono; non si possono togliere tutte
+  le parti (allora la modifica va in errore con una frase chiara).
+Con `parti` indicate si toccano solo quelle. Chi riscrive una parte riceve il suo compito, la richiesta intera solo come
+sfondo e, se c'è da unire, il testo delle parti tolte (con le loro fonti). Dopo una parte tolta le parti si rinumerano da
+1 senza buchi: anche `cambiate` e `parti` delle modifiche di prima seguono i numeri nuovi, e così le schede del Ripasso
+lampo dello schema. La `nota` comincia con quello che Lectio ha fatto davvero ("Ho tolto la parte «…» e ho messo il suo
+contenuto in «…».") e poi dice quello che non ha potuto fare. "Torna a prima" rimette anche le parti tolte.
 - **Lezione:** le parti sono i capitoli. Durante la modifica la lezione resta `pronta` e si ascolta quella di prima. La
   voce si rifà solo per i capitoli cambiati (con la voce della lezione: con Giovanni è gratis); gli altri capitoli
   riusano l'audio di prima. Alla fine cambiano `audio.sha256`, `durata_s`, `capitoli`, `domande`, `testo`: le app
@@ -734,7 +745,8 @@ aspettano in coda con le lezioni, le altre con gli schemi.
   allo stesso punto se quel capitolo non è cambiato, altrimenti all'inizio del capitolo cambiato.
 - **Schema:** le parti sono le sezioni (anche il quadro d'insieme). Le foto restano dove sono; le schede del Ripasso
   lampo delle parti cambiate si rifanno. I riassunti fatti prima diventano "vecchi" (28.3).
-- **Riassunto:** le parti sono le parti del riassunto. Si riscrive partendo dallo schema, come la prima volta.
+- **Riassunto:** le parti sono le parti del riassunto. Si riscrive partendo dallo schema, come la prima volta; la
+  risposta può anche togliere parti (`"togli": [3]`), con la stessa nota e la stessa rinumerazione.
 - **Verifica simulata:** le parti sono le domande; la richiesta può anche aggiungerne o toglierne. Se era `corretta`
   diventa una prova nuova (`pronta`, senza risposte né `esito`): quella di prima, con il suo voto, resta come versione
   da parte (28.2). Se era `in_corso` le risposte alle domande rimaste uguali restano.

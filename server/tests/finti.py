@@ -140,6 +140,7 @@ class ServerFinto:
         self.guasti: dict[str, list[int]] = {}
         self.rotte_per_ospite: dict[str, int] = {}  # ospite → quante risposte di chat non valide dare
         self.richieste_modifica: list[str] = []  # i messaggi "Lo studente vuole cambiare…" arrivati
+        self.piani_modifica: list[str] = []  # le richieste del piano della modifica
         self.chat_rotta = 0  # quante risposte di chat non valide dare prima di quelle buone
         self.chat_forzata = None  # un testo fisso per la prossima chat
         self.scheda_forzata = None
@@ -267,10 +268,12 @@ class ServerFinto:
             self.ultimo_prompt = primo
         ids = re.findall(r'<materiale id="([BV]\d+)"', primo)
         ultimo = dati["messages"][-1]["content"] if isinstance(dati["messages"][-1]["content"], str) else ""
-        if "Lo studente vuole cambiare" in ultimo:
+        if "Per ogni parte che cambia scegli un'azione" in primo:  # il piano della modifica: riscrive la parte 1
+            self.piani_modifica.append(primo)
+            return self._risposta_chat(json.dumps({"parti": [{"n": 1, "azione": "riscrivi", "compito": "Aggiungi le date qui",
+                                                              "unisci": []}], "nota": None}), dati)
+        if "Lo studente vuole cambiare" in ultimo or "Lo studente ha chiesto una modifica" in ultimo:
             self.richieste_modifica.append(ultimo)
-        if "Quali parti bisogna riscrivere" in primo:
-            return self._risposta_chat(json.dumps({"parti": [1]}), dati)
         if "Qui sotto ci sono delle frasi numerate" in primo:
             oggetto = {"fuori": self.fuori_coda.pop(0) if self.fuori_coda else []}
         elif "Qui sotto ci sono i concetti" in primo:
@@ -448,7 +451,8 @@ class ServerFinto:
             oggetto = self.correttore
         else:
             oggetto = {}
-        if "Lo studente vuole cambiare" in ultimo and "Riscrivi tenendo conto" in ultimo:
+        if ("Lo studente vuole cambiare" in ultimo and "Riscrivi tenendo conto" in ultimo) or (
+                "Lo studente ha chiesto una modifica" in ultimo and "Riscrivi facendo il compito" in ultimo):
             _segna_modifica(oggetto, "prova vera")
         return self._risposta_chat(json.dumps(oggetto, ensure_ascii=False), dati)
 
