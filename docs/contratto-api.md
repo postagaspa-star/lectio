@@ -101,7 +101,10 @@ montata `/apk`).
   server (qualità 90, lato lungo al massimo 3000 px, girate come vanno viste; `nome_file` e `formato` diventano
   `.jpg`); l'app del telefono le converte già lei prima di mandarle. Massimo 20 MB a file e
   200.000 caratteri letti. PDF con testo: letto gratis; PDF scansionato o immagine: OCR Mistral a pagamento
-  (stima prima: se sfora il tetto → 402). Titolo predefinito: dal file (per i testi di Gemini, la riga
+  (stima prima: se sfora il tetto → 402). Dal 22/11/2026 una foto piccola (lato lungo fino a 1600 px, per esempio da
+  WhatsApp) la legge `gpt-6-luna` quando c'è la chiave OpenAI, al massimo 0,001 € a foto: il `testo` comincia con una
+  riga che spiega i segni (`[[ ]]` sottolineato, «Appunto a mano (letto così, da controllare…)», `[?]`, `[tagliato]`) e la
+  spesa si chiama «Lettura di «…» (foto piccola)». Se luna non riesce si legge con l'OCR come prima. Titolo predefinito: dal file (per i testi di Gemini, la riga
   `MATERIA/PROF/DATA/TIPO` se c'è).
   Cartelle e zip (app 1.3.3): il server non li riceve mai. Le app aprono la cartella o lo zip (anche le
   sottocartelle e gli zip dentro gli zip), lasciano fuori i file che il server non legge e mandano gli altri qui, uno

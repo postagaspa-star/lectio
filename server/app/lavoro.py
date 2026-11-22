@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from . import ai, cartelle, db, lettura, mappe, memoria, modifiche, prompt, riassunti, schema_ripasso, simulata, titoli
+from . import foto_piccole
 from . import scheda as schede
 from .ai import RispostaNonUsabile
 from .audio import ErroreMontaggio
@@ -287,8 +288,9 @@ class Lavoro:
 
     def leggi_materiale(self, materiale_id: int) -> None:
         """Lettura di un materiale in sottofondo. Prima si rilegge il file sul NAS (gratis): se
-        il testo c'è già (per esempio dopo la modalità prova) l'OCR non serve. Altrimenti
-        all'OCR vanno solo le pagine vuote, con stima e tetto controllati prima."""
+        il testo c'è già (per esempio dopo la modalità prova) l'OCR non serve. Le foto piccole
+        le legge luna (foto_piccole.py), se c'è e se ci riesce. Altrimenti all'OCR vanno solo
+        le pagine vuote, con stima e tetto controllati prima."""
         with db.aperta(self.db_path) as conn:
             m = conn.execute("SELECT * FROM materiali WHERE id = ? AND stato = 'in_lettura'", (materiale_id,)).fetchone()
         if m is None:
@@ -305,8 +307,15 @@ class Lavoro:
             letto = lettura.leggi(contenuto, m["formato"] or "")
             avviso = letto.avviso
             da_prova = 0
+            piccola = None
+            if letto.pagine_ocr:
+                # Dal 22/11/2026 una foto piccola (per esempio da WhatsApp) la legge luna a strisce; None = all'OCR.
+                piccola = foto_piccole.leggi(self.ctx, contenuto, m["formato"] or "", titolo=m["titolo"],
+                                             materiale_id=m["id"], materia_id=m["materia_id"])
             if not letto.pagine_ocr:
                 testo = letto.testo or ""
+            elif piccola is not None:
+                testo = piccola
             else:
                 pagine = letto.pagine_ocr
                 if m["formato"] == "pdf" and len(pagine) < letto.pagine:
