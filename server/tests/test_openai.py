@@ -65,7 +65,7 @@ def test_i_prezzi_dei_modelli_nuovi_ci_sono():
 
     p = Prezzi.carica(PREZZI_PATH_DEFAULT)
     assert p.costo_testo(LUNA, 1_000_000, 1_000_000) == pytest.approx(0.60 * 0.86)
-    assert p.costo_testo(RISERVA, 1_000_000, 1_000_000) == pytest.approx(1.50 * 0.86)
+    assert p.costo_testo(RISERVA, 1_000_000, 1_000_000) == pytest.approx(1.50 * 0.86 * 1.1)  # Mistral, indirizzo UE
     # Su luna la cache letta costa il 10%, quella scritta 1,25 volte l'entrata (al posto del prezzo normale).
     assert p.costo_testo(LUNA, 1_000_000, 0, token_cache=400_000, token_cache_scritti=600_000) == pytest.approx(
         (0.4 * 0.01 + 0.6 * 0.125) * 0.86)
@@ -163,7 +163,7 @@ def test_openai_non_accetta_la_chiave_passa_subito_alla_riserva(servizi, server)
     server.guasti[CHAT_OPENAI] = [401]
     server.chat_forzata = '{"a": 2}'
     assert chiedi(servizi) == {"a": 2}
-    assert server.ospiti == ["api.openai.com", "api.mistral.ai"]
+    assert server.ospiti == ["api.openai.com", "api.eu.mistral.ai"]
     assert server.chiamate[1][1]["model"] == RISERVA and "reasoning_effort" not in server.chiamate[1][1]
     [riga] = spese(servizi)  # la chiamata rifiutata non costa niente
     assert riga["fornitore"] == "mistral" and riga["cosa"] == "Prova (riserva)"
@@ -175,7 +175,7 @@ def test_openai_occupato_ritenta_poi_riserva(servizi, server):
     server.guasti[CHAT_OPENAI] = [503] * 4
     server.chat_forzata = '{"a": 3}'
     assert chiedi(servizi) == {"a": 3}
-    assert server.ospiti == ["api.openai.com"] * 4 + ["api.mistral.ai"]
+    assert server.ospiti == ["api.openai.com"] * 4 + ["api.eu.mistral.ai"]
     assert [r["fornitore"] for r in spese(servizi)] == ["mistral"]
 
 
@@ -197,7 +197,7 @@ def test_risposte_non_usabili_di_luna_passano_alla_riserva(servizi, server):
     server.chat_forzata = '{"titolo": "ok"}'
     valida = lambda o: [] if "titolo" in o else ['manca "titolo"']  # noqa: E731
     assert chiedi(servizi, valida=valida) == {"titolo": "ok"}
-    assert server.ospiti == ["api.openai.com", "api.openai.com", "api.mistral.ai"]
+    assert server.ospiti == ["api.openai.com", "api.openai.com", "api.eu.mistral.ai"]
     # La riserva riparte dalla richiesta di prima, senza le correzioni fatte a luna.
     assert len(server.chiamate[2][1]["messages"]) == 2
 
@@ -206,7 +206,7 @@ def test_risposte_non_usabili_di_luna_passano_alla_riserva(servizi, server):
 @openai
 def test_se_anche_la_riserva_non_va_errore_chiaro(servizi, server):
     server.guasti[CHAT_OPENAI] = [401]
-    server.guasti["api.mistral.ai/v1/chat/completions"] = [402]
+    server.guasti["api.eu.mistral.ai/v1/chat/completions"] = [402]
     with pytest.raises(ErroreFornitore) as e:
         chiedi(servizi)
     assert "credito di Mistral" in e.value.frase
@@ -235,7 +235,7 @@ def test_lezione_intera_con_luna(client, auth, servizi, server):
     prepara_tutto(servizi)
     assert client.get(f"/api/lezioni/{l['id']}", headers=auth).json()["stato"] == "pronta"
     chat = chat_di(server, "api.openai.com")
-    assert chat and not chat_di(server, "api.mistral.ai")
+    assert chat and not chat_di(server, "api.eu.mistral.ai")
     assert all(c["model"] == LUNA and "temperature" not in c for c in chat)
     testo = [r for r in spese(servizi, f"lezione_id = {l['id']}") if r["unita"] == "token" and "Ricerca" not in r["cosa"]]
     assert testo and all(r["fornitore"] == "openai" for r in testo)
@@ -250,7 +250,7 @@ def test_lezione_intera_con_openai_spento(client, auth, servizi, server):
     l = nuova_lezione(client, auth, m["id"], voce="mistral:voice_482")
     prepara_tutto(servizi)
     assert client.get(f"/api/lezioni/{l['id']}", headers=auth).json()["stato"] == "pronta"
-    riserva = chat_di(server, "api.mistral.ai")
+    riserva = chat_di(server, "api.eu.mistral.ai")
     assert riserva and all(c["model"] == RISERVA for c in riserva)
     testo = [r for r in spese(servizi, f"lezione_id = {l['id']}") if r["unita"] == "token" and "Ricerca" not in r["cosa"]]
     assert testo and all(r["fornitore"] == "mistral" and r["cosa"].endswith("(riserva)") for r in testo)

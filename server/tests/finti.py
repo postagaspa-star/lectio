@@ -134,7 +134,7 @@ def jpeg_di_prova() -> bytes:
 class ServerFinto:
     def __init__(self):
         self.chiamate: list[tuple[str, dict | str]] = []
-        self.ospiti: list[str] = []  # a chi è andata ogni chiamata (api.openai.com, api.mistral.ai…), come `chiamate`
+        self.ospiti: list[str] = []  # a chi è andata ogni chiamata (api.openai.com, api.eu.mistral.ai…), come `chiamate`
         # percorso (oppure ospite + percorso, per esempio "api.openai.com/v1/chat/completions") → codici da restituire,
         # uno per chiamata
         self.guasti: dict[str, list[int]] = {}

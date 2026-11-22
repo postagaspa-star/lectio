@@ -176,7 +176,7 @@ def test_pdf_scansionato_ocr_a_pagamento(client, auth, materia, servizi, server)
     with db.aperta(servizi.settings.db_path) as conn:
         spesa = conn.execute("SELECT * FROM spese WHERE materiale_id = ?", (m["id"],)).fetchone()
     assert spesa["quantita"] == 3 and spesa["unita"] == "pagine"
-    assert spesa["costo_eur"] == pytest.approx(3 * 0.002 * 0.86)
+    assert spesa["costo_eur"] == pytest.approx(3 * 0.002 * 0.86 * 1.1)  # indirizzo europeo di Mistral: +10%
     # Una verifica letta fa partire l'aggiornamento della scheda.
     scheda = client.get(f"/api/materie/{materia['id']}/scheda", headers=auth).json()
     assert scheda["stato"] == "pronta"

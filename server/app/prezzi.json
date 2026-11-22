@@ -1,6 +1,8 @@
 {
   "nota": "Prezzi in dollari dai listini dei fornitori (docs.mistral.ai/inference/pricing, controllati l'11/11/2026; Medium 3.5 non c'è più nel listino e il prezzo viene dai siti che lo seguono; gpt-6-luna da developers.openai.com/api/docs/models/gpt-6-luna e DeepSeek V4.1 Flash da docs.mistral.ai, controllati il 15/11/2026). Il costo vero si calcola dai numeri che il fornitore restituisce; il cambio porta in euro.",
   "cambio_usd_eur": 0.86,
+  "ricarico_mistral": 1.1,
+  "nota_ricarico": "Dal 22/11/2026 Lectio usa l'indirizzo europeo di Mistral (api.eu.mistral.ai), che costa 1,1 volte il listino (docs.mistral.ai, Regional inference): il ricarico vale per tutto quello che fa Mistral (testo, ricerca, OCR, voce), non per OpenAI.",
   "testo": {
     "gpt-6-luna": {"entrata_per_milione": 0.10, "cache_per_milione": 0.01, "cache_scrittura_per_milione": 0.125, "uscita_per_milione": 0.50},
     "deepseek-v4-1-flash-1017": {"entrata_per_milione": 0.30, "cache_per_milione": 0.007, "uscita_per_milione": 1.20},

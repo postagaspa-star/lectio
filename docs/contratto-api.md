@@ -224,7 +224,10 @@ si spegne il 30/04/2027 e luna costa circa quindici volte meno. La riserva entra
 (chiave, credito finito, errore), quando è occupato anche dopo i 3 ritenti o quando dà due risposte non usabili: si
 rifà la stessa richiesta con DeepSeek, e le righe di spesa lo dicono ("(riserva)", fornitore `mistral`). Senza la
 chiave OpenAI scrive direttamente la riserva (anche le stime usano il suo prezzo). OCR, voce e ricerca nei documenti
-restano su Mistral. La storia di prima, per chi riprende i modelli Mistral dal file `.env`:
+restano su Mistral. **Dalla 1.4.4 (scelta di Andrea del 22/11/2026)** tutto quello che va a Mistral (riserva, OCR,
+voce, ricerca) passa dall'indirizzo europeo `https://api.eu.mistral.ai/v1`, che elabora solo in centri UE/EFTA e costa
+1,1 volte il listino (`ricarico_mistral` in `prezzi.json`, già nelle stime); `LECTIO_MISTRAL_URL` lo cambia. Quello che
+scrive luna va ancora a OpenAI negli Stati Uniti. La storia di prima, per chi riprende i modelli Mistral dal file `.env`:
 
 Modelli predefiniti fino alla 1.3.8: piano e scheda `mistral-small-latest`, scrittura
 `mistral-medium-latest` (ora Medium 3.5: 1,50/7,50 $ per milione, contati giusti dalla 1.3.2; `mistral-large-4` costa
@@ -246,7 +249,7 @@ dettagli inventati (un santo patrono, i solidi di Platone, Russell al posto di G
 li vede nemmeno fatto da Medium, che in più segnalava come fuori 10 frasi giuste su 11: per questo lezioni, riassunti e
 simulate restano su Medium. OCR `mistral-ocr-3`
 (metà prezzo di `mistral-ocr-latest`, che ora è OCR 4.1), voce `voxtral-mini-tts-3-0` con `voice_id` `voice_482`
-(Lorenzo, unica voce italiana preimpostata). Chiamata voce Mistral: `POST https://api.mistral.ai/v1/audio/speech`
+(Lorenzo, unica voce italiana preimpostata). Chiamata voce Mistral: `POST https://api.eu.mistral.ai/v1/audio/speech` (dal server 1.4.4 l'indirizzo europeo di Mistral, +10%)
 `{"model","input","voice_id","response_format":"mp3"}` → JSON con `audio_data` in base64. Azure:
 `POST https://<regione>.tts.speech.microsoft.com/cognitiveservices/v1` con SSML,
 `X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3`.

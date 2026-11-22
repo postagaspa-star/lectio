@@ -44,8 +44,8 @@ def test_stima_voce_espressiva(client, auth, servizi):
     s = r.json()
     # parole = 20 × 145; caratteri = parole × 6,3 (alle centinaia) → 18.300
     assert s["caratteri_stimati"] == 18300
-    # voce: 18,3 × 0,013 $ × 0,86 = 0,2046 € → per eccesso 0,21
-    assert s["costo_voce_eur"] == 0.21
+    # voce: 18,3 × 0,013 $ × 0,86 × 1,1 (indirizzo europeo di Mistral) = 0,2251 € → per eccesso 0,23
+    assert s["costo_voce_eur"] == 0.23
     assert 0 < s["costo_testo_eur"] <= 0.15  # Medium 3.5 ai prezzi giusti (1.3.2): circa 0,10 €
     assert s["costo_eur"] == round(s["costo_testo_eur"] + s["costo_voce_eur"], 2)
     assert s["spesa_mese_eur"] == 0 and s["tetto_eur"] == 2.0
@@ -61,7 +61,7 @@ def test_stima_voce_gratis_e_euro_al_minuto(client, auth, servizi):
     voci = client.get("/api/voci", headers=auth).json()
     lorenzo = voci[0]
     assert lorenzo == {"id": "mistral:voice_482", "nome": "Lorenzo", "tipo": "espressiva", "fornitore": "mistral",
-                       "euro_al_minuto": 0.0102, "disponibile": True}
+                       "euro_al_minuto": 0.0112, "disponibile": True}
     gratis = [v for v in voci if v["tipo"] == "gratis"]
     assert gratis[0]["id"] == "azure:it-IT-IsabellaMultilingualNeural"  # la prima Multilingual femminile
     assert {v["nome"] for v in gratis} == {"Isabella multilingue", "Isabella", "Diego"}
@@ -87,7 +87,7 @@ def test_stima_in_prova_costa_zero(client, auth):
 def test_sforerebbe_il_tetto_402_con_motivo(client, auth, servizi):
     m = crea_materia(client, auth)
     aggiungi_testo(client, auth, m["id"])
-    spendi(servizi, 1.90)
+    spendi(servizi, 1.80)
     s = client.post("/api/lezioni/stima", json={"materia_id": m["id"], "durata_min": 20, "voce": "mistral:voice_482"},
                     headers=auth).json()
     assert s["consentita"] is False
@@ -308,19 +308,21 @@ def test_tetto_vicino_una_volta_al_mese(app, servizi):
 def test_prezzi_dal_file(app):
     p = Prezzi.carica(app.state.settings.prezzi_path)
     assert p.cambio == 0.86
-    assert p.costo_testo("mistral-small-latest", 1_000_000, 1_000_000) == pytest.approx(0.75 * 0.86)
-    assert p.costo_testo("mistral-large-4", 1_000_000, 1_000_000) == pytest.approx(2.8 * 0.86)
+    # Dalla 1.4.4 tutto quello che fa Mistral costa 1,1 volte il listino (indirizzo europeo).
+    assert p.ricarico_mistral == 1.1
+    assert p.costo_testo("mistral-small-latest", 1_000_000, 1_000_000) == pytest.approx(0.75 * 0.86 * 1.1)
+    assert p.costo_testo("mistral-large-4", 1_000_000, 1_000_000) == pytest.approx(2.8 * 0.86 * 1.1)
     # Medium 3.5 (dietro mistral-medium-latest) costa 1,50 e 7,50: la 1.3.1 lo contava al prezzo del Medium 3.
-    assert p.costo_testo("mistral-medium-latest", 1_000_000, 1_000_000) == pytest.approx(9.0 * 0.86)
-    assert p.costo_ocr("mistral-ocr-3", 1000) == pytest.approx(2 * 0.86)
-    assert p.costo_ocr("mistral-ocr-latest", 1000) == pytest.approx(4 * 0.86)
-    assert p.costo_voce("voxtral-mini-tts-3-0", 1000) == pytest.approx(0.013 * 0.86)
+    assert p.costo_testo("mistral-medium-latest", 1_000_000, 1_000_000) == pytest.approx(9.0 * 0.86 * 1.1)
+    assert p.costo_ocr("mistral-ocr-3", 1000) == pytest.approx(2 * 0.86 * 1.1)
+    assert p.costo_ocr("mistral-ocr-latest", 1000) == pytest.approx(4 * 0.86 * 1.1)
+    assert p.costo_voce("voxtral-mini-tts-3-0", 1000) == pytest.approx(0.013 * 0.86 * 1.1)
     # Un modello che non è nel listino non ha prezzo: le chiamate a pagamento si fermano.
     with pytest.raises(PrezzoSconosciuto) as e:
         p.costo_testo("mistral-large-latest", 1_000_000, 0)
     assert e.value.modello == "mistral-large-latest"
     assert e.value.frase.startswith("Sul server manca il prezzo") and "prezzi.json" not in e.value.frase
-    assert p.euro_al_minuto_voce("voxtral-mini-tts-3-0") == 0.0102
+    assert p.euro_al_minuto_voce("voxtral-mini-tts-3-0") == 0.0112
     assert math.isclose(p.azure_gratis, 500_000)
 
 

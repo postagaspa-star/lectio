@@ -270,7 +270,7 @@ def test_luna_rifiuta_si_legge_con_l_ocr(client, auth, servizi, server, materia,
     m = carica_e_leggi(client, auth, servizi, materia, jpeg(1024, 768))
     assert m["stato"] == "pronto" and "Augusto fu il primo imperatore" in m["testo"]
     assert len(letture_luna(server)) == 1 and server.conta("/v1/ocr") == 1
-    assert server.ospiti.count("api.mistral.ai") == 1  # solo l'OCR: niente riserva DeepSeek, che le foto non le vede
+    assert server.ospiti.count("api.eu.mistral.ai") == 1  # solo l'OCR: niente riserva DeepSeek, che le foto non le vede
     assert [r["fornitore"] for r in spese(servizi, m["id"])] == ["mistral"]  # luna non ha lavorato: niente conto
     assert any("luna non è riuscita" in r and "OCR" in r for r in registro)
 

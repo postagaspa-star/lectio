@@ -35,7 +35,7 @@ def test_chat_mistral_richiesta_e_numeri_veri():
                  max_token=500)
     assert r.testo == '{"ok": true}' and r.token_entrata == 120 and r.token_uscita == 30
     corpo = json.loads(registro[0].content)
-    assert registro[0].url == "https://api.mistral.ai/v1/chat/completions"
+    assert registro[0].url == "https://api.eu.mistral.ai/v1/chat/completions"
     assert registro[0].headers["authorization"] == "Bearer chiave"
     assert corpo["response_format"] == {"type": "json_object"} and corpo["max_tokens"] == 500
 
@@ -97,7 +97,7 @@ def test_voce_mistral_segni_e_audio():
     v = VoceMistral("chiave", "voxtral-mini-tts-3-0", "voice_482", transport=trasporto([risposta], registro))
     a = v.sintetizza("La data è il 27 avanti Cristo.", emozione="calm", lento=True)
     corpo = json.loads(registro[0].content)
-    assert registro[0].url == "https://api.mistral.ai/v1/audio/speech"
+    assert registro[0].url == "https://api.eu.mistral.ai/v1/audio/speech"
     assert corpo == {"model": "voxtral-mini-tts-3-0", "input": "[emotion=calm][pace=slow] La data è il 27 avanti Cristo.",
                      "voice_id": "voice_482", "response_format": "mp3"}
     assert a.contenuto == b"ID3audio" and a.estensione == "mp3" and a.caratteri == len(corpo["input"])

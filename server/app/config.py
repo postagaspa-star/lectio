@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-VERSIONE = "1.4.3"
+VERSIONE = "1.4.4"
 
 CARTELLA_APP = Path(__file__).resolve().parent
 VERSIONI_PATH_DEFAULT = str(CARTELLA_APP / "versioni.json")
@@ -14,7 +14,10 @@ GEMINI_PATH_DEFAULT = str(CARTELLA_APP / "testo_gemini.txt")
 APK_DIR_DEFAULT = str(CARTELLA_APP.parent / "apk")
 DATI_DIR_DEFAULT = str(CARTELLA_APP.parent / "dati")
 
-MISTRAL_URL = "https://api.mistral.ai/v1"
+# 1.4.4 (scelta di Andrea del 22/11/2026): l'indirizzo europeo di Mistral, che elabora i dati solo in centri UE/EFTA
+# (docs.mistral.ai, "Regional inference"; costa il 10% in più, vedi "ricarico_mistral" in prezzi.json). Quello globale
+# (api.mistral.ai) non promette un luogo. LECTIO_MISTRAL_URL lo cambia senza toccare il codice.
+MISTRAL_URL = os.environ.get("LECTIO_MISTRAL_URL") or "https://api.eu.mistral.ai/v1"
 OPENAI_URL = "https://api.openai.com/v1"
 
 # 1.3.9 (scelta di Andrea del 15/11/2026): tutti i testi (scrittura e lavori leggeri) li scrive gpt-6-luna di OpenAI,

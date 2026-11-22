@@ -32,6 +32,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from . import clock, db, misure
+from .config import di_openai
 from .rete import ATTESE_SECONDI, ErroreFornitore, NonElaborata, Temporaneo
 
 log = logging.getLogger("uvicorn.error")
@@ -106,6 +107,8 @@ class Prezzi:
     voce: dict
     azure_per_mille: float
     azure_gratis: int
+    # Quanto si paga in più a Mistral per l'indirizzo europeo (1.4.4): 1,1 = +10%. Non vale per i modelli di OpenAI.
+    ricarico_mistral: float = 1.0
 
     @classmethod
     def carica(cls, percorso: str) -> "Prezzi":
@@ -118,6 +121,7 @@ class Prezzi:
             voce=d.get("voce", {}),
             azure_per_mille=float(d.get("azure", {}).get("per_mille_caratteri", 0.0)),
             azure_gratis=int(d.get("azure", {}).get("caratteri_gratis_al_mese", 500_000)),
+            ricarico_mistral=float(d.get("ricarico_mistral", 1.0)),
         )
 
     @staticmethod
@@ -151,15 +155,15 @@ class Prezzi:
         prezzo_scritti = p.get("cache_scrittura_per_milione", p["entrata_per_milione"])
         dollari = ((entrata - cache - scritti) / 1e6 * p["entrata_per_milione"] + cache / 1e6 * prezzo_cache
                    + scritti / 1e6 * prezzo_scritti + token_uscita / 1e6 * p["uscita_per_milione"])
-        return dollari * self.cambio
+        return dollari * self.cambio * (1.0 if di_openai(modello) else self.ricarico_mistral)
 
     def costo_ocr(self, modello: str, pagine: int) -> float:
         p = self._voce_listino(self.ocr, modello)
-        return pagine / 1000 * p["per_mille_pagine"] * self.cambio
+        return pagine / 1000 * p["per_mille_pagine"] * self.cambio * self.ricarico_mistral
 
     def costo_voce(self, modello: str, caratteri: int) -> float:
         p = self._voce_listino(self.voce, modello)
-        return caratteri / 1000 * p["per_mille_caratteri"] * self.cambio
+        return caratteri / 1000 * p["per_mille_caratteri"] * self.cambio * self.ricarico_mistral
 
     def costo_azure(self, caratteri: int) -> float:
         return caratteri / 1000 * self.azure_per_mille * self.cambio
