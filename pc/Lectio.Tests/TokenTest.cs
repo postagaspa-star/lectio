@@ -64,6 +64,41 @@ public class TokenTest
     }
 
     [Fact]
+    public void Senza_cartella_dati_txt_i_dati_restano_in_localappdata()
+    {
+        using var c = new CartellaTemporanea();
+        Assert.Equal(Percorsi.Predefinita, Percorsi.Scelta(c.Percorso));
+        File.WriteAllText(c.File(Percorsi.FileCartellaDati), "\r\n   \r\n");
+        Assert.Equal(Percorsi.Predefinita, Percorsi.Scelta(c.Percorso));
+    }
+
+    [Fact]
+    public void Cartella_dati_txt_sceglie_una_cartella_relativa_o_assoluta()
+    {
+        using var c = new CartellaTemporanea();
+        var programma = Path.Combine(c.Percorso, "Programma");
+        Directory.CreateDirectory(programma);
+        var file = Path.Combine(programma, Percorsi.FileCartellaDati);
+
+        File.WriteAllText(file, "\r\n..\\Dati\r\naltro\r\n");
+        Assert.Equal(Path.Combine(c.Percorso, "Dati"), Percorsi.Scelta(programma));
+
+        var assoluta = Path.Combine(c.Percorso, "Altrove", "Lectio");
+        File.WriteAllText(file, "\"" + assoluta + "\"");
+        Assert.Equal(assoluta, Percorsi.Scelta(programma));
+        Assert.True(Percorsi.Stessa(assoluta + "\\", assoluta.ToUpperInvariant()));
+        Assert.False(Percorsi.Stessa(assoluta, Percorsi.Predefinita));
+    }
+
+    [Fact]
+    public void Un_percorso_non_valido_in_cartella_dati_txt_lascia_la_cartella_di_sempre()
+    {
+        using var c = new CartellaTemporanea();
+        File.WriteAllText(c.File(Percorsi.FileCartellaDati), "D:\\Dati\0rotti");
+        Assert.Equal(Percorsi.Predefinita, Percorsi.Scelta(c.Percorso));
+    }
+
+    [Fact]
     public void Tema_e_visita_sono_di_questo_computer_e_restano()
     {
         using var b = new Banco(_ => (200, "{}"));

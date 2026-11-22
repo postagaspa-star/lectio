@@ -9,7 +9,7 @@ namespace Lectio;
 /// <summary>Le opzioni della riga di comando: servono alle prove e allo sviluppo.</summary>
 public sealed class Opzioni
 {
-    public string CartellaDati { get; private set; } = Percorsi.Predefinita;
+    public string CartellaDati { get; private set; } = Percorsi.PerQuestoProgramma;
     public bool CartellaDatiPersonale { get; private set; }
     public int? EsciDopoSecondi { get; private set; }
 
@@ -57,7 +57,7 @@ public sealed class Opzioni
 
     /// <summary>Con una cartella dati di prova serve un'istanza a parte; su quella vera l'istanza resta una sola.</summary>
     public string SuffissoIstanza =>
-        CartellaDatiPersonale && !string.Equals(Path.GetFullPath(CartellaDati).TrimEnd('\\'), Path.GetFullPath(Percorsi.Predefinita).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)
+        CartellaDatiPersonale && !Percorsi.Stessa(CartellaDati, Percorsi.PerQuestoProgramma)
             ? "." + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(CartellaDati).ToLowerInvariant())))[..12]
             : "";
 }

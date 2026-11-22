@@ -1,6 +1,9 @@
 namespace Lectio.Motore;
 
-/// <summary>Dove stanno i dati: <c>%LOCALAPPDATA%\Lectio\</c> (o la cartella di <c>--dati</c> per le prove).</summary>
+/// <summary>
+/// Dove stanno i dati: <c>%LOCALAPPDATA%\Lectio\</c>, oppure la cartella scritta in <see cref="FileCartellaDati"/> accanto a
+/// <c>Lectio.exe</c> (o quella di <c>--dati</c> per le prove).
+/// </summary>
 public sealed class Percorsi
 {
     public Percorsi(string radice)
@@ -11,6 +14,39 @@ public sealed class Percorsi
 
     public static string Predefinita =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lectio");
+
+    /// <summary>
+    /// Il file accanto a <c>Lectio.exe</c> che sceglie un'altra cartella per i dati: la prima riga non vuota, un percorso
+    /// assoluto o relativo alla cartella del programma (per esempio <c>..\Dati</c>). Il pacchetto non lo contiene, quindi
+    /// gli aggiornamenti lo lasciano dov'è.
+    /// </summary>
+    public const string FileCartellaDati = "cartella-dati.txt";
+
+    /// <summary>La cartella dei dati del programma che sta in <paramref name="cartellaProgramma"/>.</summary>
+    public static string Scelta(string cartellaProgramma)
+    {
+        try
+        {
+            var file = Path.Combine(cartellaProgramma, FileCartellaDati);
+            if (File.Exists(file))
+            {
+                var riga = File.ReadLines(file).Select(r => r.Trim().Trim('"').Trim()).FirstOrDefault(r => r.Length > 0);
+                if (riga != null) return Path.GetFullPath(Path.Combine(cartellaProgramma, riga));
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // File illeggibile o percorso non valido: si resta nella cartella di sempre.
+        }
+        return Predefinita;
+    }
+
+    /// <summary>La cartella dei dati di questo Lectio, quando non si passa <c>--dati</c>.</summary>
+    public static string PerQuestoProgramma => Scelta(AppContext.BaseDirectory);
+
+    /// <summary>true se le due cartelle sono la stessa (maiuscole e barra finale non contano).</summary>
+    public static bool Stessa(string a, string b) =>
+        string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
     public string Radice { get; }
     public string Config => Path.Combine(Radice, "config.json");

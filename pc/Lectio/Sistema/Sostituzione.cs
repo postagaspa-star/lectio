@@ -176,7 +176,9 @@ public static class Sostituzione
     private static void Riapri(string cartellaProgramma, string cartellaDati)
     {
         var psi = new ProcessStartInfo(Path.Combine(cartellaProgramma, "Lectio.exe")) { UseShellExecute = false, WorkingDirectory = cartellaProgramma };
-        if (!string.Equals(Path.GetFullPath(cartellaDati).TrimEnd('\\'), Path.GetFullPath(Percorsi.Predefinita).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+        // Con i dati nella cartella di sempre (o in quella di cartella-dati.txt) Lectio si riapre senza --dati, così
+        // resta la stessa istanza di quando lo si apre dal collegamento.
+        if (!Percorsi.Stessa(cartellaDati, Percorsi.Scelta(cartellaProgramma)))
         {
             psi.ArgumentList.Add("--dati");
             psi.ArgumentList.Add(cartellaDati);
