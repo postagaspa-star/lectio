@@ -1353,8 +1353,10 @@ stile delle altre pagine, niente schermate nuove a sé: un foglio, una scheda di
 
 ### 44.2 Il foglio "Cosa vuoi cambiare?"
 
-Finestra larga 560 come 43.3, X sempre visibile, Esc chiude. Titolo "Cosa vuoi cambiare?" 21/800, sotto il titolo
-dell'oggetto 14/500 tenue.
+Finestra larga 560 come 43.3, X sempre visibile, Esc chiude. Titolo "Cosa vuoi cambiare nello schema?" 21/800 (nel
+riassunto, nella lezione, nella verifica, nella mappa: un riassunto ha lo stesso titolo del suo schema, quindi la
+finestra deve dire che cosa si cambia), sotto il titolo dell'oggetto 14/500 tenue. Con "Tutto": "Lectio sceglie da solo
+le parti dello schema che servono." (del riassunto, della lezione…).
 1. **Campo** di più righe (16 px, Superficie 2, raggio 14, alto 120), segnaposto per tipo: schema "Per esempio:
    aggiungi le date delle crociate"; riassunto "Per esempio: più corto, solo le cose da sapere"; lezione "Per esempio:
    spiega meglio la terza crociata"; verifica "Per esempio: più domande aperte, meno crocette". Contatore "0 / 600"

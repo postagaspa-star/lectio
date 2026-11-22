@@ -1458,12 +1458,13 @@
 
   /** §44.2 Il segnaposto del campo e gli spunti, per tipo (il testo dello spunto è quello che entra nel campo). */
   const MODIFICA_PER_TIPO = {
-    schema: { segnaposto: 'Per esempio: aggiungi le date delle crociate', spunti: ['Aggiungi le date', 'Più semplice', 'Più dettagli', 'Più corto'] },
-    riassunto: { segnaposto: 'Per esempio: più corto, solo le cose da sapere', spunti: ['Più corto', 'Più semplice', 'Più dettagli'] },
-    lezione: { segnaposto: 'Per esempio: spiega meglio la terza crociata', spunti: ['Spiega meglio', 'Più esempi', 'Più semplice'] },
-    simulata: { segnaposto: 'Per esempio: più domande aperte, meno crocette', spunti: ['Più difficile', 'Più facile', 'Più domande aperte', 'Meno crocette'] },
-    mappa: { segnaposto: 'Per esempio: aggiungi i concetti sulle cause', spunti: ['Meno concetti', 'Più concetti', 'Più semplice'] },
-    mappa_date: { segnaposto: 'Per esempio: aggiungi le date delle battaglie', spunti: ['Meno date', 'Più date', 'Frasi più corte'] },
+    // `nel`/`del`: la finestra dice sempre che cosa si cambia (un riassunto ha lo stesso titolo del suo schema).
+    schema: { nel: 'nello schema', del: 'dello schema', segnaposto: 'Per esempio: aggiungi le date delle crociate', spunti: ['Aggiungi le date', 'Più semplice', 'Più dettagli', 'Più corto'] },
+    riassunto: { nel: 'nel riassunto', del: 'del riassunto', segnaposto: 'Per esempio: più corto, solo le cose da sapere', spunti: ['Più corto', 'Più semplice', 'Più dettagli'] },
+    lezione: { nel: 'nella lezione', del: 'della lezione', segnaposto: 'Per esempio: spiega meglio la terza crociata', spunti: ['Spiega meglio', 'Più esempi', 'Più semplice'] },
+    simulata: { nel: 'nella verifica', del: 'della verifica', segnaposto: 'Per esempio: più domande aperte, meno crocette', spunti: ['Più difficile', 'Più facile', 'Più domande aperte', 'Meno crocette'] },
+    mappa: { nel: 'nella mappa', del: 'della mappa', segnaposto: 'Per esempio: aggiungi i concetti sulle cause', spunti: ['Meno concetti', 'Più concetti', 'Più semplice'] },
+    mappa_date: { nel: 'nella mappa', del: 'della mappa', segnaposto: 'Per esempio: aggiungi le date delle battaglie', spunti: ['Meno date', 'Più date', 'Frasi più corte'] },
   };
 
   /** Una modifica che lavora ancora (in coda o in preparazione): intanto niente altre modifiche né scambi. */

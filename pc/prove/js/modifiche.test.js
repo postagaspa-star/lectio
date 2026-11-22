@@ -207,12 +207,12 @@ test('schema: Modifica a sinistra di Scarica PDF; la finestra chiede la stima, m
   assert.ok(pillola.querySelector('svg.icona'));
   p.clic(pillola);
   await p.aspetta(() => p.q('.finestra-modifica'));
-  assert.match(p.q('.finestra-modifica').textContent, /Cosa vuoi cambiare\?/);
+  assert.equal(p.q('[data-titolo="modifica"]').textContent, 'Cosa vuoi cambiare nello schema?');
   assert.match(p.q('[data-oggetto="titolo"]').textContent, /L'Impero romano/);
   assert.equal(p.q('[data-campo="richiesta"]').getAttribute('placeholder'), 'Per esempio: aggiungi le date delle crociate');
   assert.equal(p.q('[data-conta="richiesta"]').textContent, '0 / 600');
   assert.equal(p.q('[data-dove="tutto"]').getAttribute('aria-pressed'), 'true');
-  assert.match(p.q('.mod-tutto').textContent, /Lectio sceglie da solo le parti che servono\./);
+  assert.match(p.q('.mod-tutto').textContent, /Lectio sceglie da solo le parti dello schema che servono\./);
   assert.equal(p.q('[data-azione="manda-modifica"]').disabled, true, 'campo vuoto: spento');
   // Spunti: il secondo va dopo un punto.
   p.clic(p.q('[data-spunto="Aggiungi le date"]'));
@@ -458,6 +458,9 @@ test('riassunto: Modifica e Correggi a mano (stesse parti, una voce per riga)', 
   assert.equal(testa.indexOf('modifica'), testa.indexOf('scarica-pdf') - 1);
   p.clic(p.q('.sch-testa [data-azione="modifica"]'));
   await p.aspetta(() => p.q('[data-campo="richiesta"]'));
+  // La finestra dice che si cambia il riassunto (ha lo stesso titolo del suo schema).
+  assert.equal(p.q('[data-titolo="modifica"]').textContent, 'Cosa vuoi cambiare nel riassunto?');
+  assert.match(p.q('.mod-tutto').textContent, /Lectio sceglie da solo le parti del riassunto che servono\./);
   assert.equal(p.q('[data-campo="richiesta"]').getAttribute('placeholder'), 'Per esempio: più corto, solo le cose da sapere');
   assert.deepEqual(p.tutti('.mod-spunto').map((b) => b.textContent), ['Più corto', 'Più semplice', 'Più dettagli']);
   p.clic(p.q('[data-azione="chiudi-modifica"]'));

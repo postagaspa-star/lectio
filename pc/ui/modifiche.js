@@ -66,7 +66,7 @@
     const corpo = h('div', { class: 'corpo bianco' });
     const piede = h('div', { class: 'piede' });
     const ctl = A.apriFinestra({
-      stretta: true, etichetta: 'Cosa vuoi cambiare?', classe: 'finestra-nuovo finestra-modifica ' + A.classeMateria(m.colore),
+      stretta: true, etichetta: 'Cosa vuoi cambiare ' + cfg.nel + '?', classe: 'finestra-nuovo finestra-modifica ' + A.classeMateria(m.colore),
       disegna: (f) => svuota(f, corpo, piede),
       suChiusura: () => {
         st.chiusa = true;
@@ -95,7 +95,7 @@
 
     svuota(corpo,
       h('div', { class: 'testa-finestra' },
-        h('div', { class: 'mod-titoli' }, h('h2', { class: 'titolo-sezione titolo-finestra' }, 'Cosa vuoi cambiare?'), o.titolo ? h('span', { class: 'mod-oggetto', 'data-oggetto': 'titolo' }, o.titolo) : null),
+        h('div', { class: 'mod-titoli' }, h('h2', { class: 'titolo-sezione titolo-finestra', 'data-titolo': 'modifica' }, 'Cosa vuoi cambiare ' + cfg.nel + '?'), o.titolo ? h('span', { class: 'mod-oggetto', 'data-oggetto': 'titolo' }, o.titolo) : null),
         h('button', { type: 'button', class: 'tondo', 'aria-label': 'Chiudi', 'data-azione': 'chiudi-modifica', onclick: () => ctl.chiudi() }, icona('chiudi'))),
       h('div', { class: 'mod-gruppo' }, campo, conta),
       h('div', { class: 'mod-spunti', 'data-spunti': tipo }, cfg.spunti.map((f) => h('button', { type: 'button', class: 'mod-spunto', 'data-spunto': f, onclick: () => spunto(f) }, f))),
@@ -276,7 +276,7 @@
         h('button', { type: 'button', 'aria-pressed': st.dove === 'tutto' ? 'true' : 'false', 'data-dove': 'tutto', onclick: () => scegliDove('tutto') }, 'Tutto'),
         h('button', { type: 'button', 'aria-pressed': st.dove === 'io' ? 'true' : 'false', 'data-dove': 'io', onclick: () => scegliDove('io') }, 'Scelgo io'));
       if (st.dove === 'tutto') {
-        svuota(sottoDove, h('p', { class: 'mod-tutto' }, 'Lectio sceglie da solo le parti che servono.'));
+        svuota(sottoDove, h('p', { class: 'mod-tutto' }, 'Lectio sceglie da solo le parti ' + cfg.del + ' che servono.'));
         return;
       }
       svuota(sottoDove, h('div', { class: 'mod-parti', role: 'group', 'aria-label': 'Le parti da cambiare' }, parti.map((p) => {
