@@ -12,7 +12,7 @@ const path = require('path');
 
 // LECTIO_UI: un'altra cartella dell'interfaccia (per esempio quella di una versione vecchia, per vedere che i test la bocciano).
 const UI = process.env.LECTIO_UI || path.join(__dirname, '..', '..', 'ui');
-const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'disegno-mappe.js', 'mappe.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'modifiche.js', 'visita.js', 'avvio.js'];
+const SCRIPT = ['logica.js', 'archivi.js', 'esempio.js', 'api.js', 'base.js', 'pagine.js', 'lezione.js', 'lettore.js', 'studio.js', 'cartelle.js', 'schemi.js', 'riassunti.js', 'disegno-mappe.js', 'mappe.js', 'chiarimenti.js', 'lampo.js', 'formule.js', 'simulate.js', 'modifiche.js', 'visita.js', 'avvio.js'];
 const dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 
@@ -89,6 +89,12 @@ function server(opzioni) {
       };
       (s.esempio.stato.materiale[materia] = s.esempio.stato.materiale[materia] || []).unshift(nuovo);
       return [201, nuovo];
+    }
+    if (p.startsWith('/locale/allegato')) {
+      // §21.1: come il programma, che lo manda al server in multipart (n e file).
+      const q = new URLSearchParams(p.split('?')[1] || '');
+      const e = s.esempio.richiesta('POST', '/server/api/simulate/' + q.get('simulata_id') + '/allegati', { n: Number(q.get('n')), nome: q.get('nome') || '' });
+      return [e.stato, e.dati];
     }
     return [404, { errore: 'Non trovato.', codice: 'non_trovato' }];
   };

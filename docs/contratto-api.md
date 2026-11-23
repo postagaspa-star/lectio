@@ -636,6 +636,41 @@ degli schemi (senza `immagini`). `POST /api/simulate` (più `evento_id`) → 201
 `non_corretta` = l'esercizio non ha una soluzione nei documenti: si mostra "confronta tu", e i suoi punti non contano né in `punti` né in `punti_totali`. Gli esercizi si ripropongono solo se sono nei documenti, con gli stessi numeri.
 Il formato (tipi di domande, punti, durata) viene dalle verifiche vere della materia; senza verifiche caricate la `nota` lo dice.
 
+### 21.1 Esercizi con i numeri, grafici e allegati (server 1.5.0, computer 1.4.0)
+Gli esercizi con i numeri (calcoli, equazioni, disequazioni, sistemi, scomposizioni) hanno sempre numeri nuovi rispetto ai materiali: dai
+materiali si prendono tipo, difficoltà e richieste. La soluzione la calcola il server con un programma (`calcolo.py`), non l'AI; un esercizio
+che il programma non sa risolvere, o con gli stessi numeri dei materiali, non entra. Le materie con i numeri sono quelle con nel nome
+matematica, fisica, chimica, algebra, geometria, statistica, aritmetica o trigonometria.
+
+Ogni domanda di `domande` può avere in più (un'app che non li conosce li ignora):
+- `forma`: `"testo"` (la casella di sempre), `"formule"` (la casella con la barra della matematica: le domande aperte delle materie con i
+  numeri), `"conti"` (un esercizio con i numeri: la casella dei passaggi con la barra e un campo per ogni voce di `risultati`). Senza `forma`
+  vale `"testo"`.
+- `risultati`: solo con `"conti"`, i nomi dei campi del risultato: `["Semidispersione massima"]`, `["Soluzione"]`, `["x", "y"]`.
+- `tabella`: `null` oppure `{"titolo": null, "colonne": ["x (cm)", "Δx (cm)"], "valori": [["1,72", "0,02"], ["1,58", "0,03"]]}`: testi già
+  scritti all'italiana, da mostrare così come sono.
+- `grafico`: `null` oppure `{"tipo": "punti" | "linee", "titolo": null, "asse_x": "t (s)", "asse_y": "s (m)", "serie": [{"nome": null,
+  "punti": [[0, 0], [1, 2.5]]}]}`, oppure `{"tipo": "barre", "titolo": null, "asse_x": "…", "asse_y": "…", "categorie": ["A", "B"],
+  "serie": [{"nome": null, "valori": [3, 5]}]}`. I numeri sono numeri JSON; le funzioni arrivano già come `"linee"` di punti. Le app
+  disegnano assi, tacche e numeri all'italiana; se lo 0 è dentro l'intervallo, l'asse passa per lo 0.
+
+`Simulata` ha in più `risultati` (`{"3": ["0,07 cm"]}`: quello scritto nei campi del risultato, nell'ordine di `domanda.risultati`) e
+`allegati` (`{"3": [{"id": "k3J9x2aQ", "nome": "foglio.jpg", "tipo": "foto" | "pdf"}]}`).
+
+`PATCH /api/simulate/{id}` accetta anche `risultati`, nello stesso formato: si unisce domanda per domanda come `risposte` (al massimo 6
+campi per domanda, 200 caratteri l'uno).
+`POST /api/simulate/{id}/allegati` (multipart: `n` = il numero della domanda, `file`; massimo 20 MB; jpg, jpeg, png, webp, heic, heif,
+pdf) → 201 `{"id": "…", "nome": "…", "tipo": "foto" | "pdf"}`. Al massimo 4 file per domanda; le HEIC diventano JPEG. Solo con la
+verifica `pronta` o `in_corso`, se no 409. `DELETE /api/simulate/{id}/allegati/{allegato_id}` → `{"ok": true}` (stessi stati).
+Alla correzione il server legge i file (le foto piccole con luna, il resto con l'OCR) e li manda alla correzione con la risposta.
+
+Nell'`esito`, ogni domanda con `"conti"` ha in più `controllo`: `[{"cosa": "Semidispersione massima", "scritto": "0,25", "atteso": "0,07 cm",
+"esito": "giusto" | "non_arrotondato" | "sbagliato" | "mancante" | "da_leggere"}]`, il confronto fatto dal programma (`da_leggere`: il
+programma non riesce a leggere quello che è scritto e decide la correzione). I `punti` di una domanda e il totale possono avere il mezzo
+punto (`1.5`).
+La correzione conta solo quello che la domanda chiede (niente punti tolti per un arrotondamento o un'unità di misura non chiesti); negli
+esercizi un errore di calcolo con il metodo giusto vale circa metà dei punti.
+
 ## 22. Colori delle materie
 Sono 16: `ambra`, `rosa`, `petrolio`, `viola`, `blu`, `verde`, `arancio`, `oliva`, `giada`, `senape`, `orchidea`, `prugna`, `cacao`, `lavagna`, `salvia`, `lavanda`. I valori sono in `docs/aspetto.md`. `POST` e `PATCH` delle materie accettano solo questi; un nome che un'app non conosce diventa ambra.
 

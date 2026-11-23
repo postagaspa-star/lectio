@@ -289,6 +289,53 @@ public class ClientContrattoTest
     }
 
     [Fact]
+    public async Task Un_allegato_della_verifica_va_al_server_in_multipart_col_numero_della_domanda()
+    {
+        using var b = new Banco(_ => (201, "{\"id\":\"k3J9x2aQ\",\"nome\":\"foglio.jpg\",\"tipo\":\"foto\"}"));
+        var r = await b.Motore.CaricaAllegatoAsync(9, 3, "foglio.jpg", new byte[] { 255, 216, 255, 224 });
+        Assert.Equal(201, r.Stato);
+        Assert.Contains("k3J9x2aQ", r.Json);
+        var q = b.Finto.Ricevute.Single();
+        Assert.Equal("/api/simulate/9/allegati", q.Percorso);
+        Assert.Equal("multipart/form-data", q.TipoCorpo);
+        Assert.Contains("filename=foglio.jpg", q.Corpo);
+        Assert.Contains("Content-Type: image/jpeg", q.Corpo);
+        Assert.Matches(@"name=n\r?\n(?:[^\r\n]+\r?\n)*\r?\n3\r?\n", q.Corpo);
+    }
+
+    [Fact]
+    public async Task Un_allegato_rifiutato_dal_server_porta_la_sua_frase()
+    {
+        using var b = new Banco(_ => (409, "{\"errore\":\"Questa verifica è già stata consegnata.\",\"codice\":\"conflitto\"}"));
+        var r = await b.Motore.CaricaAllegatoAsync(9, 3, "conti.pdf", new byte[] { 37, 80, 68, 70 });
+        Assert.Equal(409, r.Stato);
+        Assert.Contains("già stata consegnata", Json.Testo(Json.Nodo(r.Json)!["errore"]));
+    }
+
+    [Theory]
+    [InlineData(9L, 3, "appunti.docx", 10, 422)]
+    [InlineData(9L, 3, "video.mp4", 10, 422)]
+    [InlineData(9L, 3, "vuoto.jpg", 0, 422)]
+    [InlineData(9L, 0, "foglio.jpg", 10, 422)]
+    [InlineData(0L, 3, "foglio.jpg", 10, 422)]
+    public async Task Allegati_che_il_server_non_prende_si_fermano_prima(long simulata, int domanda, string nome, int byteFile, int stato)
+    {
+        using var b = new Banco(_ => Ok("{}"));
+        var r = await b.Motore.CaricaAllegatoAsync(simulata, domanda, nome, new byte[byteFile]);
+        Assert.Equal(stato, r.Stato);
+        Assert.Empty(b.Finto.Ricevute);
+    }
+
+    [Fact]
+    public async Task Un_allegato_oltre_20_mb_non_parte()
+    {
+        using var b = new Banco(_ => Ok("{}"));
+        var r = await b.Motore.CaricaAllegatoAsync(9, 3, "foto.png", new byte[Motore.Motore.MassimoByteFile + 1]);
+        Assert.Equal(413, r.Stato);
+        Assert.Empty(b.Finto.Ricevute);
+    }
+
+    [Fact]
     public async Task Un_file_oltre_20_mb_non_parte()
     {
         using var b = new Banco(_ => Ok("{}"));

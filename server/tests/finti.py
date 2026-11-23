@@ -162,6 +162,7 @@ class ServerFinto:
         self.piano_senza_foto = False
         self.chiarimento = None
         self.simulata = None
+        self.correzione = None  # la risposta del modello che corregge la verifica di prova (None = metà dei punti)
         self.riassunti_corti = 0  # quanti riassunti dare con una parte sola, anche se lo schema ha più sezioni
         self.mappa = None  # la risposta del modello per le mappe (None = quella solita)
         self.vettori_rotti = False
@@ -366,7 +367,7 @@ class ServerFinto:
                 {"tipo": "esercizio", "testo": "Risolvi 7x + 3 = 24", "punti": 10, "sezione": None, "risposta_attesa": "x = 3", "fonti": []},
             ]}
         elif "Correggi ogni risposta confrontandola" in primo:
-            oggetto = {"domande": [{"n": int(n), "esito": "parziale", "punti": int(p) // 2, "commento": "Quasi.", "mancava": ["la data"]}
+            oggetto = self.correzione or {"domande": [{"n": int(n), "esito": "parziale", "punti": int(p) // 2, "commento": "Quasi.", "mancava": ["la data"]}
                                    for n, p in re.findall(r"Domanda (\d+) \(massimo (\d+) punti\)", primo)]}
         elif "Prepara il PIANO di un RIPASSO" in primo:
             m = re.search(r'esattamente (\d+) parti in "blocchi" e (\d+) domande', primo)

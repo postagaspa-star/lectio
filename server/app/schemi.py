@@ -266,6 +266,7 @@ class SimulataIn(SimulataStimaIn):
 
 class SimulataPatch(Corpo):
     risposte: dict[str, str] | None = None
+    risultati: dict[str, list[str]] | None = None
     iniziata: StrictBool | None = None
 
     @field_validator("risposte")
@@ -273,6 +274,13 @@ class SimulataPatch(Corpo):
     def _risposte(cls, v):
         if v is not None and (len(v) > 200 or any(len(x) > 20_000 for x in v.values())):
             raise ValueError("risposte troppo lunghe")
+        return v
+
+    @field_validator("risultati")
+    @classmethod
+    def _risultati(cls, v):
+        if v is not None and (len(v) > 200 or any(len(x) > 6 or any(len(s) > 200 for s in x) for x in v.values())):
+            raise ValueError("risultati troppo lunghi")
         return v
 
 

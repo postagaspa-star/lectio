@@ -979,6 +979,98 @@ tenue 15/500, "Nei tuoi documenti non c'è la soluzione. Confronta tu con il lib
 15/600, pulsante pieno **Ripassa adesso**. Sempre: secondario **Rifai la verifica** (riapre 36.1 con tutto già
 compilato, il costo si rivede).
 
+### 36.5 Esercizi con i numeri (PC 1.4.0, contratto 21.1, richiesta di Andrea del 23/11)
+
+Per matematica, fisica e le altre materie con i numeri. Le scelte di Andrea: la base è la **barra della matematica**;
+foto e file sono un'aggiunta facoltativa; grafici e tabelle si **guardano** nella domanda, non si disegnano.
+
+**Dalla ricerca (23/11):** gli editor di formule per la scuola (MathLive, GeoGebra) scrivono in riga e
+mostrano subito la formula impaginata; i tasti "a schema" (frazione, radice, potenza) mettono il cursore dentro il
+primo posto vuoto, così si continua a scrivere senza toccare il mouse. Chi studia scrive i passaggi uno per riga, come
+sul quaderno: la riga resta testo semplice (si salva e si corregge come testo), l'impaginazione è solo da guardare.
+Niente librerie scaricate: l'anteprima e il grafico li disegna Lectio con nodi DOM e SVG.
+
+**Le tre forme** (`domanda.forma`):
+
+| `forma` | Cosa si vede sotto il testo della domanda |
+|---|---|
+| `testo` (o assente) | La casella di sempre (36.3) |
+| `formule` | Barra, casella della risposta, anteprima, riga Foto o file |
+| `conti` | Barra, etichetta **Passaggi** e casella, anteprima, un campo per ogni voce di `risultati`, riga Foto o file |
+
+Ordine nella scheda: testo, tabella, grafico, barra, campi, Foto o file. Tutto a tutta larghezza della scheda.
+
+**Barra della matematica** (`role="toolbar"`, "Simboli"): due gruppi che vanno a capo uno alla volta, spazio 6 tra i
+tasti e 14 tra i gruppi. Tasti 44 × 44 (anche più larghi se serve), raggio 12, 19/600.
+- Schemi, fondo accento tenue: **Frazione** (faccia a/b impilata, scrive `()/()` col cursore nella prima parentesi),
+  **Radice** (`√()`), **Potenza** (`^()`), **Pedice** (`_()`), **Parentesi** (`()`). Con del testo selezionato lo
+  avvolgono (la selezione diventa il numeratore, il radicando, l'esponente).
+- Segni, Superficie 2: ± · × ÷ Δ π ≤ ≥ ≠ ≈ °.
+- Ogni tasto ha suggerimento e nome per i lettori di schermo ("Frazione", "Più o meno", "Minore o uguale"…).
+- Scrive nel campo che ha (o ha avuto per ultimo) il cursore, anche nei campi del risultato; il clic non toglie il
+  cursore dal campo. Dopo il tasto la risposta si salva come se l'avesse scritta Andrea.
+
+**Anteprima "come sul libro"**: riquadro sotto il campo, bordo 1 px `--riga`, raggio 14, 18/400 interlinea 2. Si vede
+solo se qualche riga ha qualcosa da impaginare (`/`, `^`, `_`, `√`); se no non c'è. Una riga di anteprima per ogni
+riga scritta.
+- `a/b` e `(…)/(…)`: frazione impilata con la linea (le parentesi di raggruppamento non si vedono).
+- `x^2`, `x^(n+1)`: esponente in alto; `x_1`, `x_max`, `x_(min)`: pedice in basso.
+- `√(…)` o `sqrt(…)`: radice con la linea sopra. `*` si vede come `·`.
+
+**Campi del risultato** (solo `conti`): etichetta col nome della voce ("Valore medio", "Soluzione") 14/700 testo, campo
+alto 48, raggio 14, 17/600 cifre tabellari, al massimo 200 caratteri. Affiancati in griglia (almeno 220 l'uno), uno
+sotto l'altro quando non ci stanno. Ognuno ha la sua anteprima. Si salvano come le risposte (prima sul dispositivo,
+poi `PATCH` con `risultati`, solo quando c'è qualcosa da mandare). Senza `risultati` il campo si chiama "Risultato".
+
+**Foto o file**: pulsante tenue piccolo con `clip` e "Foto o file"; apre la scelta dei file (jpg, jpeg, png, webp, heic,
+heif, pdf). Anche Ctrl+V di un'immagine dentro un campo della domanda. A destra le pillole (alte 40, Superficie 2):
+icona foto o documento, nome (tagliato con … oltre 240), X tonda 32 "Togli <nome>". Mentre carica la pillola è tenue
+e senza X. Al massimo 4 per domanda: al quarto il pulsante si spegne. Errori (tipo, più di 20 MB, vuoto, quinto file,
+frase del server su 409/422) in avviso breve. Il computer manda i byte al programma (`/locale/allegato`), che li
+spedisce al server come multipart.
+
+**Domanda fatta** (spunta nella colonna, numero nel foglio delle domande, conteggio "5 scritte su 8"): c'è qualcosa
+nella casella, in un campo del risultato o almeno un file.
+
+**Tabella**: sotto il testo, intestazioni 14/700 tenue con riga 2 px, celle 16/500 centrate, cifre tabellari, righe
+1 px `--riga`. I valori arrivano già scritti all'italiana e si mostrano così. Se è più larga della scheda scorre di
+lato solo lei. Titolo (se c'è) 14/700 tenue sopra.
+
+**Grafico** (SVG fatto da Lectio, al massimo 560 di larghezza, alto 320; nella finestra stretta si ridisegna alla
+larghezza vera, alto almeno 240, così i numeri restano 13/600):
+- griglia 1 px `--riga` alle tacche "tonde" (1, 2, 2,5, 5 × 10ⁿ); numeri all'italiana (virgola, segno −) 13/600 tenue;
+- assi 1,6 px tenue: passano per lo 0 se è dentro l'intervallo, se no stanno sul bordo; nomi degli assi 13/700 in
+  fondo a destra (x) e in alto a sinistra (y);
+- `punti`: pallini r 4,5; `linee`: linea 2,5 px, con i pallini se i punti sono al massimo 12; `barre`: barre raggio 3
+  che partono da 0, categorie sotto;
+- colori delle serie: 1ª colore pieno della materia, 2ª accento, 3ª ambra testo, 4ª tenue (sono gettoni: nel tema
+  scuro cambiano da soli);
+- legenda (trattino 16 × 4 e nome, 14/600 tenue) solo se le serie hanno un nome. Nome per i lettori di schermo: il
+  titolo, se no "Grafico".
+
+**Risultati (36.4) per `conti` e `formule`:** tabella e grafico restano sotto il testo della domanda. Con `formule`,
+"LA TUA RISPOSTA" mostra le righe impaginate come nell'anteprima. Con `conti`, al posto di "LA TUA RISPOSTA":
+- "PASSAGGI" e le righe impaginate ("Nessun passaggio" tenue se vuota);
+- una riga per voce del risultato (Superficie 2, raggio 12): nome 14/700 tenue, quello scritto 16/700 (impaginato se
+  serve, "Vuoto" tenue se manca), a destra la pillola del `controllo`:
+
+| `controllo.esito` | Parola | Icona | Colori |
+|---|---|---|---|
+| `giusto` | Giusto | `spunta` | come Giusta |
+| `non_arrotondato` | Da arrotondare | `quasi` | come Quasi |
+| `sbagliato` | Da rivedere | `ripeti` | come Da rivedere |
+| `mancante` | Vuoto | `ripeti` | come Da rivedere |
+| `da_leggere` | niente pillola: decide la correzione | | |
+
+Con tutte e due: "FOTO O FILE" con le pillole dei nomi (senza X), se ce ne sono.
+I punti possono avere il mezzo punto: "1,5 su 3", "10,5 punti su 15"; "1 punto" solo per 1.
+
+**Icona nuova:** `clip` `M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48`
+(Feather, licenza MIT).
+
+**Esempio:** la verifica di Matematica "Verifica su misure, equazioni e grafici" (pronta, in corso, corretta) con
+una domanda `formule`, tre `conti`, una tabella, un grafico a linee e uno a punti.
+
 ## 37. I 16 colori delle materie
 
 Nomi per il codice (minuscoli, senza accenti; il server e le app accettano solo questi, uno sconosciuto diventa

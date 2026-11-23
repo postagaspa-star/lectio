@@ -432,6 +432,193 @@ test('PDF della verifica pronta per farla su carta', opz, async () => {
   await p.aspetta(() => /premi Inizia e copia qui le risposte/.test(p.testo()));
 });
 
+// --- §21.1 Esercizi con i numeri: barra della matematica, anteprima, risultati, foto o file, tabella e grafico ---
+
+test('esercizi con i numeri: mezzo punto, forme, file, tasti della barra, anteprima, tacche dei grafici', () => {
+  assert.equal(L.frasePunti({ punti: 13.5, punti_totali: 15 }), '13,5 punti su 15');
+  assert.equal(L.frasePunti({ punti: 1, punti_totali: 3 }), '1 punto su 3');
+  assert.equal(L.puntiDomanda({ esito: 'parziale', punti: 1.5 }, { punti: 3 }), '1,5 su 3');
+  assert.equal(L.formaDomanda({ forma: 'conti' }), 'conti');
+  assert.equal(L.formaDomanda({ forma: 'formule' }), 'formule');
+  assert.equal(L.formaDomanda({ forma: 'disegno' }), 'testo');
+  assert.equal(L.formaDomanda({}), 'testo');
+  assert.deepEqual(L.campiRisultato({ forma: 'conti', risultati: ['x', 'y'] }), ['x', 'y']);
+  assert.deepEqual(L.campiRisultato({ forma: 'conti' }), ['Risultato']);
+  assert.deepEqual(L.campiRisultato({ forma: 'formule', risultati: ['x'] }), []);
+  assert.equal(L.campiRisultato({ forma: 'conti', risultati: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] }).length, 6, 'al massimo 6 campi');
+  // Fatta = risposta, oppure un risultato scritto, oppure un file.
+  assert.equal(L.contaRisposte([{ n: 1 }, { n: 2 }, { n: 3 }], { 1: '' }, { 1: ['', '5'] }, { 2: [{ id: 'a' }] }).frase, '2 scritte su 3 · 1 vuota');
+  assert.equal(L.rispostaFatta(3, {}, { 3: ['', ' '] }, { 3: [] }), false);
+  assert.equal(L.controllaAllegato('foglio.HEIC', 10, 0), null);
+  assert.equal(L.controllaAllegato('conti.pdf', 10, 3), null);
+  assert.match(L.controllaAllegato('video.mp4', 10, 0), /non lo leggo/);
+  assert.match(L.controllaAllegato('foglio.jpg', 10, 4), /Al massimo 4 file/);
+  assert.match(L.controllaAllegato('foglio.jpg', 21 * 1024 * 1024, 0), /20 MB/);
+  assert.equal(L.esitoControllo('da_leggere'), null);
+  assert.equal(L.esitoControllo('non_arrotondato').parola, 'Da arrotondare');
+  assert.equal(L.esitoControllo('sbagliato').classe, 'rivedere');
+  // La barra: schemi col cursore dentro, la selezione va dentro lo schema.
+  assert.equal(L.TASTI_FORMULA.length, 16);
+  assert.ok(L.TASTI_FORMULA.every((t) => t.nome && t.chiave));
+  assert.deepEqual(L.inserisciFormula('v = ', 4, 4, 'frazione'), { valore: 'v = ()/()', inizio: 5, fine: 5 });
+  assert.deepEqual(L.inserisciFormula('a+b', 0, 3, 'frazione'), { valore: '(a+b)/()', inizio: 7, fine: 7 });
+  assert.deepEqual(L.inserisciFormula('x', 1, 1, 'potenza'), { valore: 'x^()', inizio: 3, fine: 3 });
+  assert.deepEqual(L.inserisciFormula('2', 0, 1, 'radice'), { valore: '√(2)', inizio: 4, fine: 4 });
+  assert.deepEqual(L.inserisciFormula('x', 1, 1, 'piumeno'), { valore: 'x±', inizio: 2, fine: 2 });
+  assert.deepEqual(L.inserisciFormula('x', 1, 1, 'sconosciuto'), { valore: 'x', inizio: 1, fine: 1 });
+  // L'anteprima: solo quando c'è da impaginare; le parentesi di frazioni ed esponenti non si vedono.
+  assert.equal(L.daImpaginare('1,63; 1,65; 1,64'), false);
+  for (const x of ['x^2', '√2', 'a/b', 'x_1', 'sqrt(2)']) assert.equal(L.daImpaginare(x), true, x);
+  assert.deepEqual(L.pezziFormula('(1,66-1,61)/2'), [{ t: 'frazione', num: [{ t: 'testo', v: '1,66-1,61' }], den: [{ t: 'testo', v: '2' }] }]);
+  assert.deepEqual(L.pezziFormula('Δx_1 = 10^-3'), [{ t: 'testo', v: 'Δx' }, { t: 'giu', v: [{ t: 'testo', v: '1' }] }, { t: 'testo', v: ' = 10' }, { t: 'su', v: [{ t: 'testo', v: '-3' }] }]);
+  assert.deepEqual(L.pezziFormula('(a+b)^2'), [{ t: 'testo', v: '(a+b)' }, { t: 'su', v: [{ t: 'testo', v: '2' }] }]);
+  assert.deepEqual(L.pezziFormula('x_max'), [{ t: 'testo', v: 'x' }, { t: 'giu', v: [{ t: 'testo', v: 'max' }] }]);
+  assert.deepEqual(L.pezziFormula('x^2y'), [{ t: 'testo', v: 'x' }, { t: 'su', v: [{ t: 'testo', v: '2' }] }, { t: 'testo', v: 'y' }]);
+  assert.deepEqual(L.pezziFormula('√(x+1)'), [{ t: 'radice', v: [{ t: 'testo', v: 'x+1' }] }]);
+  assert.deepEqual(L.pezziFormula('2 + 3/4'), [{ t: 'testo', v: '2 + ' }, { t: 'frazione', num: [{ t: 'testo', v: '3' }], den: [{ t: 'testo', v: '4' }] }]);
+  assert.deepEqual(L.pezziFormula('/ ^ ) ('), [{ t: 'testo', v: '/ ^ ) (' }]);
+  // Grafici: tacche tonde, numeri all'italiana, lo 0 solo quando serve, barre da 0.
+  assert.deepEqual(L.tacche(1.58, 1.75, 5).valori, [1.55, 1.6, 1.65, 1.7, 1.75]);
+  assert.deepEqual(L.tacche(0, 5, 6).valori, [0, 1, 2, 3, 4, 5]);
+  assert.equal(L.numeroGrafico(-0.04), '−0,04');
+  assert.equal(L.numeroGrafico(2.5), '2,5');
+  const sp = L.spazioGrafico({ tipo: 'linee', serie: [{ punti: [[-2, -5], [3, 5]] }] });
+  assert.deepEqual([sp.x.min, sp.x.max, sp.y.min, sp.y.max], [-2, 3, -6, 6]);
+  assert.ok(L.spazioGrafico({ tipo: 'punti', serie: [{ punti: [[1, 1.58], [2, 1.75]] }] }).y.min > 1);
+  assert.equal(L.spazioGrafico({ tipo: 'barre', categorie: ['A', 'B'], serie: [{ valori: [3, 5] }] }).y.min, 0);
+});
+
+test('esercizio con i numeri: la barra scrive nel campo col cursore, l\'anteprima impagina, i risultati vanno al server', opz, async () => {
+  const p = await apri('#simulata/8');
+  await p.aspetta(() => p.q('[data-domanda="5"] [data-barra="formule"]'));
+  assert.equal(p.q('[data-domanda="5"]').getAttribute('data-forma'), 'conti');
+  assert.equal(p.q('[data-domanda="1"]').getAttribute('data-forma'), 'formule');
+  assert.equal(p.q('[data-domanda="1"] [data-risultato]'), null);
+  assert.deepEqual(p.tutti('[data-domanda="2"] .sim-campo-risultato label').map((x) => x.textContent), ['Valore medio', 'Semidispersione massima']);
+  assert.equal(p.q('[data-risultato="2:0"]').value, '1,686 cm');
+  // La frazione con il cursore dentro la prima parentesi.
+  const passaggi = p.q('[data-risposta="5"]');
+  p.scrivi(passaggi, 'v = ');
+  passaggi.setSelectionRange(4, 4);
+  p.clic(p.q('[data-domanda="5"] [data-tasto="frazione"]'));
+  assert.equal(passaggi.value, 'v = ()/()');
+  assert.equal(passaggi.selectionStart, 5);
+  // L'anteprima si vede solo quando c'è da impaginare.
+  const ant = p.q('[data-domanda="5"] [data-anteprima]');
+  p.scrivi(passaggi, 'v = 5 m al secondo');
+  assert.equal(ant.hidden, true);
+  p.scrivi(passaggi, 'v = (5-0)/(4-0)');
+  assert.equal(ant.hidden, false);
+  assert.equal(ant.querySelector('.f-fraz .f-num').textContent, '5-0');
+  assert.equal(ant.querySelector('.f-fraz .f-den').textContent, '4-0');
+  // La barra scrive nel risultato, se il cursore è lì.
+  const ris = p.q('[data-risultato="5:0"]');
+  p.scrivi(ris, '1,25');
+  p.clic(p.q('[data-domanda="5"] [data-tasto="piumeno"]'));
+  assert.equal(ris.value, '1,25±');
+  assert.equal(passaggi.value, 'v = (5-0)/(4-0)');
+  p.scrivi(ris, '1,25 m/s');
+  await p.aspetta(() => p.s.chiamate('PATCH', '/server/api/simulate/8').some((c) => c.corpo.risultati && c.corpo.risultati['5']
+    && c.corpo.risultati['5'][0] === '1,25 m/s' && c.corpo.risposte['5'] === 'v = (5-0)/(4-0)'));
+  // Un risultato da solo basta per dire che la domanda è fatta.
+  p.scrivi(p.q('[data-risultato="3:0"]'), 'x = 5');
+  await p.aspetta(() => p.q('[data-salta="3"] [data-segno] svg'));
+  // Le verifiche senza numeri restano come prima: niente barra.
+  p.A.vai('#simulata/3');
+  await p.aspetta(() => /Impero/.test(p.q('[data-simulata="in_corso"] h1').textContent));
+  assert.ok(p.q('[data-risposta="1"]'));
+  assert.equal(p.q('[data-barra]'), null);
+  assert.equal(p.q('[data-allega]'), null);
+});
+
+test('tabella e grafico si vedono nella domanda, disegnati da Lectio', opz, async () => {
+  const p = await apri('#simulata/8');
+  await p.aspetta(() => p.q('[data-domanda="2"] [data-tabella]'));
+  const t = p.q('[data-domanda="2"] table.sim-tabella');
+  assert.deepEqual(p.tutti('th', t).map((x) => x.textContent), ['Misura', 'x (cm)']);
+  assert.equal(p.tutti('tbody tr', t).length, 5);
+  assert.equal(p.tutti('tbody tr', t)[4].textContent, '51,58');
+  const punti = p.q('[data-domanda="5"] [data-grafico="punti"]');
+  assert.equal(punti.querySelectorAll('circle.gr-punto').length, 5);
+  assert.deepEqual(p.tutti('.gr-nome-asse', punti).map((x) => x.textContent), ['t (s)', 's (m)']);
+  assert.equal(punti.querySelector('.gr-legenda'), null);
+  const linee = p.q('[data-domanda="4"] [data-grafico="linee"]');
+  assert.ok(linee.querySelector('polyline.gr-linea'));
+  assert.ok(p.tutti('.gr-numero', linee).some((x) => x.textContent === '−6'));
+  assert.equal(linee.querySelector('.gr-legenda').textContent, 'r');
+  assert.equal(linee.querySelector('svg').getAttribute('role'), 'img');
+});
+
+test('foto o file: dal pulsante o con Ctrl+V, si tolgono, al massimo 4, gli errori si dicono', opz, async () => {
+  const p = await apri('#simulata/8');
+  await p.aspetta(() => p.q('[data-allega="3"]'));
+  const scelta = p.q('[data-scelta-file="3"]');
+  const file = (nome, tipo) => new p.w.File([new Uint8Array([1, 2, 3])], nome, { type: tipo });
+  const scegli = (lista) => {
+    Object.defineProperty(scelta, 'files', { value: lista, configurable: true });
+    scelta.dispatchEvent(new p.w.Event('change'));
+  };
+  const pillole = () => p.tutti('[data-allegati="3"] [data-allegato]');
+  scegli([file('foglio.jpg', 'image/jpeg'), file('conti.pdf', 'application/pdf')]);
+  await p.aspetta(() => pillole().length === 2);
+  const andate = p.s.chiamate('POST', '/locale/allegato');
+  assert.equal(andate.length, 2);
+  assert.match(andate[0].percorso, /simulata_id=8&n=3&nome=foglio\.jpg/);
+  assert.equal(andate[0].byte, 3);
+  assert.deepEqual(pillole().map((x) => x.textContent), ['foglio.jpg', 'conti.pdf']);
+  await p.aspetta(() => p.q('[data-salta="3"] [data-segno] svg'));
+  // Ctrl+V di una foto dentro i passaggi.
+  const incolla = new p.w.Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(incolla, 'clipboardData', { value: { files: [file('image.png', 'image/png')] } });
+  p.q('[data-risposta="3"]').dispatchEvent(incolla);
+  assert.equal(incolla.defaultPrevented, true);
+  await p.aspetta(() => pillole().length === 3);
+  // Un tipo che non si legge: si dice e non parte.
+  scegli([file('video.mp4', 'video/mp4')]);
+  await p.aspetta(() => /Questo tipo di file non lo leggo/.test(p.testo()));
+  assert.equal(p.s.chiamate('POST', '/locale/allegato').length, 3);
+  // Il quarto va, poi il pulsante si spegne.
+  scegli([file('altra.png', 'image/png')]);
+  await p.aspetta(() => pillole().length === 4);
+  assert.equal(p.q('[data-allega="3"]').disabled, true);
+  // Togliere un file.
+  p.clic(p.q('[data-allegati="3"] [data-azione="togli-allegato"]'));
+  await p.aspetta(() => pillole().length === 3);
+  assert.equal(p.s.chiamate('DELETE', '/server/api/simulate/8/allegati/').length, 1);
+  assert.equal(p.q('[data-allega="3"]').disabled, false);
+  // Il server dice di no: la sua frase si vede.
+  p.s.risposta = (m, q) => (q.startsWith('/locale/allegato') ? [409, { errore: 'Questa verifica è già stata consegnata.', codice: 'conflitto' }] : undefined);
+  scegli([file('ultima.jpg', 'image/jpeg')]);
+  await p.aspetta(() => /Questa verifica è già stata consegnata/.test(p.testo()));
+  assert.equal(pillole().length, 3);
+});
+
+test('risultati dei conti: passaggi impaginati, ogni risultato col segno del programma, mezzo punto, file', opz, async () => {
+  const p = await apri('#simulata/9');
+  await p.aspetta(() => p.q('[data-simulata="corretta"]'));
+  assert.equal(p.q('[data-voto]').textContent, 'circa 7,5');
+  assert.match(p.q('[data-punti]').textContent, /11,5 punti su 15 · la sufficienza è a 9/);
+  const q2 = p.q('.sim-esito[data-domanda="2"]');
+  assert.match(q2.querySelector('.riga-su').textContent, /3,5 su 4/);
+  assert.ok(q2.querySelector('[data-tabella]'));
+  assert.ok(q2.querySelector('.mia.con-formule .f-fraz'));
+  const righe = p.tutti('.sim-riga-risultato', q2);
+  assert.deepEqual(righe.map((r) => r.getAttribute('data-risultato-esito')), ['giusto', 'non_arrotondato']);
+  assert.match(righe[0].textContent, /Valore medio.*1,686 cm.*Giusto/);
+  assert.match(righe[1].textContent, /Da arrotondare/);
+  const q5 = p.q('.sim-esito[data-domanda="5"]');
+  assert.match(q5.querySelector('.riga-su').textContent, /1,5 su 3/);
+  assert.match(q5.querySelector('.sim-riga-risultato').textContent, /12,5.*Da rivedere/);
+  assert.ok(q5.querySelector('[data-grafico="punti"]'));
+  const q3 = p.q('.sim-esito[data-domanda="3"]');
+  assert.equal(q3.querySelector('.dentro'), null);
+  p.clic(q3.querySelector('.intesta'));
+  await p.aspetta(() => q3.querySelector('.dentro'));
+  assert.match(q3.textContent, /equazione\.jpg/);
+  assert.match(q3.querySelector('.sim-riga-risultato').textContent, /x = 5.*Giusto/);
+  assert.doesNotMatch(p.testo(), /[!]/);
+});
+
 test('stato di lavorazione: avanzamento, Annulla; errore: Riprova ed Elimina', opz, async () => {
   const p = await apri('#schema/5');
   await p.aspetta(() => p.q('[data-vista="lavoro"]'));
@@ -542,7 +729,7 @@ test('chi ha già visto le novità non rivede niente', opz, async () => {
 test('nei testi nuovi niente emoji e niente punti esclamativi', () => {
   const ui = path.join(__dirname, '..', '..', 'ui');
   const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
-  for (const f of ['studio.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'simulate.js', 'modifiche.js', 'lettore.js']) {
+  for (const f of ['studio.js', 'schemi.js', 'riassunti.js', 'chiarimenti.js', 'lampo.js', 'formule.js', 'simulate.js', 'modifiche.js', 'lettore.js']) {
     const testo = fs.readFileSync(path.join(ui, f), 'utf8');
     assert.doesNotMatch(testo, emoji, f);
     for (const m of testo.matchAll(/'([^'\n]*[A-Za-zà-ù ]!)'/g)) assert.fail(f + ': punto esclamativo in ' + m[1]);

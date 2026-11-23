@@ -36,7 +36,7 @@ class LimiteCorpo:
             return
         intestazioni = dict(scope.get("headers") or [])
         tipo = intestazioni.get(b"content-type", b"").decode("latin-1").lower()
-        if tipo.startswith("multipart/form-data") and scope["path"].endswith("/materiale"):
+        if tipo.startswith("multipart/form-data") and scope["path"].endswith(("/materiale", "/allegati")):
             limite, frase = self.limite_file, FRASE_FILE
         else:
             limite, frase = self.limite_json, FRASE_JSON

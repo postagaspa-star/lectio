@@ -304,6 +304,10 @@
       case 'simulata-corso': await vai('#simulata/3', '.sim-domanda'); break;
       case 'simulata-consegna': await vai('#simulata/3', '.sim-domanda'); document.querySelector('[data-azione="consegna"]').click(); await aspetta('[data-consegna="conto"]'); break;
       case 'simulata-risultati': await vai('#simulata/4', '.sim-testata'); break;
+      // §21.1 Esercizi con i numeri: barra della matematica, tabella, grafici, risultati con il controllo.
+      case 'simulata-conti': await vai('#simulata/8', '.sim-domanda'); break;
+      case 'simulata-conti-pronta': await vai('#simulata/7', '[data-azione="inizia-simulata"]'); break;
+      case 'simulata-conti-risultati': await vai('#simulata/9', '.sim-testata'); break;
       // §44 Modifica, Correggi a mano, Torna a prima.
       case 'modifica-foglio': {
         await vai('#schema/3', '.sch-parte');

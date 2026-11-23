@@ -10,7 +10,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
-from . import ai, clock, controllo, db, lampo, memoria, prompt, prompt_studio, stile
+from . import ai, allegati, calcolo, clock, controllo, db, esercizi, lampo, memoria, prompt, prompt_studio, stile
 from . import scheda as schede
 from .cartella import Cartella
 from .lezione import Annullata, ErroreLezione
@@ -51,11 +51,76 @@ def valida(o: dict) -> list[str]:
     return []
 
 
-def domande_rotte(o: dict) -> list[str]:
-    """Le domande chiuse da sistemare. Non stanno in `valida`: due risposte con una crocetta rotta
-    farebbero fallire tutta la verifica; così si chiede una correzione e quello che resta rotto si toglie."""
-    return [f"la domanda {i} {problema}" for i, d in enumerate(o.get("domande") or [], start=1)
-            if isinstance(d, dict) and (problema := domanda_chiusa_rotta(d))][:6]
+def domande_rotte(o: dict, brani: list[dict] | None = None, numeri: bool = False) -> list[str]:
+    """Le domande da sistemare. Non stanno in `valida`: due risposte con una crocetta rotta farebbero fallire
+    tutta la verifica; così si chiede una correzione e quello che resta rotto si toglie (`normalizza`).
+    Dal 23/11/2026 anche gli esercizi con i numeri che il programma non sa risolvere o che hanno gli stessi
+    numeri dei materiali (contratto 21.1)."""
+    materiali = _materiali(brani) if brani else None
+    problemi = []
+    for i, d in enumerate(o.get("domande") or [], start=1):
+        if not isinstance(d, dict):
+            continue
+        problema = domanda_chiusa_rotta(d)
+        if not problema:
+            try:
+                conti = prepara_conti(d, numeri, materiali)
+            except esercizi.EsercizioRotto as e:
+                problema = f"ha questo problema: {e}"
+            else:
+                problema = (esercizio_incompleto(d) if conti is None else None) or manca_figura(d, conti)
+        if problema:
+            problemi.append(f"la domanda {i} {problema}")
+    return problemi[:8]
+
+
+def _materiali(brani: list[dict]) -> tuple[str, set]:
+    tutto = " ".join(b["testo"] for b in brani)
+    return calcolo.compatta(tutto), calcolo.numeri_del_testo(tutto)
+
+
+def prepara_conti(d: dict, numeri: bool, materiali: tuple | None) -> dict | None:
+    """None se la domanda non chiede conti; se no il calcolo risolto, la tabella e il grafico.
+    EsercizioRotto se il programma non lo sa risolvere o se ha gli stessi numeri dei materiali."""
+    if not esercizi.chiede_conti(d, numeri):
+        return None
+    testo = stile.formule_in_testo(" ".join(str(d.get("testo") or "").split()))
+    tab, graf = esercizi.tabella(d.get("tabella")), esercizi.grafico(d.get("grafico"))
+    visibile = esercizi.testo_visibile({"testo": testo, "tabella": tab, "grafico": graf})
+    r = esercizi.risolvi(d, visibile, esercizi.numeri_visibili(testo, tab, graf))
+    if materiali and esercizi.stessi_numeri(r["calcolo"], *materiali):
+        raise esercizi.EsercizioRotto("ha gli stessi numeri dell'esercizio dei materiali: riscrivilo con numeri nuovi")
+    return {**r, "tabella": tab, "grafico": graf}
+
+
+def manca_figura(d: dict, conti: dict | None) -> str | None:
+    testo = str(d.get("testo") or "")
+    tab = conti["tabella"] if conti else esercizi.tabella(d.get("tabella"))
+    graf = conti["grafico"] if conti else esercizi.grafico(d.get("grafico"))
+    if re.search(r"\btabell", testo, re.I) and not tab:
+        return 'parla di una tabella ma "tabella" manca o è scritta male'
+    if re.search(r"\bgrafic", testo, re.I) and not graf:
+        return 'parla di un grafico ma "grafico" manca o è scritto male'
+    return None
+
+
+_ARROTONDA = re.compile(r"arrotond|approssim|cifre significative", re.I)
+_UNITA = re.compile(r"\d\)?\s*(?:mm|cm|dm|km|mg|kg|g|ms|min|s|h|kN|N|kJ|J|kW|W|kPa|Pa|K|°C|mL|ml|L|m)(?:\^?[23²³]|/s²?)?(?![A-Za-zà-ù])")
+_UNITA_A_PAROLE = re.compile(r"\b(?:milli|centi|deci|chilo)?(?:metr|gramm|litr|second)[io]\b|\bnewton\b|\bjoule\b|\bwatt\b|\bkelvin\b|\bgradi\b", re.I)
+
+
+def esercizio_incompleto(d: dict) -> str | None:
+    """23/11/2026, fisica: "Calcola la semidispersione massima per le misure: 1,63; 1,65…" senza i centimetri e senza
+    chiedere di arrotondare, ma la risposta attesa era "0,025 cm, che si arrotonda a 0,03 cm". Si chiede di sistemarlo;
+    se resta così, l'esercizio non si toglie: ci pensa la correzione a non chiedere quello che il testo non chiede."""
+    testo, attesa = str(d.get("testo") or ""), str(d.get("risposta_attesa") or "")
+    if not attesa or not e_esercizio(str(d.get("tipo") or ""), testo):
+        return None
+    if _ARROTONDA.search(attesa) and not _ARROTONDA.search(testo):
+        return 'ha la risposta attesa arrotondata ma il "testo" non chiede di arrotondare'
+    if re.search(r"\d", testo) and _UNITA.search(attesa) and not (_UNITA.search(testo) or _UNITA_A_PAROLE.search(testo)):
+        return 'ha l\'unità di misura nella risposta attesa ma non nei dati del "testo"'
+    return None
 
 
 def domanda_chiusa_rotta(d: dict) -> str | None:
@@ -80,14 +145,18 @@ def domanda_chiusa_rotta(d: dict) -> str | None:
 _NON_SPECIFICATO = re.compile(r"\bnon (?:è |viene )?(?:specificat|indicat)[oa]\b|\bnon è detto nel\b", re.I)
 
 
-def normalizza(o: dict, brani: list[dict]) -> list[dict]:
-    """Le domande utilizzabili: un esercizio che non è scritto nei documenti non passa."""
+def normalizza(o: dict, brani: list[dict], numeri: bool = False) -> list[dict]:
+    """Le domande utilizzabili. Un esercizio senza numeri che non è scritto nei documenti non passa; uno con i numeri
+    passa solo con numeri nuovi e un calcolo che il programma sa risolvere (contratto 21.1)."""
     per_id = {b["id"]: b for b in brani}
     tutto = _normale(" ".join(b["testo"] for b in brani))
     parole = set(tutto.split())
+    materiali = _materiali(brani)
     uscita = []
     for d in o["domande"]:
-        testo = stile.formule_in_testo(" ".join(str(d["testo"]).split()))
+        if not isinstance(d, dict):
+            continue
+        testo = stile.formule_in_testo(" ".join(str(d.get("testo") or "").split()))
         tipo = str(d.get("tipo") or "").strip().lower().replace(" ", "_")
         tipo = tipo if tipo in prompt.TIPI_DOMANDA else "aperta"
         if not testo:
@@ -95,18 +164,33 @@ def normalizza(o: dict, brani: list[dict]) -> list[dict]:
         if domanda_chiusa_rotta(d):
             log.info("simulata: domanda chiusa scartata perché senza opzioni o senza soluzione")
             continue
-        if e_esercizio(tipo, testo) and not schede._trovata(testo, tutto, parole):
+        try:
+            conti = prepara_conti(d, numeri, materiali)
+        except esercizi.EsercizioRotto as e:
+            log.info("simulata: esercizio con i numeri scartato (%s)", e)
+            continue
+        if conti is None and e_esercizio(tipo, testo) and not schede._trovata(testo, tutto, parole):
             log.info("simulata: esercizio scartato perché non è nei documenti")
+            continue
+        if manca_figura(d, conti):
+            log.info("simulata: domanda scartata perché parla di una tabella o di un grafico che non c'è")
             continue
         try:
             punti = max(1, int(float(d.get("punti") or 0)))
         except (TypeError, ValueError):
             punti = 10
         ids = [str(i) for i in _lista(d.get("fonti")) if str(i) in per_id]
-        uscita.append({"n": len(uscita) + 1, "tipo": tipo, "testo": testo, "punti": punti,
-                       "sezione": " ".join(str(d.get("sezione")).split())[:80] if d.get("sezione") else None,
-                       "risposta_attesa": stile.formule_in_testo(" ".join(str(d.get("risposta_attesa") or "").split())),
-                       "fonti": memoria.fonti_di(ids, brani)})
+        metodo = stile.formule_in_testo(" ".join(str(d.get("risposta_attesa") or "").split()))
+        voce = {"n": len(uscita) + 1, "tipo": tipo, "testo": testo, "punti": punti,
+                "sezione": " ".join(str(d.get("sezione")).split())[:80] if d.get("sezione") else None,
+                "risposta_attesa": metodo, "fonti": memoria.fonti_di(ids, brani),
+                "forma": "formule" if numeri and tipo not in esercizi.TIPI_CHIUSI else "testo",
+                "tabella": conti["tabella"] if conti else esercizi.tabella(d.get("tabella")),
+                "grafico": conti["grafico"] if conti else esercizi.grafico(d.get("grafico"))}
+        if conti:
+            voce.update(tipo="esercizio", forma="conti", risultati=conti["risultati"], calcolo=conti["calcolo"], metodo=metodo,
+                        risposta_attesa=f"{metodo} {conti['soluzione']}".strip())
+        uscita.append(voce)
     return uscita
 
 
@@ -142,16 +226,17 @@ class PreparazioneSimulata:
         minuti = self.riga["minuti"]
         modello = self.ctx.settings.modello_scrittura
         n = domande_circa(minuti)
+        numeri = esercizi.con_i_numeri(self.riga["materia_nome"])
         messaggi = prompt_studio.messaggi_simulata(lettura, minuti, n)
         dati = {"lettura": lettura, "domande_circa": n}
-        max_token = min(8000, 800 + 340 * n)
+        max_token = min(10000, 900 + 450 * n)
         comuni = {"cassa": self.ctx.cassa, "fornitore": self.ctx.testo, "materia_id": self.riga["materia_id"],
                   "prima_di_ogni_chiamata": self.controlla, "riferimento": self.riferimento}
         grezzo = self.c.leggi("grezzo.json")
         if grezzo is None:
             grezzo = ai.chiedi_json(compito="simulata", messaggi=messaggi, modello=modello, valida=valida, max_token=max_token,
                                     cosa="Verifica simulata", dati=dati, **comuni)
-            rotte = domande_rotte(grezzo)
+            rotte = domande_rotte(grezzo, lettura["brani"], numeri)
             if rotte:
                 try:
                     nuovo = ai.chiedi_json(compito="simulata", modello=modello, valida=valida, max_token=max_token, dati=dati,
@@ -160,7 +245,7 @@ class PreparazioneSimulata:
                                            cosa="Verifica simulata (domande da sistemare)", **comuni)
                 except ai.RispostaNonUsabile:
                     nuovo = None
-                if nuovo and len(domande_rotte(nuovo)) < len(rotte):
+                if nuovo and len(domande_rotte(nuovo, lettura["brani"], numeri)) < len(rotte):
                     grezzo = nuovo
             self.c.scrivi("grezzo.json", grezzo)
         self._avanza("controllo", "Controllo le domande")
@@ -168,7 +253,7 @@ class PreparazioneSimulata:
                                     max_token=max_token, cosa="Verifica simulata", altro=prompt.scheda_in_parole(lettura.get("scheda")),
                                     materia_id=self.riga["materia_id"], prima=self.controlla, dati=dati, parlato=False,
                                     riferimento=self.riferimento)
-        domande = normalizza(riveduto, lettura["brani"])
+        domande = normalizza(riveduto, lettura["brani"], numeri)
         if not domande:
             raise ErroreLezione("Nei tuoi documenti non ho trovato abbastanza per farci una verifica: aggiungi il libro o una verifica vera.")
         ci_sono_verifiche = any(b["tipo"] == "verifica" for b in lettura["brani"])
@@ -211,6 +296,12 @@ class PreparazioneSimulata:
         return lettura
 
 
+def _mezzi(x: float) -> int | float:
+    """I punti al mezzo punto, come nelle verifiche vere: 1.5 resta 1.5, 3.0 diventa 3."""
+    x = round(float(x) * 2) / 2
+    return int(x) if x.is_integer() else x
+
+
 def _valida_correzione(o: dict) -> list[str]:
     domande = o.get("domande")
     if not isinstance(domande, list) or any(not isinstance(d, dict) for d in domande):
@@ -227,9 +318,27 @@ def correggi(ctx, simulata_id: int) -> None:
         scheda = schede.per_lezione(conn, r["materia_id"])
     domande = json.loads(r["domande"])
     risposte = json.loads(r["risposte"] or "{}")
-    voci = [{"n": d["n"], "punti": d["punti"], "testo": d["testo"], "risposta_attesa": d["risposta_attesa"],
-             "risposta": str(risposte.get(str(d["n"])) or "").strip()}
-            for d in domande if d["risposta_attesa"] and str(risposte.get(str(d["n"])) or "").strip()]
+    risultati = json.loads(r["risultati"] or "{}")
+    file_di = allegati.elenco(r)
+    scritto: dict[int, str] = {}
+    controlli: dict[int, list[dict]] = {}
+    for d in domande:
+        n = str(d["n"])
+        passaggi = str(risposte.get(n) or "").strip()
+        miei = [str(x or "").strip() for x in risultati.get(n) or []]
+        letti = [(a["nome"], allegati.testo(ctx, simulata_id, r["materia_id"], a)) for a in file_di.get(n) or []] if d["risposta_attesa"] else []
+        if d.get("calcolo") and (passaggi or any(miei) or letti):
+            controlli[d["n"]] = esercizi.controlla(d, passaggi + "\n" + "\n".join(t for _, t in letti), miei)
+        parti = [passaggi] if passaggi else []
+        nomi = d.get("risultati") or []
+        if any(miei):
+            parti.append("Risultati scritti: " + "; ".join(f"{nomi[i] if i < len(nomi) else 'Risultato'}: {x}" for i, x in enumerate(miei) if x))
+        parti += [f"Testo letto dal file «{nome}»:\n{t}" if t else f"(il file «{nome}» non si è riuscito a leggere)" for nome, t in letti]
+        if parti:
+            scritto[d["n"]] = "\n".join(parti)
+    voci = [{"n": d["n"], "punti": d["punti"], "testo": esercizi.testo_visibile(d), "risposta_attesa": d["risposta_attesa"],
+             "risposta": scritto[d["n"]], "controllo": esercizi.controllo_in_parole(controlli[d["n"]]) if d["n"] in controlli else None}
+            for d in domande if d["risposta_attesa"] and d["n"] in scritto]
     corrette: dict[int, dict] = {}
     if voci:
         o = ai.chiedi_json(cassa=ctx.cassa, fornitore=ctx.testo, compito="correzione_simulata",
@@ -244,8 +353,10 @@ def correggi(ctx, simulata_id: int) -> None:
     uscita = []
     punti, totali, da_rifare = 0, 0, 0
     for d in domande:
-        risposta = str(risposte.get(str(d["n"])) or "").strip()
+        risposta = scritto.get(d["n"], "")
         base = {"n": d["n"], "risposta_attesa": d["risposta_attesa"], "fonti": d.get("fonti") or []}
+        if d.get("calcolo"):
+            base["controllo"] = controlli.get(d["n"]) or esercizi.controlla(d, "", [])
         if not d["risposta_attesa"]:
             uscita.append({**base, "esito": "non_corretta", "punti": 0, "commento": FRASE_NON_CORRETTA, "mancava": []})
             continue
@@ -256,7 +367,7 @@ def correggi(ctx, simulata_id: int) -> None:
         else:
             esito = str(c["esito"]).strip().lower()
             try:
-                presi = max(0, min(d["punti"], int(round(float(c.get("punti") or 0)))))
+                presi = _mezzi(max(0.0, min(float(d["punti"]), float(c.get("punti") or 0))))
             except (TypeError, ValueError):
                 presi = 0
             commento = stile.ripulisci(" ".join(str(c.get("commento") or "").split()))[:400]
@@ -264,6 +375,7 @@ def correggi(ctx, simulata_id: int) -> None:
         punti += presi
         da_rifare += int(esito != "giusta")
         uscita.append({**base, "esito": esito, "punti": presi, "commento": commento, "mancava": mancava})
+    punti = _mezzi(punti)
     voto = max(1.0, round(20 * punti / totali) / 2) if totali else None
     esito_finale = {"punti": punti, "punti_totali": totali, "voto_stimato": voto, "soglia": round(SOGLIA_SUFFICIENZA * totali),
                     "domande": uscita, "da_rifare": da_rifare}
@@ -275,7 +387,8 @@ def correggi(ctx, simulata_id: int) -> None:
             return
         for u in uscita:
             if u["esito"] in ("parziale", "sbagliata") and u["risposta_attesa"]:
-                lampo.aggiungi(conn, r["materia_id"], "simulata", f"simulata:{simulata_id}:{u['n']}", per_n[u["n"]]["testo"], u["risposta_attesa"], u["fonti"])
+                lampo.aggiungi(conn, r["materia_id"], "simulata", f"simulata:{simulata_id}:{u['n']}", esercizi.testo_visibile(per_n[u["n"]]),
+                               u["risposta_attesa"], u["fonti"])
         db.aggiungi_novita(conn, "simulata_corretta", "Ho corretto la verifica di prova", materia_id=r["materia_id"])
 
 
@@ -294,7 +407,11 @@ def in_errore(db_path: str, simulata_id: int, frase: str) -> None:
 
 
 def _domanda_api(d: dict) -> dict:
-    return {k: d.get(k) for k in ("n", "tipo", "testo", "punti", "sezione")}
+    uscita = {k: d.get(k) for k in ("n", "tipo", "testo", "punti", "sezione", "tabella", "grafico")}
+    uscita["forma"] = d.get("forma") or "testo"
+    if uscita["forma"] == "conti":
+        uscita["risultati"] = d.get("risultati") or []
+    return uscita
 
 
 def per_api(r: sqlite3.Row, completa: bool = True) -> dict:
@@ -308,7 +425,8 @@ def per_api(r: sqlite3.Row, completa: bool = True) -> dict:
     esito = json.loads(r["esito"]) if r["esito"] else None
     if completa:
         # Le risposte attese stanno solo dentro `esito`: prima della correzione non escono.
-        uscita.update(domande=[_domanda_api(d) for d in json.loads(r["domande"] or "[]")], risposte=json.loads(r["risposte"] or "{}"), esito=esito)
+        uscita.update(domande=[_domanda_api(d) for d in json.loads(r["domande"] or "[]")], risposte=json.loads(r["risposte"] or "{}"),
+                      risultati=json.loads(r["risultati"] or "{}"), allegati=allegati.per_api(allegati.elenco(r)), esito=esito)
     else:
         uscita.update(esito={k: esito[k] for k in ("punti", "punti_totali", "voto_stimato", "soglia", "da_rifare")} if esito else None)
     return uscita

@@ -1,17 +1,20 @@
 """Schemi, "Non ho capito", ripasso lampo e verifica simulata (contratto 18-21)."""
 
+import asyncio
 import json
 import re
 import sqlite3
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from starlette.datastructures import UploadFile
 from fastapi.responses import FileResponse, Response
 
 from ..firma import FIRMA
-from .. import chiarimenti, clock, lampo, mappe, modifiche, pdf, riassunti, schema_ripasso, simulata
+from .. import allegati, chiarimenti, clock, lampo, lettura, mappe, modifiche, pdf, riassunti, schema_ripasso, simulata
+from ..config import MASSIMO_BYTE_FILE
 from ..auth import richiede_token
 from ..db import get_conn, transazione
-from ..errori import conflitto, non_trovato, non_valido, tetto
+from ..errori import ErroreApi, conflitto, non_trovato, non_valido, tetto
 from ..schemi import ChiarimentoIn, LampoIn, MappaIn, RiassuntoIn, SchemaIn, SchemaStimaIn, SimulataIn, SimulataPatch, SimulataStimaIn
 from ..servizi import Servizi, servizi
 from ..spesa import arrotonda_su
@@ -491,9 +494,89 @@ def salva_simulata(simulata_id: int, corpo: SimulataPatch, conn: sqlite3.Connect
         if corpo.risposte is not None:
             risposte = {**json.loads(r["risposte"] or "{}"), **corpo.risposte}
             conn.execute("UPDATE simulate SET risposte = ? WHERE id = ?", (json.dumps(risposte, ensure_ascii=False), simulata_id))
+        if corpo.risultati is not None:
+            risultati = {**json.loads(r["risultati"] or "{}"), **corpo.risultati}
+            conn.execute("UPDATE simulate SET risultati = ? WHERE id = ?", (json.dumps(risultati, ensure_ascii=False), simulata_id))
         if corpo.iniziata and r["stato"] == "pronta":
             conn.execute("UPDATE simulate SET stato = 'in_corso', iniziata_il = ? WHERE id = ?", (clock.adesso(), simulata_id))
     return simulata_api(conn, trova_simulata(conn, simulata_id))
+
+
+@router.post("/simulate/{simulata_id}/allegati", status_code=201)
+async def aggiungi_allegato(simulata_id: int, request: Request, conn: sqlite3.Connection = Depends(get_conn),
+                            s: Servizi = Depends(servizi)):
+    """Una foto o un PDF per una risposta (contratto 21.1): si legge solo alla correzione."""
+    try:
+        lunghezza = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        lunghezza = 0
+    if lunghezza > MASSIMO_BYTE_FILE + 512 * 1024:
+        raise ErroreApi(413, "Il file è troppo grande: il massimo è 20 MB.")
+    form = await request.form(max_files=1, max_fields=4)
+    try:
+        file = form.get("file")
+        if not isinstance(file, UploadFile):
+            raise non_valido("Manca il file.", campo="file")
+        contenuto = await file.read(MASSIMO_BYTE_FILE + 1)
+        nome = re.sub(r"[^\w.\- ]", "_", (file.filename or "file").replace("\\", "/").rsplit("/", 1)[-1]).strip(" .")[:120] or "file"
+        n = str(form.get("n") or "").strip()
+    finally:
+        await form.close()
+    if len(contenuto) > MASSIMO_BYTE_FILE:
+        raise ErroreApi(413, "Il file è troppo grande: il massimo è 20 MB.")
+    if not contenuto:
+        raise non_valido("Il file è vuoto.", campo="file")
+    est = lettura.estensione(nome)
+    if est not in allegati.FORMATI:
+        raise non_valido(allegati.FRASE_FORMATO, campo="file")
+    r = trova_simulata(conn, simulata_id)
+    if r["stato"] not in ("pronta", "in_corso"):
+        raise conflitto("Questa verifica non si può più modificare.")
+    numeri = {str(d["n"]) for d in json.loads(r["domande"] or "[]")}
+    if n not in numeri:
+        raise non_valido("Questa domanda non c'è nella verifica.", campo="n")
+    if len(allegati.elenco(r).get(n) or []) >= allegati.PER_DOMANDA:
+        raise conflitto(allegati.FRASE_TROPPI)
+    if est in lettura.HEIC:
+        try:
+            contenuto = await asyncio.to_thread(lettura.da_heic, contenuto)
+        except lettura.FileIlleggibile as e:
+            raise non_valido(e.frase, campo="file") from None
+        est, nome = "jpg", lettura.nome_jpg(nome)
+    elif est == "jpeg":
+        est = "jpg"
+    nuovo = allegati.salva(s.settings.dati_dir, simulata_id, nome, est, contenuto)
+    with transazione(conn):
+        r = trova_simulata(conn, simulata_id)
+        elenco = allegati.elenco(r)
+        if r["stato"] not in ("pronta", "in_corso") or len(elenco.get(n) or []) >= allegati.PER_DOMANDA:
+            allegati.togli_file(s.settings.dati_dir, simulata_id, nuovo)
+            raise conflitto(allegati.FRASE_TROPPI if r["stato"] in ("pronta", "in_corso") else "Questa verifica non si può più modificare.")
+        elenco.setdefault(n, []).append(nuovo)
+        conn.execute("UPDATE simulate SET allegati = ? WHERE id = ?", (json.dumps(elenco, ensure_ascii=False), simulata_id))
+    return {"id": nuovo["id"], "nome": nuovo["nome"], "tipo": nuovo["tipo"]}
+
+
+@router.delete("/simulate/{simulata_id}/allegati/{allegato_id}")
+def togli_allegato(simulata_id: int, allegato_id: str, conn: sqlite3.Connection = Depends(get_conn),
+                   s: Servizi = Depends(servizi)):
+    with transazione(conn):
+        r = trova_simulata(conn, simulata_id)
+        if r["stato"] not in ("pronta", "in_corso"):
+            raise conflitto("Questa verifica non si può più modificare.")
+        elenco = allegati.elenco(r)
+        tolto = None
+        for n, voci in elenco.items():
+            for a in voci:
+                if a["id"] == allegato_id:
+                    tolto = a
+            elenco[n] = [a for a in voci if a["id"] != allegato_id]
+        if tolto is None:
+            raise non_trovato("Questo file non c'è più.")
+        elenco = {n: v for n, v in elenco.items() if v}
+        conn.execute("UPDATE simulate SET allegati = ? WHERE id = ?", (json.dumps(elenco, ensure_ascii=False), simulata_id))
+    allegati.togli_file(s.settings.dati_dir, simulata_id, tolto)
+    return {"ok": True}
 
 
 @router.post("/simulate/{simulata_id}/consegna")

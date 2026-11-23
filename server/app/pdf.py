@@ -5,9 +5,11 @@ l'ha scritto: nomi delle fonti e crediti delle foto sì, perché servono."""
 
 import html
 import io
+import math
 import re
 from pathlib import Path
 
+from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
@@ -188,6 +190,109 @@ def schema_pdf(riga: dict, contenuto: dict, materia: dict, cartella_foto: Path) 
     return _documento(storia, str(riga.get("titolo") or "Schema"))
 
 
+def _numero_breve(v: float) -> str:
+    t = f"{v:.6f}".rstrip("0").rstrip(".")
+    return ("0" if t in ("-0", "") else t).replace(".", ",")
+
+
+def _tacche(a: float, b: float, quante: int = 5) -> list[float]:
+    """Tacche "tonde" (1, 2, 2,5, 5 per una potenza di dieci) che coprono da a a b."""
+    if a == b:
+        a, b = a - 1, b + 1
+    grezzo = (b - a) / quante
+    scala = 10 ** math.floor(math.log10(grezzo))
+    passo = next(m * scala for m in (1, 2, 2.5, 5, 10) if m * scala >= grezzo)
+    inizio, fine = math.floor(a / passo) * passo, math.ceil(b / passo) * passo
+    return [round(inizio + i * passo, 10) for i in range(int(round((fine - inizio) / passo)) + 1)]
+
+
+def _intervallo(valori: list[float]) -> tuple[float, float]:
+    """Un po' di spazio intorno ai punti; dati tutti positivi e vicini allo 0 partono da 0, come sul quaderno."""
+    a, b = min(valori), max(valori)
+    margine = (b - a) * 0.04
+    a, b = a - margine, b + margine
+    if min(valori) >= 0 and min(valori) <= 0.5 * max(valori):
+        a = 0.0
+    return a, b
+
+
+def _tabella_pdf(tab: dict, s: dict, colore) -> Table:
+    righe = [[Paragraph(_testo(c), s["testata"]) for c in tab["colonne"]]]
+    righe += [[Paragraph(_testo(c), s["cella"]) for c in r] for r in tab["valori"]]
+    t = Table(righe, hAlign="LEFT", repeatRows=1)
+    t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colore), ("GRID", (0, 0), (-1, -1), 0.4, LINEA),
+                           ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                           ("RIGHTPADDING", (0, 0), (-1, -1), 8)]))
+    return t
+
+
+def _grafico_pdf(g: dict, colore) -> Drawing:
+    """Il grafico della domanda (contratto 21.1), disegnato a mano: assi, tacche, punti, linee o barre."""
+    font, _ = _font()
+    larghezza, altezza = LARGHEZZA * 0.72, 64 * mm
+    sx, dx, su, giu = 16 * mm, 4 * mm, 6 * mm, 11 * mm
+    d = Drawing(larghezza, altezza)
+    barre = g["tipo"] == "barre"
+    if barre:
+        xs = [-0.5, len(g["categorie"]) - 0.5]
+        ys = [0.0] + [float(v) for s in g["serie"] for v in s["valori"]]
+    else:
+        xs = [float(p[0]) for s in g["serie"] for p in s["punti"]]
+        ys = [float(p[1]) for s in g["serie"] for p in s["punti"]]
+    tx = None if barre else _tacche(*_intervallo(xs))
+    ty = _tacche(*_intervallo(ys))
+    x0, x1 = (xs[0], xs[1]) if barre else (tx[0], tx[-1])
+    y0, y1 = ty[0], ty[-1]
+    pw, ph = larghezza - sx - dx, altezza - su - giu
+
+    def px(x):
+        return sx + (x - x0) / (x1 - x0) * pw
+
+    def py(y):
+        return giu + (y - y0) / (y1 - y0) * ph
+
+    for y in ty:
+        d.add(Line(sx, py(y), sx + pw, py(y), strokeColor=LINEA, strokeWidth=0.3))
+        d.add(String(sx - 2, py(y) - 2.5, _numero_breve(y), fontName=font, fontSize=7, fillColor=GRIGIO, textAnchor="end"))
+    for x in tx or []:
+        d.add(Line(px(x), giu, px(x), giu + ph, strokeColor=LINEA, strokeWidth=0.3))
+        d.add(String(px(x), giu - 9, _numero_breve(x), fontName=font, fontSize=7, fillColor=GRIGIO, textAnchor="middle"))
+    asse_y = px(0) if not barre and x0 <= 0 <= x1 else sx
+    asse_x = py(0) if y0 <= 0 <= y1 else giu
+    d.add(Line(sx, asse_x, sx + pw, asse_x, strokeColor=INCHIOSTRO, strokeWidth=0.8))
+    d.add(Line(asse_y, giu, asse_y, giu + ph, strokeColor=INCHIOSTRO, strokeWidth=0.8))
+    tinte = [colore, colors.HexColor("#636F8E"), colors.HexColor("#C27C0E"), colors.HexColor("#2B8A3E"), colors.HexColor("#A34A80")]
+    if barre:
+        quante = len(g["serie"])
+        for i, nome in enumerate(g["categorie"]):
+            d.add(String(px(i), giu - 9, nome[:14], fontName=font, fontSize=7, fillColor=GRIGIO, textAnchor="middle"))
+            for k, s in enumerate(g["serie"]):
+                largo = 0.7 / quante
+                sinistra = px(i - 0.35 + k * largo)
+                v = float(s["valori"][i])
+                d.add(Rect(sinistra, min(asse_x, py(v)), px(i - 0.35 + (k + 1) * largo) - sinistra - 1, abs(py(v) - asse_x),
+                           fillColor=tinte[k % len(tinte)], strokeColor=None))
+    else:
+        for k, s in enumerate(g["serie"]):
+            tinta = tinte[k % len(tinte)]
+            punti = [(px(float(p[0])), py(float(p[1]))) for p in s["punti"]]
+            if g["tipo"] == "linee" and len(punti) > 1:
+                d.add(PolyLine([c for p in punti for c in p], strokeColor=tinta, strokeWidth=1.3))
+            if g["tipo"] == "punti" or len(punti) <= 12:
+                for x, y in punti:
+                    d.add(Circle(x, y, 1.8, fillColor=tinta, strokeColor=None))
+    if g.get("asse_x"):
+        d.add(String(sx + pw, giu + 3 if asse_x <= giu + 1 else asse_x + 3, g["asse_x"], fontName=font, fontSize=7.5,
+                     fillColor=INCHIOSTRO, textAnchor="end"))
+    if g.get("asse_y"):
+        d.add(String(asse_y + 3, giu + ph - 2, g["asse_y"], fontName=font, fontSize=7.5, fillColor=INCHIOSTRO))
+    nomi = [(s["nome"], tinte[k % len(tinte)]) for k, s in enumerate(g["serie"]) if s.get("nome")]
+    for k, (nome, tinta) in enumerate(nomi):
+        d.add(Rect(sx + 4 + k * 38 * mm, altezza - 4, 6, 3, fillColor=tinta, strokeColor=None))
+        d.add(String(sx + 12 + k * 38 * mm, altezza - 4.5, nome[:30], fontName=font, fontSize=7, fillColor=INCHIOSTRO))
+    return d
+
+
 def simulata_pdf(riga: dict, domande: list[dict], materia: dict) -> bytes:
     colore = colors.HexColor(COLORE_MATERIA.get(materia.get("colore"), COLORE_MATERIA["ambra"]))
     s = _stili(colore)
@@ -202,10 +307,21 @@ def simulata_pdf(riga: dict, domande: list[dict], materia: dict) -> bytes:
             parti.append(Paragraph(_testo(sezione_attuale), s["sezione"]))
         punti = f"  <font color='#6B7280'>({d.get('punti')} punti)</font>" if d.get("punti") else ""
         parti.append(Paragraph(f"<b>{d.get('n')}.</b> {_testo(d.get('testo'))}{punti}", s["base"]))
+        if d.get("tabella"):
+            parti += [_tabella_pdf(d["tabella"], s, colore), Spacer(1, 6)]
+        if d.get("grafico"):
+            try:
+                parti += [_grafico_pdf(d["grafico"], colore), Spacer(1, 4)]
+            except (ValueError, ZeroDivisionError, KeyError, IndexError, TypeError):
+                pass  # un grafico che non si disegna non deve fermare il PDF
         righe_vuote = 9 if d.get("tipo") in ("aperta", "collegamento", "esercizio") else 4
         spazi = Table([[""]] * righe_vuote, colWidths=[LARGHEZZA], rowHeights=[8 * mm] * righe_vuote)
         spazi.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, LINEA)]))
-        parti += [spazi, Spacer(1, 10)]
+        parti.append(spazi)
+        if d.get("forma") == "conti":
+            parti.append(Spacer(1, 6))
+            parti += [Paragraph(f"<b>{_testo(nome)}</b>: ______________________________", s["base"]) for nome in d.get("risultati") or []]
+        parti.append(Spacer(1, 10))
         storia.append(KeepTogether(parti))
     return _documento(storia, str(riga.get("titolo") or "Verifica"))
 

@@ -528,6 +528,13 @@ ALTER TABLE eventi ADD COLUMN racconto_nascosto_il TEXT
 """
 
 
+# 1.5.0 (23/11): nella verifica di prova i risultati scritti nei campi degli esercizi e le foto o i file aggiunti.
+SCHEMA_10 = """
+ALTER TABLE simulate ADD COLUMN risultati TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE simulate ADD COLUMN allegati TEXT NOT NULL DEFAULT '{}'
+"""
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
@@ -539,6 +546,7 @@ MIGRAZIONI = [
     (7, SCHEMA_7, None),
     (8, SCHEMA_8, None),
     (9, SCHEMA_9, None),
+    (10, SCHEMA_10, None),
 ]
 
 

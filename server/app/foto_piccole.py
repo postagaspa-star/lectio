@@ -308,7 +308,7 @@ def lettore(ctx):
 
 
 def leggi(ctx, contenuto: bytes, formato: str, *, titolo: str, materiale_id: int | None = None,
-          materia_id: int | None = None) -> str | None:
+          materia_id: int | None = None, riferimento: str | None = None) -> str | None:
     """Il testo di una foto piccola letto da luna; None se va letta con l'OCR (foto grande, PDF, luna che non c'è o
     non riesce). Solo il tetto del mese ferma tutto (TettoRaggiunto): l'OCR costerebbe di più."""
     if formato not in lettura.IMMAGINI:
@@ -363,7 +363,7 @@ def leggi(ctx, contenuto: bytes, formato: str, *, titolo: str, materiale_id: int
         risposta = ctx.cassa.chiama(
             cosa=f"Lettura di «{titolo}» (foto piccola)", fornitore=openai.nome, stima_eur=p.costo_peggiore_eur,
             quantita_stimata=p.token_entrata + TOKEN_USCITA, unita="token", materiale_id=materiale_id,
-            materia_id=materia_id, fare=fare, registra=registra)
+            materia_id=materia_id, riferimento=riferimento, fare=fare, registra=registra)
     except TettoRaggiunto:
         raise
     except ErroreFornitore as e:

@@ -466,6 +466,62 @@
     };
   }
 
+  // §21.1 Una verifica di prova con i numeri (Matematica): formule, conti con tabella e grafici.
+  function domandeConti() {
+    return [
+      { n: 1, tipo: 'aperta', forma: 'formule', testo: 'Spiega come si calcola la semidispersione massima di una serie di misure.', punti: 2, sezione: null, tabella: null, grafico: null },
+      {
+        n: 2, tipo: 'esercizio', forma: 'conti', testo: 'Calcola il valore medio e la semidispersione massima delle misure in tabella. Arrotonda la semidispersione a due cifre decimali.', punti: 4, sezione: null,
+        risultati: ['Valore medio', 'Semidispersione massima'],
+        tabella: { titolo: null, colonne: ['Misura', 'x (cm)'], valori: [['1', '1,72'], ['2', '1,68'], ['3', '1,75'], ['4', '1,70'], ['5', '1,58']] }, grafico: null,
+      },
+      { n: 3, tipo: 'esercizio', forma: 'conti', testo: 'Risolvi l\'equazione 3(x - 2) = x + 4.', punti: 3, sezione: null, risultati: ['Soluzione'], tabella: null, grafico: null },
+      {
+        n: 4, tipo: 'aperta', forma: 'formule', testo: 'Il grafico mostra la retta r. Scrivi la sua equazione.', punti: 3, sezione: null, tabella: null,
+        grafico: { tipo: 'linee', titolo: null, asse_x: 'x', asse_y: 'y', serie: [{ nome: 'r', punti: [[-2, -5], [-1, -3], [0, -1], [1, 1], [2, 3], [3, 5]] }] },
+      },
+      {
+        n: 5, tipo: 'esercizio', forma: 'conti', testo: 'Il grafico mostra la posizione di un carrello nel tempo. Calcola la velocità media tra 0 s e 4 s.', punti: 3, sezione: null,
+        risultati: ['Velocità media'], tabella: null,
+        grafico: { tipo: 'punti', titolo: null, asse_x: 't (s)', asse_y: 's (m)', serie: [{ nome: null, punti: [[0, 0], [1, 1.2], [2, 2.5], [3, 3.6], [4, 5]] }] },
+      },
+    ];
+  }
+
+  function esitoConti() {
+    return {
+      punti: 11.5, punti_totali: 15, voto_stimato: 7.5, soglia: 9, da_rifare: 3,
+      domande: [
+        { n: 1, esito: 'giusta', punti: 2, commento: 'Giusto: la misura più grande meno la più piccola, diviso 2.', mancava: [], risposta_attesa: 'Si sottrae la misura più piccola dalla più grande e si divide per 2: Δx = (xmax - xmin) / 2.', fonti: [] },
+        {
+          n: 2, esito: 'parziale', punti: 3.5, commento: 'Il valore medio è giusto. La semidispersione andava arrotondata a due cifre decimali, come chiede il testo.', mancava: [],
+          risposta_attesa: 'Valore medio: (1,72 + 1,68 + 1,75 + 1,70 + 1,58) / 5 = 1,686 cm. Semidispersione massima: (1,75 - 1,58) / 2 = 0,085 cm, arrotondata 0,09 cm.', fonti: [],
+          controllo: [{ cosa: 'Valore medio', scritto: '1,686 cm', atteso: '1,686 cm', esito: 'giusto' }, { cosa: 'Semidispersione massima', scritto: '0,085 cm', atteso: '0,09 cm', esito: 'non_arrotondato' }],
+        },
+        {
+          n: 3, esito: 'giusta', punti: 3, commento: 'Passaggi giusti e soluzione giusta.', mancava: [], risposta_attesa: '3x - 6 = x + 4, quindi 2x = 10. Soluzione: x = 5.', fonti: [],
+          controllo: [{ cosa: 'Soluzione', scritto: 'x = 5', atteso: 'x = 5', esito: 'giusto' }],
+        },
+        { n: 4, esito: 'parziale', punti: 1.5, commento: 'L\'intercetta -1 è giusta, ma la pendenza è 2, non 1: la retta sale di 2 a ogni passo verso destra.', mancava: ['Pendenza'], risposta_attesa: 'y = 2x - 1', fonti: [] },
+        {
+          n: 5, esito: 'parziale', punti: 1.5, commento: 'Il metodo è giusto, ma 5 / 4 fa 1,25, non 12,5.', mancava: [], risposta_attesa: 'v = Δs / Δt = (5 - 0) / (4 - 0) = 1,25 m/s.', fonti: [],
+          controllo: [{ cosa: 'Velocità media', scritto: '12,5', atteso: '1,25 m/s', esito: 'sbagliato' }],
+        },
+      ],
+    };
+  }
+
+  function simulateConti() {
+    const base = { materia_id: 5, evento_id: null, argomento: 'Misure, equazioni e grafici', titolo: 'Verifica su misure, equazioni e grafici', minuti: 30, materiali: [], indicazioni: '', fase: null, fatto: 0, totale: 0, frase: null, errore: null, nota: null, stima_eur: 0.02, creata_il: '2026-10-26T18:00:00+01:00', iniziata_il: null, consegnata_il: null, domande: [], risposte: {}, risultati: {}, allegati: {}, esito: null };
+    const risposte = { 1: 'Si fa la misura più grande meno la più piccola, diviso 2: Δx = (x_max - x_min)/2', 2: '(1,72+1,68+1,75+1,70+1,58)/5 = 8,43/5\n(1,75-1,58)/2 = 0,17/2', 3: '3x - 6 = x + 4\n2x = 10', 4: 'y = x - 1', 5: 'v = Δs/Δt = 5/4' };
+    const risultati = { 2: ['1,686 cm', '0,085 cm'], 3: ['x = 5'], 5: ['12,5'] };
+    return [
+      Object.assign({}, base, { id: 9, stato: 'corretta', iniziata_il: '2026-10-26T18:10:00+01:00', consegnata_il: '2026-10-26T18:38:00+01:00', domande: domandeConti(), risposte, risultati, allegati: { 3: [{ id: 'fq8Lm2xA', nome: 'equazione.jpg', tipo: 'foto' }] }, esito: esitoConti() }),
+      Object.assign({}, base, { id: 8, stato: 'in_corso', iniziata_il: '2026-10-27T09:45:00+01:00', domande: domandeConti(), risposte: { 1: risposte[1], 2: risposte[2] }, risultati: { 2: ['1,686 cm', ''] }, allegati: {} }),
+      Object.assign({}, base, { id: 7, stato: 'pronta', domande: domandeConti() }),
+    ];
+  }
+
   function simulate() {
     const base = { materia_id: 1, evento_id: 3, argomento: 'L\'Impero romano da Augusto a Nerone', titolo: 'Verifica sull\'Impero romano', minuti: 50, materiali: [12, 11, 13, 14, 15], indicazioni: '', fase: null, fatto: 0, totale: 0, frase: null, errore: null, nota: null, stima_eur: 0.03, creata_il: '2026-10-26T17:00:00+01:00', iniziata_il: null, consegnata_il: null, domande: [], risposte: {}, esito: null };
     const risposte = { 1: 'Perché a Roma la parola re faceva pensare alla tirannia, quindi si presenta come primo cittadino.', 2: 'È un governo dove restano le istituzioni della Repubblica.', 3: 'Il comando dell\'esercito.', 4: 'Nel 31.', 5: 'Era il capo dei pretoriani di Tiberio.', 7: 'Caligola governa da padrone e umilia il senato. Claudio sembra debole ma organizza bene lo Stato.', 8: 'Perché il senato si mette contro Nerone.' };
@@ -475,7 +531,7 @@
       Object.assign({}, base, { id: 4, stato: 'corretta', iniziata_il: '2026-10-25T15:00:00+01:00', consegnata_il: '2026-10-25T15:56:00+01:00', domande: domandeSimulata(), risposte, esito: esitoSimulata() }),
       Object.assign({}, base, { id: 3, stato: 'in_corso', iniziata_il: '2026-10-27T09:40:00+01:00', minuti: 30, domande: domandeSimulata(), risposte: { 1: risposte[1], 2: risposte[2], 3: risposte[3], 5: risposte[5], 7: risposte[7] } }),
       Object.assign({}, base, { id: 2, stato: 'pronta', nota: 'Ho preso il formato dalle tue 2 verifiche di Storia.', domande: domandeSimulata() }),
-    ];
+    ].concat(simulateConti());
   }
 
   const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -670,7 +726,7 @@
         }
         if (i >= 1) Object.assign(x, { stato: 'in_preparazione', fase: 'scrittura', fatto: i, totale: 2, frase: 'Scrivo le domande' });
       } else if (x.stato === 'in_correzione' && i >= 2) {
-        Object.assign(x, { stato: 'corretta', esito: esitoSimulata() });
+        Object.assign(x, { stato: 'corretta', esito: (x.domande || []).some((d) => d.forma === 'conti') ? esitoConti() : esitoSimulata() });
         delete x._t0;
       }
     };
@@ -865,6 +921,8 @@
       const c = senzaInterni(x);
       delete c.domande;
       delete c.risposte;
+      delete c.risultati;
+      delete c.allegati;
       if (c.esito) c.esito = { punti: c.esito.punti, punti_totali: c.esito.punti_totali, voto_stimato: c.esito.voto_stimato, soglia: c.esito.soglia, da_rifare: c.esito.da_rifare };
       return c;
     };
@@ -1428,6 +1486,28 @@
         s.simulate.unshift(x);
         return [201, simulataPerApi(x)];
       }
+      // §21.1 Foto o file aggiunti a una risposta: 4 per domanda, solo a verifica pronta o in corso.
+      if ((m = /^\/server\/api\/simulate\/(\d+)\/allegati(?:\/([A-Za-z0-9_-]+))?$/.exec(p)) && (metodo === 'POST' || metodo === 'DELETE')) {
+        const x = s.simulate.find((y) => y.id === Number(m[1]));
+        if (!x) return [404, { errore: 'Questa verifica non c\'è più.', codice: 'non_trovato' }];
+        if (x.stato !== 'pronta' && x.stato !== 'in_corso') return [409, { errore: 'Questa verifica è già stata consegnata.', codice: 'conflitto' }];
+        x.allegati = x.allegati || {};
+        if (metodo === 'DELETE') {
+          for (const k of Object.keys(x.allegati)) x.allegati[k] = x.allegati[k].filter((a) => a.id !== m[2]);
+          return [200, { ok: true }];
+        }
+        const c = corpo || {};
+        const n = String(Number(c.n) || '');
+        if (!(x.domande || []).some((d) => String(d.n) === n)) return [422, { errore: 'Questa domanda non c\'è nella verifica.', codice: 'non_valido', campo: 'n' }];
+        const nome = String(c.nome || '');
+        const est = (nome.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+        if (!['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.pdf'].includes(est)) return [422, { errore: 'Questo tipo di file non lo leggo. Usa una foto JPG, PNG, WEBP o HEIC, oppure un PDF.', codice: 'non_valido', campo: 'file' }];
+        const lista = x.allegati[n] || [];
+        if (lista.length >= 4) return [422, { errore: 'Al massimo 4 file per domanda.', codice: 'non_valido', campo: 'file' }];
+        const nuovo = { id: 'a' + (s.prossimoId++), nome: /\.hei[cf]$/.test(est) ? nome.replace(/\.[^.]+$/, '.jpg') : nome, tipo: est === '.pdf' ? 'pdf' : 'foto' };
+        x.allegati[n] = lista.concat(nuovo);
+        return [201, nuovo];
+      }
       if ((m = /^\/server\/api\/simulate\/(\d+)\/(annulla|riprova|consegna)$/.exec(p)) && metodo === 'POST') {
         const x = s.simulate.find((y) => y.id === Number(m[1]));
         if (!x) return [404, { errore: 'Questa verifica non c\'è più.', codice: 'non_trovato' }];
@@ -1446,6 +1526,8 @@
         if (metodo === 'PATCH') {
           if (x.stato !== 'pronta' && x.stato !== 'in_corso') return [409, { errore: 'Questa verifica è già stata consegnata.', codice: 'conflitto' }];
           Object.assign(x.risposte, (corpo || {}).risposte || {});
+          // §21.1: i campi del risultato, domanda per domanda come le risposte.
+          if ((corpo || {}).risultati) x.risultati = Object.assign({}, x.risultati || {}, corpo.risultati);
           if ((corpo || {}).iniziata && x.stato === 'pronta') { x.stato = 'in_corso'; x.iniziata_il = new Date().toISOString(); }
           return [200, simulataPerApi(x)];
         }

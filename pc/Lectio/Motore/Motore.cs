@@ -61,6 +61,9 @@ public sealed class Motore : IDisposable
     /// <summary>§6: i formati che il server legge (le foto HEIC le fa diventare JPEG lui, dalla 1.3.6).</summary>
     public static readonly string[] Estensioni = { ".txt", ".md", ".pdf", ".docx", ".odt", ".rtf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif" };
 
+    /// <summary>Contratto §21.1: i file che si aggiungono a una risposta della verifica di prova (foto e PDF).</summary>
+    public static readonly string[] EstensioniAllegato = { ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".pdf" };
+
     private static readonly Regex PercorsoAmmesso = new(@"^api/[A-Za-z0-9_\-/]*$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoNuovaLezione = new(@"^api/lezioni/?$", RegexOptions.CultureInvariant);
     private static readonly Regex PercorsoRiprovaLezione = new(@"^api/lezioni/\d+/riprova/?$", RegexOptions.CultureInvariant);
@@ -937,6 +940,41 @@ public sealed class Motore : IDisposable
         var r = await client.InviaContenutoAsync("POST", base_, percorso, tok, multipart, TempoForzato ?? TempoCaricamento).ConfigureAwait(false);
         Annota(r, base_);
         if (r.Scaduta) return ErrorePonte(504, "Il server ci sta mettendo troppo: guarda tra poco nel materiale se il file è arrivato prima di rimandarlo.", "esito_sconosciuto");
+        if (ComeSenzaRete(r)) return ErrorePonte(503, "Il file non è arrivato al server di casa. Controlla la connessione e riprova.", "rete");
+        if (r.Ok) return new RispostaPonte(r.Stato, string.IsNullOrWhiteSpace(r.Corpo) ? "{}" : r.Corpo);
+        return new RispostaPonte(r.Stato, ErroreLeggibile(r).ToJsonString());
+    }
+
+    /// <summary>
+    /// Contratto §21.1: una foto o un PDF aggiunto alla risposta <paramref name="domanda"/> della verifica di prova
+    /// <paramref name="simulataId"/>. Va al server in multipart (<c>n</c> e <c>file</c>); i controlli che il server
+    /// fa comunque (al massimo 4 per domanda, verifica non ancora consegnata) li dice lui con la sua frase.
+    /// </summary>
+    public async Task<RispostaPonte> CaricaAllegatoAsync(long? simulataId, int? domanda, string? nomeFile, byte[]? dati)
+    {
+        if (!Abbinato) return ErrorePonte(401, Frasi.NonCollegato, "non_abbinato");
+        if (simulataId is not long id || id <= 0 || domanda is not int n || n <= 0) return ErrorePonte(422, "Questa domanda non c'è nella verifica.", "non_valido");
+        if (dati == null || dati.Length == 0) return ErrorePonte(422, "Il file è vuoto oppure non è arrivato al programma. Riprova.", "non_valido");
+        if (dati.LongLength > MassimoByteFile) return ErrorePonte(413, "Il file è troppo grande: il massimo è 20 MB.", "troppo_grande");
+        var nome = Path.GetFileName((nomeFile ?? "").Trim());
+        var estensione = Path.GetExtension(nome).ToLowerInvariant();
+        if (nome.Length == 0 || !EstensioniAllegato.Contains(estensione))
+        {
+            return ErrorePonte(422, "Questo tipo di file non lo leggo. Usa una foto JPG, PNG, WEBP o HEIC, oppure un PDF.", "non_valido");
+        }
+        var (base_, tok) = await CollegamentoAsync().ConfigureAwait(false);
+        if (base_ == null || tok == null) return ErrorePonte(503, "Il file non è arrivato al server di casa. Controlla la connessione e riprova.", "rete");
+
+        var multipart = new MultipartFormDataContent();
+        multipart.Add(new StringContent(n.ToString(CultureInfo.InvariantCulture)), "n");
+        var file = new ByteArrayContent(dati);
+        file.Headers.ContentType = new MediaTypeHeaderValue(TipoFile(estensione));
+        multipart.Add(file, "file", nome);
+
+        var percorso = "api/simulate/" + id.ToString(CultureInfo.InvariantCulture) + "/allegati";
+        var r = await client.InviaContenutoAsync("POST", base_, percorso, tok, multipart, TempoForzato ?? TempoCaricamento).ConfigureAwait(false);
+        Annota(r, base_);
+        if (r.Scaduta) return ErrorePonte(504, "Il server ci sta mettendo troppo: riapri la verifica e guarda se il file è arrivato prima di rimandarlo.", "esito_sconosciuto");
         if (ComeSenzaRete(r)) return ErrorePonte(503, "Il file non è arrivato al server di casa. Controlla la connessione e riprova.", "rete");
         if (r.Ok) return new RispostaPonte(r.Stato, string.IsNullOrWhiteSpace(r.Corpo) ? "{}" : r.Corpo);
         return new RispostaPonte(r.Stato, ErroreLeggibile(r).ToJsonString());

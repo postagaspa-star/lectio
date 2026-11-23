@@ -141,6 +141,15 @@ public sealed class Ponte
                 return await motore.CaricaFileAsync(materia, Vuoto(q.GetValueOrDefault("tipo")), Vuoto(q.GetValueOrDefault("titolo")),
                     Vuoto(q.GetValueOrDefault("data")), q.GetValueOrDefault("nome"), corpo, cartella).ConfigureAwait(false);
             }
+            if (nome == "allegato")
+            {
+                // Contratto §21.1: una foto o un PDF per una risposta della verifica di prova.
+                if (metodo != "POST") return Rifiuto(405);
+                var q = Query(uri.Query);
+                long? simulata = long.TryParse(q.GetValueOrDefault("simulata_id"), NumberStyles.None, CultureInfo.InvariantCulture, out var s) ? s : null;
+                int? domanda = int.TryParse(q.GetValueOrDefault("n"), NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : null;
+                return await motore.CaricaAllegatoAsync(simulata, domanda, q.GetValueOrDefault("nome"), corpo).ConfigureAwait(false);
+            }
             if (nome == "diagnosi-corpo" && motore.Diagnosi)
             {
                 // --diagnosi: la pagina manda dei byte come farebbe con un file trascinato; qui si conta cosa arriva.

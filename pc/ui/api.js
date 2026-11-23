@@ -36,7 +36,7 @@
   function attesa(percorso) {
     if (percorso === '/locale/abbina' || percorso === '/locale/scollega') return ATTESA_ABBINAMENTO_MS;
     if (/^\/locale\/lezioni\/\d+\/scarica$/.test(percorso)) return ATTESA_SCARICA_MS;
-    if (percorso.startsWith('/locale/carica')) return ATTESA_CARICA_MS;
+    if (percorso.startsWith('/locale/carica') || percorso.startsWith('/locale/allegato')) return ATTESA_CARICA_MS;
     if (/^\/server\/api\/lezioni\/\d+\/domande\/\d+\/risposta$/.test(percorso)) return ATTESA_CORREZIONE_MS;
     if (percorso === '/locale/salva-pdf' || percorso === '/locale/stampa-pdf') return ATTESA_PDF_MS;
     if (percorso === '/server/api/chiarimenti') return ATTESA_CHIARIMENTO_MS;
@@ -119,6 +119,17 @@
     return chiama('POST', '/locale/carica?' + q.toString(), undefined, { byte });
   }
 
+  /**
+   * Una foto o un PDF aggiunto a una risposta della verifica di prova (contratto §21.1):
+   * /locale/allegato?simulata_id=…&n=…&nome=… col file come corpo; il programma lo manda al server in multipart.
+   */
+  function allega(byte, campi) {
+    const c = campi || {};
+    const q = new URLSearchParams({ simulata_id: String(c.simulata_id), n: String(c.n), nome: String(c.nome || '') });
+    if (esempio) return daEsempio('POST', '/server/api/simulate/' + c.simulata_id + '/allegati', { n: Number(c.n), nome: c.nome || '' });
+    return chiama('POST', '/locale/allegato?' + q.toString(), undefined, { byte });
+  }
+
   radice.LectioApi = {
     get: (p) => chiama('GET', p),
     post: (p, c) => chiama('POST', p, c === undefined ? {} : c),
@@ -126,6 +137,7 @@
     patch: (p, c) => chiama('PATCH', p, c),
     elimina: (p, c) => chiama('DELETE', p, c),
     carica,
+    allega,
     /** Accende (con un server finto di esempio.js) o spegne la modalità esempio. */
     modoEsempio(server) { esempio = server || null; },
     inEsempio() { return !!esempio; },

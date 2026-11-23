@@ -60,7 +60,7 @@
   async function dopo(percorso, promessa) {
     const r = await promessa;
     // Solo le chiamate che vanno davvero al server (un audio già scaricato si apre anche senza rete).
-    if (percorso.startsWith('/server/') || percorso.startsWith('/locale/carica')) {
+    if (percorso.startsWith('/server/') || percorso.startsWith('/locale/carica') || percorso.startsWith('/locale/allegato')) {
       const prima = S.senzaRete;
       if (r.rete) S.senzaRete = true;
       else if (r.ok || (r.stato >= 400 && r.stato < 500)) S.senzaRete = false;
@@ -88,6 +88,7 @@
     patch: (p, c) => dopo(p, ApiBase.patch(p, c)),
     elimina: (p, c) => dopo(p, ApiBase.elimina(p, c)),
     carica: (byte, campi) => dopo('/locale/carica', ApiBase.carica(byte, campi)),
+    allega: (byte, campi) => dopo('/locale/allegato', ApiBase.allega(byte, campi)),
   };
 
   // --- Costruire la pagina senza HTML da stringhe ------------------------------------------------
@@ -165,6 +166,8 @@
     mappa: 'M12 2.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z M5 16.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z M19 16.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z M10.8 7.2 6.2 16.8 M13.2 7.2l4.6 9.6',
     meno: 'M5 12h14',
     adatta: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
+    // §36.5: foto o file aggiunti a una risposta (Feather "paperclip", licenza MIT).
+    clip: 'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48',
   };
   const PIENE = {
     play: 'M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5z',

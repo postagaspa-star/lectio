@@ -137,6 +137,25 @@ public class PonteTest
     }
 
     [Fact]
+    public async Task Allegato_passa_i_byte_della_pagina_alla_domanda_della_verifica()
+    {
+        using var b = new Banco(_ => (201, "{\"id\":\"k3J9x2aQ\",\"nome\":\"conti.pdf\",\"tipo\":\"pdf\"}"));
+        var ponte = new Ponte(b.Motore);
+        var byteFile = Encoding.UTF8.GetBytes("%PDF-1.7 conti");
+        var r = await ponte.GestisciAsync("POST", new Uri(Base, "locale/allegato?simulata_id=9&n=2&nome=conti.pdf"), byteFile);
+        Assert.Equal(201, r.Stato);
+        var q = Assert.Single(b.Finto.Ricevute);
+        Assert.Equal("/api/simulate/9/allegati", q.Percorso);
+        Assert.Contains("filename=conti.pdf", q.Corpo);
+        Assert.Contains("%PDF-1.7 conti", q.Corpo);
+
+        // Solo POST; una domanda scritta male non parte.
+        Assert.Equal(405, (await ponte.GestisciAsync("GET", new Uri(Base, "locale/allegato?simulata_id=9&n=2&nome=conti.pdf"), null)).Stato);
+        Assert.Equal(422, (await ponte.GestisciAsync("POST", new Uri(Base, "locale/allegato?simulata_id=9&n=due&nome=conti.pdf"), byteFile)).Stato);
+        Assert.Single(b.Finto.Ricevute);
+    }
+
+    [Fact]
     public async Task Carica_porta_la_cartella_scelta_e_una_cartella_scritta_male_non_parte()
     {
         using var b = new Banco(_ => (201, "{\"id\":42,\"stato\":\"in_lettura\"}"));

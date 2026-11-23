@@ -651,22 +651,6 @@ def test_verifica_simulata_completa(client, auth, servizi, server):
 
 
 @pagamento
-def test_esercizio_senza_soluzione_si_confronta_da_soli(client, auth, servizi, server):
-    m = crea_materia(client, auth, "Matematica")
-    aggiungi_testo(client, auth, m["id"], "Esercizio: Risolvi 7x + 3 = 24 e controlla il risultato.", tipo="verifica")
-    sfondo_tutto(servizi)
-    server.simulata = {"titolo": "Prova", "domande": [{"tipo": "esercizio", "testo": "Risolvi 7x + 3 = 24", "punti": 10, "risposta_attesa": "", "fonti": []}]}
-    s = _simulata(client, auth, m["id"])
-    studio_tutto(servizi)
-    d = client.get(f"/api/simulate/{s['id']}", headers=auth).json()
-    assert d["nota"] is None and len(d["domande"]) == 1
-    client.post(f"/api/simulate/{s['id']}/consegna", headers=auth)
-    studio_tutto(servizi)
-    e = client.get(f"/api/simulate/{s['id']}", headers=auth).json()["esito"]
-    assert e["domande"][0]["esito"] == "non_corretta" and e["punti_totali"] == 0 and e["voto_stimato"] is None
-
-
-@pagamento
 def test_crocette_senza_opzioni_non_arrivano(client, auth, servizi, server):
     """1.3.5: Small 4 scriveva "Quale di queste città…" senza le città. Si chiede di correggere; se resta, la domanda si toglie."""
     m = materia_pronta(client, auth, servizi)

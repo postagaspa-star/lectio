@@ -180,6 +180,12 @@
       const locali = salvato.risposte || {};
       const sporche = new Set((salvato.sporche || []).map(String));
       const risposte = L.unisciRisposte(s.risposte, locali, Array.from(sporche));
+      // §21.1: i campi del risultato degli esercizi "conti" e i file aggiunti (questi vanno subito al server).
+      const risultati = L.unisciRisposte(s.risultati, salvato.risultati || {}, Array.from(sporche));
+      const allegati = Object.assign({}, s.allegati || {});
+      const conti = new Set((s.domande || []).filter((d) => L.formaDomanda(d) === 'conti').map((d) => String(d.n)));
+      const allegatiEl = new Map();
+      const inCarica = new Map();
       let usati = Number(salvato.usati) || 0;
       let nascosto = A.memoriaStudio.leggi(CHIAVE_TEMPO) === true;
       let timerManda = null;
@@ -194,8 +200,10 @@
       const rigaEl = new Map();
 
       function salvaLocale() {
-        A.memoriaStudio.scrivi(chiave, { risposte, sporche: Array.from(sporche), usati });
+        A.memoriaStudio.scrivi(chiave, { risposte, risultati, sporche: Array.from(sporche), usati });
       }
+
+      const stessi = (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []);
 
       function statoDi(n, testo, riprova) {
         const el = statiEl.get(String(n));
@@ -208,12 +216,18 @@
         if (invioInCorso || !sporche.size || consegnata) return true;
         invioInCorso = true;
         const qui = {};
-        for (const n of sporche) qui[n] = risposte[n] || '';
-        const r = await A.api.patch('/server/api/simulate/' + id, { risposte: qui, iniziata: true });
+        const quiRisultati = {};
+        for (const n of sporche) {
+          qui[n] = risposte[n] || '';
+          if (conti.has(n)) quiRisultati[n] = (risultati[n] || []).slice();
+        }
+        const corpo = { risposte: qui, iniziata: true };
+        if (Object.keys(quiRisultati).length) corpo.risultati = quiRisultati;
+        const r = await A.api.patch('/server/api/simulate/' + id, corpo);
         invioInCorso = false;
         if (r.ok) {
           for (const n of Object.keys(qui)) {
-            if ((risposte[n] || '') === qui[n]) {
+            if ((risposte[n] || '') === qui[n] && (!quiRisultati[n] || stessi(risultati[n], quiRisultati[n]))) {
               sporche.delete(n);
               statoDi(n, 'Salvata');
             }
@@ -230,9 +244,8 @@
         return false;
       }
 
-      function scritto(d, area) {
-        const n = String(d.n);
-        risposte[n] = area.value;
+      /** Un campo della domanda `n` è cambiato (risposta, passaggi o risultato): si salva qui e poi si manda. */
+      function scritto(n) {
         sporche.add(n);
         salvaLocale();
         statoDi(n, 'Salvo…');
@@ -248,7 +261,7 @@
 
       function aggiornaColonna() {
         for (const [n, r] of rigaEl) {
-          const si = String(risposte[n] || '').trim();
+          const si = L.rispostaFatta(n, risposte, risultati, allegati);
           const segno = r.querySelector('[data-segno]');
           svuota(segno, si ? icona('spunta') : null);
         }
@@ -296,14 +309,14 @@
         A.apriFoglio({
           titolo: 'Domande',
           corpo: (c, ctl) => svuota(c, h('div', { class: 'sim-griglia-numeri' }, s.domande.map((d) => h('button', {
-            type: 'button', class: 'sim-numero' + (String(risposte[String(d.n)] || '').trim() ? ' scritta' : ''), 'aria-label': 'Domanda ' + d.n, onclick: () => { ctl.chiudi(true); salta(d.n); },
+            type: 'button', class: 'sim-numero' + (L.rispostaFatta(d.n, risposte, risultati, allegati) ? ' scritta' : ''), 'aria-label': 'Domanda ' + d.n, onclick: () => { ctl.chiudi(true); salta(d.n); },
           }, String(d.n)))),
           h('button', { type: 'button', class: 'pulsante pieno largo', onclick: () => { ctl.chiudi(true); foglioConsegna(); } }, 'Consegna')),
         });
       }
 
       function foglioConsegna() {
-        const conto = L.contaRisposte(s.domande, risposte);
+        const conto = L.contaRisposte(s.domande, risposte, risultati, allegati);
         A.apriFoglio({
           titolo: 'Consegnare?',
           corpo: (c, ctl) => {
@@ -350,6 +363,75 @@
         A.tornaIndietroDa(m.id, 'simulate');
       }
 
+      // --- §21.1 Foto o file aggiunti a una risposta: vanno subito al server, 4 al massimo per domanda ---
+
+      function rigaAllegati(n) {
+        const scelta = h('input', {
+          type: 'file', class: 'sr', accept: L.ESTENSIONI_ALLEGATO.join(','), multiple: true, tabindex: '-1', 'aria-hidden': 'true', 'data-scelta-file': n,
+          onchange: async () => {
+            const file = Array.from(scelta.files || []);
+            scelta.value = '';
+            for (const f of file) await allega(n, f);
+          },
+        });
+        const pulsante = h('button', { type: 'button', class: 'pulsante tenue piccolo sim-allega', 'data-azione': 'allega', 'data-allega': n, onclick: () => scelta.click() }, icona('clip'), 'Foto o file');
+        const pillole = h('div', { class: 'sim-allegati-pillole' });
+        allegatiEl.set(n, { pillole, pulsante });
+        disegnaAllegati(n);
+        return h('div', { class: 'sim-allegati', 'data-allegati': n }, pulsante, scelta, pillole);
+      }
+
+      function disegnaAllegati(n) {
+        const el = allegatiEl.get(n);
+        if (!el) return;
+        const lista = allegati[n] || [];
+        const caricano = inCarica.get(n) || [];
+        el.pulsante.disabled = lista.length + caricano.length >= L.MASSIMO_ALLEGATI;
+        svuota(el.pillole,
+          lista.map((a) => h('span', { class: 'pillola sim-allegato', 'data-allegato': a.id },
+            icona(a.tipo === 'pdf' ? 'file' : 'foto'), h('span', { class: 'nome' }, a.nome),
+            h('button', { type: 'button', class: 'togli', 'aria-label': 'Togli ' + a.nome, 'data-azione': 'togli-allegato', onclick: () => togli(n, a) }, icona('chiudi')))),
+          caricano.map((nome) => h('span', { class: 'pillola sim-allegato in-carica', 'data-in-carica': 'si' }, icona('carica'), h('span', { class: 'nome' }, nome))));
+      }
+
+      async function allega(n, file) {
+        const nome = (file && file.name) || 'foto.png';
+        const caricano = inCarica.get(n) || [];
+        const no = L.controllaAllegato(nome, file && file.size, (allegati[n] || []).length + caricano.length);
+        if (no) { A.avviso(no); return; }
+        inCarica.set(n, caricano.concat(nome));
+        disegnaAllegati(n);
+        let r;
+        try {
+          r = await A.api.allega(await file.arrayBuffer(), { simulata_id: id, n: Number(n), nome });
+        } catch (e) {
+          r = { ok: false, errore: 'Non sono riuscito a leggere il file. Riprova.' };
+        }
+        const resta = (inCarica.get(n) || []).slice();
+        resta.splice(resta.indexOf(nome), 1);
+        inCarica.set(n, resta);
+        if (!vivo() || consegnata || fermato) return;
+        if (!r.ok || !r.dati) {
+          A.avviso(r.errore);
+          disegnaAllegati(n);
+          return;
+        }
+        allegati[n] = (allegati[n] || []).concat(r.dati);
+        s.allegati = allegati;
+        disegnaAllegati(n);
+        aggiornaColonna();
+      }
+
+      async function togli(n, a) {
+        const r = await A.api.elimina('/server/api/simulate/' + id + '/allegati/' + encodeURIComponent(a.id));
+        if (!vivo() || consegnata || fermato) return;
+        if (!r.ok) { A.avviso(r.errore); return; }
+        allegati[n] = (allegati[n] || []).filter((x) => x.id !== a.id);
+        s.allegati = allegati;
+        disegnaAllegati(n);
+        aggiornaColonna();
+      }
+
       const sezioniViste = new Set();
       const schede = [];
       for (const d of s.domande || []) {
@@ -358,16 +440,68 @@
           sezioniViste.add(d.sezione);
           schede.push(h('h2', { class: 'sim-sezione' }, d.sezione));
         }
-        const area = h('textarea', { class: 'sim-risposta', rows: '5', placeholder: 'Scrivi la tua risposta', 'aria-label': 'Risposta alla domanda ' + d.n, 'data-risposta': n });
+        const forma = L.formaDomanda(d);
+        const conFormule = forma !== 'testo';
+        const area = h('textarea', {
+          class: 'sim-risposta', rows: '5', placeholder: forma === 'conti' ? null : 'Scrivi la tua risposta', id: 'sim-risposta-' + n,
+          'aria-label': (forma === 'conti' ? 'Passaggi della domanda ' : 'Risposta alla domanda ') + d.n, 'data-risposta': n, spellcheck: conFormule ? 'false' : null,
+        });
         area.value = risposte[n] || '';
-        area.addEventListener('input', () => { adatta(area); scritto(d, area); });
         const stato = h('div', { class: 'sim-stato', 'data-stato-risposta': n, 'aria-live': 'polite' });
         statiEl.set(n, stato);
         const cambiata = seg.evidenzia.has(Number(d.n));
-        const scheda = h('section', { class: 'sim-domanda' + (cambiata ? ' mod-cambiata' : ''), 'data-domanda': n },
+        let campiRisposta = [area];
+        if (!conFormule) {
+          area.addEventListener('input', () => { adatta(area); risposte[n] = area.value; scritto(n); });
+        } else {
+          // §36.5 La barra della matematica scrive nel campo col cursore; sotto ogni campo l'anteprima come sul libro.
+          const campi = [area];
+          const barra = A.formule.barra(() => campi);
+          const ant = A.formule.anteprima();
+          ant.aggiorna(area.value);
+          barra.segui(area);
+          area.addEventListener('input', () => { adatta(area); risposte[n] = area.value; ant.aggiorna(area.value); scritto(n); });
+          const pezzi = [barra.el];
+          if (forma === 'conti') pezzi.push(h('label', { class: 'etichetta sim-campo-nome', for: area.id }, 'Passaggi'));
+          pezzi.push(area, ant.el);
+          if (forma === 'conti') {
+            const nomi = L.campiRisultato(d);
+            pezzi.push(h('div', { class: 'sim-risultati-campi' }, nomi.map((nome, i) => {
+              const input = h('input', {
+                type: 'text', class: 'sim-risultato', id: 'sim-risultato-' + n + '-' + i, autocomplete: 'off', spellcheck: 'false', maxlength: '200',
+                'data-risultato': n + ':' + i, value: ((risultati[n] || [])[i]) || '',
+              });
+              const antR = A.formule.anteprima();
+              antR.aggiorna(input.value);
+              barra.segui(input);
+              campi.push(input);
+              input.addEventListener('input', () => {
+                const v = (risultati[n] || []).slice();
+                while (v.length < nomi.length) v.push('');
+                v[i] = input.value;
+                risultati[n] = v;
+                antR.aggiorna(input.value);
+                scritto(n);
+              });
+              return h('div', { class: 'sim-campo-risultato' }, h('label', { class: 'etichetta sim-campo-nome', for: input.id }, nome), input, antR.el);
+            })));
+          }
+          pezzi.push(rigaAllegati(n));
+          campiRisposta = pezzi;
+        }
+        const scheda = h('section', { class: 'sim-domanda' + (cambiata ? ' mod-cambiata' : '') + (conFormule ? ' con-formule' : ''), 'data-domanda': n, 'data-forma': forma },
           h('span', { class: 'mod-titolo-cambiata' }, h('span', { class: 'etichetta' }, 'Domanda ' + d.n + ' · ' + L.plurale(Number(d.punti) || 0, 'punto', 'punti')), cambiata ? A.etichettaCambiata() : null,
             A.etichettaFile(s, d.n, A.materiaDi(s.materia_id))),
-          h('p', { class: 'testo-d' }, d.testo), area, stato);
+          h('p', { class: 'testo-d' }, d.testo), A.formule.tabella(d.tabella), A.formule.grafico(d.grafico), campiRisposta, stato);
+        if (conFormule) {
+          // Ctrl+V di una foto dentro la domanda: diventa un file aggiunto alla risposta.
+          scheda.addEventListener('paste', (e) => {
+            const file = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => /^image\//.test(f.type || ''));
+            if (!file.length) return;
+            e.preventDefault();
+            (async () => { for (const f of file) await allega(n, f); })();
+          });
+        }
         domandeEl.set(n, scheda);
         schede.push(scheda);
         if (sporche.has(n)) statoDi(n, 'Salvata sul computer');
@@ -395,6 +529,8 @@
         h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'consegna-fondo', onclick: foglioConsegna }, 'Consegna')))));
 
       for (const a of pag.querySelectorAll('.sim-risposta')) adatta(a);
+      // Alla prima apertura lo stile può arrivare un attimo dopo: si rimisura al disegno successivo.
+      requestAnimationFrame(() => { if (vivo() && !fermato) for (const a of pag.querySelectorAll('.sim-risposta')) adatta(a); });
       disegnaTempo();
       aggiornaColonna();
       const timerTempo = setInterval(tic, 1000);
@@ -419,14 +555,51 @@
       const oltre = L.fraseOltreTempo(locale.usati, s.minuti);
       const correzioni = new Map((e.domande || []).map((x) => [x.n, x]));
 
+      /** La risposta com'è scritta; con la barra della matematica, le righe con le formule impaginate. */
+      function testoMio(testo, forma) {
+        if (forma === 'testo' || !L.daImpaginare(testo)) return h('p', { class: 'mia' }, testo);
+        return h('div', { class: 'mia con-formule' }, testo.split('\n').filter((r) => r.trim()).map((r) => h('div', { class: 'f-riga' }, A.formule.formula(r))));
+      }
+
+      /** §21.1 Esercizio "conti": i passaggi e ogni risultato con il segno del controllo del programma. */
+      function bloccoConti(d, c, passaggi) {
+        const scritti = (s.risultati || {})[String(d.n)] || [];
+        const controllo = Array.isArray(c.controllo) ? c.controllo : [];
+        const nomi = L.campiRisultato(d);
+        return [
+          h('div', { class: 'blocco' }, h('span', { class: 'etichetta' }, 'Passaggi'), passaggi ? testoMio(passaggi, 'conti') : h('p', { class: 'mia vuota' }, 'Nessun passaggio')),
+          h('div', { class: 'blocco sim-risultati-esito' }, nomi.map((nome, i) => {
+            const k = controllo.find((x) => x && x.cosa === nome) || controllo[i] || {};
+            const scritto = String(scritti[i] || k.scritto || '').trim();
+            const v = L.esitoControllo(k.esito);
+            return h('div', { class: 'sim-riga-risultato', 'data-risultato-esito': k.esito || 'nessuno' },
+              h('span', { class: 'etichetta' }, nome),
+              h('span', { class: 'valore' + (scritto ? '' : ' vuota') }, scritto ? A.formule.formula(scritto) : 'Vuoto'),
+              v ? h('span', { class: 'esito ' + v.classe }, icona(v.icona), v.parola) : null);
+          })),
+        ];
+      }
+
+      /** I nomi dei file aggiunti alla risposta (§21.1). */
+      function bloccoFile(d) {
+        const lista = (s.allegati || {})[String(d.n)] || [];
+        if (!lista.length) return null;
+        return h('div', { class: 'blocco' }, h('span', { class: 'etichetta' }, 'Foto o file'),
+          h('div', { class: 'sim-allegati-pillole' }, lista.map((a) => h('span', { class: 'pillola sim-allegato', 'data-allegato': a.id }, icona(a.tipo === 'pdf' ? 'file' : 'foto'), h('span', { class: 'nome' }, a.nome)))));
+      }
+
       function rigaDomanda(d) {
         const c = correzioni.get(d.n) || { esito: 'non_corretta' };
         const v = L.esitoSimulata(c.esito);
         const risposta = String((s.risposte || {})[String(d.n)] || '').trim();
         const punti = L.puntiDomanda(c, d);
+        const forma = L.formaDomanda(d);
         let aperta = c.esito !== 'giusta';
         const dentro = () => h('div', { class: 'dentro' },
-          h('div', { class: 'blocco' }, h('span', { class: 'etichetta' }, 'La tua risposta'), risposta ? h('p', { class: 'mia' }, risposta) : h('p', { class: 'mia vuota' }, 'Non hai risposto')),
+          A.formule.tabella(d.tabella), A.formule.grafico(d.grafico),
+          forma === 'conti' ? bloccoConti(d, c, risposta) : h('div', { class: 'blocco' }, h('span', { class: 'etichetta' }, 'La tua risposta'),
+            risposta ? testoMio(risposta, forma) : h('p', { class: 'mia vuota' }, 'Non hai risposto')),
+          bloccoFile(d),
           c.esito === 'non_corretta' && !c.commento && !c.risposta_attesa ? h('p', { class: 'confronta-t' }, 'Nei tuoi documenti non c\'è la soluzione. Confronta tu con il libro o con il prof.') : null,
           c.commento ? h('div', { class: 'blocco' }, h('span', { class: 'etichetta' }, 'Commento'), h('p', { class: 'commento' }, c.commento)) : null,
           (c.mancava || []).length ? h('div', { class: 'blocco' }, h('span', { class: 'etichetta' }, 'Mancava'), h('div', { class: 'mancava-p' }, c.mancava.map((x) => h('span', { class: 'pillola' }, x)))) : null,

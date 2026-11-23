@@ -27,7 +27,8 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from . import ai, clock, controllo, db, lampo, mappe, memoria, misure, prompt, prompt_studio, riassunti, schema_ripasso, simulata
+from . import (ai, allegati, clock, controllo, db, esercizi, lampo, mappe, memoria, misure, prompt, prompt_studio, riassunti,
+               schema_ripasso, simulata)
 from .audio import PAUSA_CAPITOLI
 from .cartella import Cartella
 from .lezione import (CAPITOLO_FINALE, CAPITOLO_FINALE_INTERROGAZIONE, CAPITOLO_FINALE_RIPASSO, Annullata,
@@ -340,7 +341,7 @@ def _dati_di(conn: sqlite3.Connection, tipo: str, r) -> dict:
     if tipo == "mappa":
         return {k: r[k] for k in ("titolo", "contenuto", "elementi", "schema_del")}
     if tipo == "simulata":
-        return {k: r[k] for k in ("titolo", "domande", "risposte", "esito", "stato", "iniziata_il", "consegnata_il", "nota")}
+        return {k: r[k] for k in ("titolo", "domande", "risposte", "risultati", "allegati", "esito", "stato", "iniziata_il", "consegnata_il", "nota")}
     domande = [dict(d) for d in conn.execute(
         "SELECT id, tipo, capitolo, testo, risposta, inizio_s, fine_domanda_s, inizio_risposta_s, fine_s FROM domande"
         " WHERE lezione_id = ? AND tolta = 0 ORDER BY n", (r["id"],))]
@@ -366,10 +367,10 @@ def _rimetti(conn: sqlite3.Connection, tipo: str, r, dati: dict) -> None:
         conn.execute("UPDATE mappe SET titolo = ?, contenuto = ?, elementi = ?, schema_del = ? WHERE id = ?",
                      (dati["titolo"], dati["contenuto"], dati["elementi"], dati["schema_del"], oggetto_id))
     elif tipo == "simulata":
-        conn.execute("UPDATE simulate SET titolo = ?, domande = ?, risposte = ?, esito = ?, stato = ?, iniziata_il = ?,"
-                     " consegnata_il = ?, nota = ? WHERE id = ?",
-                     (dati["titolo"], dati["domande"], dati["risposte"], dati["esito"], dati["stato"], dati["iniziata_il"],
-                      dati["consegnata_il"], dati["nota"], oggetto_id))
+        conn.execute("UPDATE simulate SET titolo = ?, domande = ?, risposte = ?, risultati = ?, allegati = ?, esito = ?, stato = ?,"
+                     " iniziata_il = ?, consegnata_il = ?, nota = ? WHERE id = ?",
+                     (dati["titolo"], dati["domande"], dati["risposte"], dati.get("risultati") or "{}", dati.get("allegati") or "{}",
+                      dati["esito"], dati["stato"], dati["iniziata_il"], dati["consegnata_il"], dati["nota"], oggetto_id))
     else:
         # L'ascolto resta dov'era (dentro la durata della versione rimessa).
         conn.execute("UPDATE lezioni SET capitoli = ?, testo = ?, durata_s = ?, audio_byte = ?, audio_sha256 = ?,"
@@ -1049,8 +1050,10 @@ class PreparazioneModifica:
             self.avanza("scrittura", 0, 1, "Riscrivo le domande")
             minuti = r["minuti"]
             base = prompt_studio.messaggi_simulata(lettura, minuti, simulata.domande_circa(minuti))
-            attuale = {"titolo": r["titolo"], "domande": [{k: d.get(k) for k in ("n", "tipo", "testo", "punti", "sezione", "risposta_attesa")}
-                                                         for d in domande]}
+            # Gli esercizi con i numeri tornano al modello come li aveva scritti lui: il metodo e il "calcolo" (contratto 21.1).
+            attuale = {"titolo": r["titolo"], "domande": [
+                {**{k: d.get(k) for k in ("n", "tipo", "testo", "punti", "sezione", "risposta_attesa", "calcolo", "tabella", "grafico")},
+                 **({"risposta_attesa": d.get("metodo") or ""} if d.get("calcolo") else {})} for d in domande]}
             ultima_n = max(numeri or [0])
             messaggi = base + [{"role": "assistant", "content": json.dumps(attuale, ensure_ascii=False)},
                                {"role": "user", "content": prompt_studio.richiesta_modifica(
@@ -1090,7 +1093,7 @@ class PreparazioneModifica:
                     n = int(d.get("n"))
                 except (TypeError, ValueError, AttributeError):
                     continue
-                norm = simulata.normalizza({"domande": [d]}, lettura["brani"])
+                norm = simulata.normalizza({"domande": [d]}, lettura["brani"], esercizi.con_i_numeri((lettura.get("materia") or {}).get("nome")))
                 if norm and (not scelte or n in scelte or n > ultima_n):
                     nuove[str(n)] = norm[0]
             togli = []
@@ -1134,11 +1137,16 @@ class PreparazioneModifica:
             if stato == "in_corso":
                 vecchie = json.loads(attuale["risposte"] or "{}")
                 risposte = {da_vecchio[k]: v for k, v in vecchie.items() if k in da_vecchio}
-                conn.execute("UPDATE simulate SET domande = ?, risposte = ? WHERE id = ?",
-                             (json.dumps(nuove_domande, ensure_ascii=False), json.dumps(risposte, ensure_ascii=False), r["id"]))
+                risultati = {da_vecchio[k]: v for k, v in json.loads(attuale["risultati"] or "{}").items() if k in da_vecchio}
+                file_dopo = {da_vecchio[k]: v for k, v in allegati.elenco(attuale).items() if k in da_vecchio}
+                conn.execute("UPDATE simulate SET domande = ?, risposte = ?, risultati = ?, allegati = ? WHERE id = ?",
+                             (json.dumps(nuove_domande, ensure_ascii=False), json.dumps(risposte, ensure_ascii=False),
+                              json.dumps(risultati, ensure_ascii=False), json.dumps(file_dopo, ensure_ascii=False), r["id"]))
             else:  # pronta, oppure corretta: diventa una prova nuova (quella di prima resta da parte con il suo voto)
-                conn.execute("UPDATE simulate SET domande = ?, risposte = '{}', esito = NULL, stato = 'pronta', iniziata_il = NULL,"
-                             " consegnata_il = NULL WHERE id = ?", (json.dumps(nuove_domande, ensure_ascii=False), r["id"]))
+                conn.execute("UPDATE simulate SET domande = ?, risposte = '{}', risultati = '{}', allegati = '{}', esito = NULL,"
+                             " stato = 'pronta', iniziata_il = NULL, consegnata_il = NULL WHERE id = ?",
+                             (json.dumps(nuove_domande, ensure_ascii=False), r["id"]))
+            # I file tolti dalla verifica restano nella sua cartella: "Torna a prima" li rimette (si cancellano con la verifica).
             self._chiudi(conn, cambiate, titolo_di("simulata", r))
             if nuovi_brani:
                 sc.scrivi("lettura.json", lettura)

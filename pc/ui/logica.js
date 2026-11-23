@@ -1359,10 +1359,21 @@
     return plurale(domande.length, 'domanda', 'domande') + ' · ' + plurale(punti, 'punto', 'punti') + ' · ' + plurale((s && s.minuti) || 0, 'minuto', 'minuti');
   }
 
+  /**
+   * §36.3 Una domanda è fatta se ha la risposta (o i passaggi), un risultato scritto o un file aggiunto (§21.1).
+   * `risultati` e `allegati` come nella Simulata: { "3": ["0,07 cm"] }, { "3": [{ id, nome, tipo }] }.
+   */
+  function rispostaFatta(n, risposte, risultati, allegati) {
+    const k = String(n);
+    if (String((risposte || {})[k] || '').trim()) return true;
+    if (((risultati || {})[k] || []).some((x) => String(x || '').trim())) return true;
+    return ((allegati || {})[k] || []).length > 0;
+  }
+
   /** §36.3 Le risposte scritte e quelle vuote: { scritte, vuote, frase: "5 scritte su 8 · 3 vuote" }. */
-  function contaRisposte(domande, risposte) {
+  function contaRisposte(domande, risposte, risultati, allegati) {
     const tutte = domande || [];
-    const scritte = tutte.filter((d) => String((risposte || {})[String(d.n)] || '').trim()).length;
+    const scritte = tutte.filter((d) => rispostaFatta(d.n, risposte, risultati, allegati)).length;
     const vuote = tutte.length - scritte;
     return { scritte, vuote, frase: scritte + (scritte === 1 ? ' scritta su ' : ' scritte su ') + tutte.length + ' · ' + vuote + (vuote === 1 ? ' vuota' : ' vuote') };
   }
@@ -1377,8 +1388,9 @@
   /** §36.4 "62 punti su 100 · la sufficienza è a 58" (la soglia solo se c'è). */
   function frasePunti(esito) {
     if (!esito) return '';
-    const base = plurale(Number(esito.punti) || 0, 'punto', 'punti') + ' su ' + (Number(esito.punti_totali) || 0);
-    return esito.soglia != null ? base + ' · la sufficienza è a ' + esito.soglia : base;
+    const p = Number(esito.punti) || 0;
+    const base = voto(p) + ' ' + (p === 1 ? 'punto' : 'punti') + ' su ' + voto(Number(esito.punti_totali) || 0);
+    return esito.soglia != null ? base + ' · la sufficienza è a ' + voto(esito.soglia) : base;
   }
 
   /** §36.4 "Consegnata dopo 56 minuti su 50", solo se è andato oltre il tempo. */
@@ -1389,10 +1401,264 @@
     return 'Consegnata dopo ' + Math.ceil(usati / 60) + ' minuti su ' + m;
   }
 
-  /** "8 su 10" di una domanda corretta. Le `non_corretta` non hanno punti (contratto §21). */
+  /** "8 su 10", "1,5 su 3" di una domanda corretta. Le `non_corretta` non hanno punti (contratto §21). */
   function puntiDomanda(correzione, domanda) {
     if (!correzione || correzione.esito === 'non_corretta') return null;
-    return (Number(correzione.punti) || 0) + ' su ' + (Number(domanda && domanda.punti) || 0);
+    return voto(Number(correzione.punti) || 0) + ' su ' + voto(Number(domanda && domanda.punti) || 0);
+  }
+
+  // --- Esercizi con i numeri: forma, barra della matematica, anteprima, grafici (contratto §21.1, guida §36.5) ---
+
+  /** La forma della risposta: "testo", "formule" o "conti". Una forma che non conosciamo vale "testo". */
+  function formaDomanda(d) {
+    const f = d && d.forma;
+    return f === 'formule' || f === 'conti' ? f : 'testo';
+  }
+
+  /** I nomi dei campi del risultato di un esercizio "conti" (contratto: `domanda.risultati`). */
+  function campiRisultato(d) {
+    if (formaDomanda(d) !== 'conti') return [];
+    // Al massimo 6 campi per domanda: il server non ne tiene di più (§21.1).
+    const v = Array.isArray(d.risultati) ? d.risultati.slice(0, 6).map((x) => String(x == null ? '' : x).trim()) : [];
+    return v.length ? v : ['Risultato'];
+  }
+
+  /** I file che si possono aggiungere a una risposta (§21.1): foto e PDF, 20 MB, 4 per domanda. */
+  const ESTENSIONI_ALLEGATO = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.pdf'];
+  const MASSIMO_ALLEGATI = 4;
+  function controllaAllegato(nome, byte, gia) {
+    if (!ESTENSIONI_ALLEGATO.includes(estensione(nome))) return 'Questo tipo di file non lo leggo. Usa una foto JPG, PNG, WEBP o HEIC, oppure un PDF.';
+    if (Number(byte) > MASSIMO_BYTE) return 'Il file è troppo grande: il massimo è 20 MB.';
+    if (Number(byte) === 0) return 'Il file è vuoto.';
+    if ((Number(gia) || 0) >= MASSIMO_ALLEGATI) return 'Al massimo ' + MASSIMO_ALLEGATI + ' file per domanda.';
+    return null;
+  }
+
+  /** Il segno di un risultato controllato dal programma (`controllo[].esito`). Mai rosso, come gli esiti. */
+  function esitoControllo(esito) {
+    switch (esito) {
+      case 'giusto': return { parola: 'Giusto', classe: 'giusta', icona: 'spunta' };
+      case 'non_arrotondato': return { parola: 'Da arrotondare', classe: 'quasi', icona: 'quasi' };
+      case 'sbagliato': return { parola: 'Da rivedere', classe: 'rivedere', icona: 'ripeti' };
+      case 'mancante': return { parola: 'Vuoto', classe: 'rivedere', icona: 'ripeti' };
+      default: return null; // da_leggere: decide la correzione, niente segno
+    }
+  }
+
+  /**
+   * I tasti della barra della matematica. Gli schemi mettono il cursore dentro (come i modelli di GeoGebra e
+   * MathLive): `prima` + cursore + `dopo`; con del testo selezionato, `avvolgi` dice dove va la selezione.
+   */
+  const TASTI_FORMULA = [
+    { chiave: 'frazione', nome: 'Frazione', prima: '(', dopo: ')/()', avvolgi: ['(', ')/(', ')'] },
+    { chiave: 'radice', nome: 'Radice', prima: '√(', dopo: ')', avvolgi: ['√(', ')', ''] },
+    { chiave: 'potenza', nome: 'Potenza', prima: '^(', dopo: ')', avvolgi: ['^(', ')', ''] },
+    { chiave: 'pedice', nome: 'Pedice', prima: '_(', dopo: ')', avvolgi: ['_(', ')', ''] },
+    { chiave: 'parentesi', nome: 'Parentesi', prima: '(', dopo: ')', avvolgi: ['(', ')', ''], segno: '( )' },
+    { chiave: 'piumeno', nome: 'Più o meno', segno: '±' },
+    { chiave: 'punto', nome: 'Per', segno: '·' },
+    { chiave: 'per', nome: 'Per (croce)', segno: '×' },
+    { chiave: 'diviso', nome: 'Diviso', segno: '÷' },
+    { chiave: 'delta', nome: 'Delta', segno: 'Δ' },
+    { chiave: 'pi', nome: 'Pi greco', segno: 'π' },
+    { chiave: 'minore', nome: 'Minore o uguale', segno: '≤' },
+    { chiave: 'maggiore', nome: 'Maggiore o uguale', segno: '≥' },
+    { chiave: 'diverso', nome: 'Diverso', segno: '≠' },
+    { chiave: 'circa', nome: 'Circa uguale', segno: '≈' },
+    { chiave: 'gradi', nome: 'Gradi', segno: '°' },
+  ];
+
+  /**
+   * Un tasto premuto con il cursore tra `inizio` e `fine`: il testo nuovo e dove va il cursore.
+   * Frazione senza selezione: "()/()" col cursore nella prima parentesi; con la selezione, la selezione sopra e
+   * il cursore sotto la linea.
+   */
+  function inserisciFormula(valore, inizio, fine, chiave) {
+    const v = String(valore == null ? '' : valore);
+    const a = Math.max(0, Math.min(v.length, Number(inizio) || 0));
+    const b = Math.max(a, Math.min(v.length, fine == null ? a : Number(fine) || 0));
+    const t = TASTI_FORMULA.find((x) => x.chiave === chiave);
+    if (!t) return { valore: v, inizio: a, fine: b };
+    const scelto = v.slice(a, b);
+    let dentro;
+    let cursore;
+    if (t.prima === undefined) {
+      dentro = t.segno;
+      cursore = a + dentro.length;
+    } else if (scelto) {
+      dentro = t.avvolgi[0] + scelto + t.avvolgi[1] + t.avvolgi[2];
+      cursore = a + t.avvolgi[0].length + scelto.length + t.avvolgi[1].length;
+    } else {
+      dentro = t.prima + t.dopo;
+      cursore = a + t.prima.length;
+    }
+    return { valore: v.slice(0, a) + dentro + v.slice(b), inizio: cursore, fine: cursore };
+  }
+
+  /** C'è qualcosa da impaginare "come sul libro" (frazione, potenza, pedice, radice)? */
+  function daImpaginare(testo) {
+    return /[/^_√]|sqrt\(/.test(String(testo || ''));
+  }
+
+  /**
+   * La scrittura in riga ("(1,66-1,61)/2", "x^2", "Δx_1", "√(x+1)") come albero da impaginare:
+   * { t: 'testo', v } | { t: 'frazione', num: [...], den: [...] } | { t: 'su' | 'giu' | 'radice', v: [...] }.
+   * Le parentesi che delimitano numeratore, denominatore, esponente, pedice o radice non si vedono, come sul libro.
+   */
+  function pezziFormula(testo) {
+    const s = String(testo == null ? '' : testo);
+    let i = 0;
+    const cifra = (c) => c !== undefined && c >= '0' && c <= '9';
+    const lettera = (c) => c !== undefined && /[A-Za-zÀ-ÖØ-öø-ÿͰ-Ͽ]/.test(c);
+    const diTermine = (k) => {
+      const c = s[k];
+      if (c === undefined) return false;
+      if (cifra(c) || lettera(c) || /[²³¹⁰⁴-⁹₀-₉°%']/.test(c)) return true;
+      return (c === ',' || c === '.') && cifra(s[k - 1]) && cifra(s[k + 1]);
+    };
+    const termine = () => { const a = i; while (i < s.length && diTermine(i)) i++; return { nodi: [{ t: 'testo', v: s.slice(a, i) }] }; };
+    const conParentesi = (p) => (p.gruppo ? [{ t: 'testo', v: '(' }, ...p.nodi, ...(p.chiusa ? [{ t: 'testo', v: ')' }] : [])] : p.nodi);
+
+    function gruppo() {
+      i++;
+      const nodi = sequenza(')');
+      const chiusa = s[i] === ')';
+      if (chiusa) i++;
+      return { nodi, gruppo: true, chiusa };
+    }
+    function radice() {
+      i += s[i] === '√' ? 1 : 4;
+      const arg = argomento(false);
+      return { nodi: [{ t: 'radice', v: arg ? arg.nodi : [] }] };
+    }
+    // Dopo ^ _ / √: un gruppo tra parentesi (senza parentesi), una radice o un termine.
+    // `stretto` senza parentesi: l'esponente prende le cifre (anche col meno davanti) o una lettera sola ("x^2y" è
+    // x² per y); il pedice prende lettere e cifre attaccate ("x_max", "x_12").
+    function argomento(stretto) {
+      if (s[i] === '(') return gruppo();
+      if (s[i] === '√' || s.startsWith('sqrt(', i)) return radice();
+      if (!stretto) return diTermine(i) ? termine() : null;
+      const a = i;
+      if (stretto === 'giu') {
+        while (i < s.length && (cifra(s[i]) || lettera(s[i]))) i++;
+        return i > a ? { nodi: [{ t: 'testo', v: s.slice(a, i) }] } : null;
+      }
+      if ((s[i] === '-' || s[i] === '−') && cifra(s[i + 1])) i++;
+      if (cifra(s[i])) {
+        while (i < s.length && (cifra(s[i]) || ((s[i] === ',' || s[i] === '.') && cifra(s[i + 1])))) i++;
+      } else if (lettera(s[i])) i++;
+      else { i = a; return null; }
+      return { nodi: [{ t: 'testo', v: s.slice(a, i) }] };
+    }
+    function suGiu(p) {
+      let x = p;
+      while (s[i] === '^' || s[i] === '_') {
+        const segno = s[i];
+        const salva = i;
+        i++;
+        const arg = argomento(segno === '^' ? 'su' : 'giu');
+        if (!arg) { i = salva; break; }
+        x = { nodi: [...conParentesi(x), { t: segno === '^' ? 'su' : 'giu', v: arg.nodi }] };
+      }
+      return x;
+    }
+    function sequenza(fine) {
+      const pezzi = [];
+      while (i < s.length && s[i] !== fine) {
+        const c = s[i];
+        let p;
+        if (c === '(') p = suGiu(gruppo());
+        else if (c === '√' || s.startsWith('sqrt(', i)) p = suGiu(radice());
+        else if (diTermine(i)) p = suGiu(termine());
+        else if (c === '/') {
+          let k = pezzi.length - 1;
+          while (k >= 0 && pezzi[k].spazio) k--;
+          const salva = i;
+          i++;
+          while (s[i] === ' ') i++;
+          const den = argomento(false);
+          if (k >= 0 && den && !pezzi[k].segno) {
+            const num = pezzi[k];
+            pezzi.splice(k);
+            pezzi.push({ nodi: [{ t: 'frazione', num: num.nodi, den: suGiu(den).nodi }] });
+            continue;
+          }
+          i = salva + 1;
+          p = { nodi: [{ t: 'testo', v: '/' }], segno: true };
+        } else {
+          i++;
+          p = { nodi: [{ t: 'testo', v: c }], spazio: c === ' ', segno: c !== ' ' };
+        }
+        pezzi.push(p);
+      }
+      const nodi = [];
+      for (const p of pezzi) {
+        for (const n of conParentesi(p)) {
+          const ultimo = nodi[nodi.length - 1];
+          if (n.t === 'testo' && ultimo && ultimo.t === 'testo') ultimo.v += n.v;
+          else nodi.push(n.t === 'testo' ? { t: 'testo', v: n.v } : n);
+        }
+      }
+      return nodi;
+    }
+    return sequenza(undefined);
+  }
+
+  /** Un numero per gli assi dei grafici: "2,5", "−0,04", "1200" (al più 6 cifre significative). */
+  function numeroGrafico(v) {
+    const x = Number(v);
+    if (!Number.isFinite(x)) return '';
+    const t = String(Number(x.toPrecision(6)));
+    if (/e/i.test(t)) return t.replace('.', ',').replace('-', '−');
+    return (x < 0 ? '−' : '') + t.replace('-', '').replace('.', ',');
+  }
+
+  /** Le tacche "tonde" di un asse da min a max (passi 1, 2, 2,5, 5 per una potenza di 10). */
+  function tacche(min, max, quante) {
+    let a = Number(min);
+    let b = Number(max);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return { min: 0, max: 1, passo: 1, valori: [0, 1] };
+    if (a > b) [a, b] = [b, a];
+    if (a === b) { const d = Math.abs(a) > 0 ? Math.abs(a) / 2 : 1; a -= d; b += d; }
+    const grezzo = (b - a) / Math.max(1, quante || 5);
+    const p10 = Math.pow(10, Math.floor(Math.log10(grezzo)));
+    const f = grezzo / p10;
+    const passo = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p10;
+    const inizio = Math.floor(a / passo + 1e-9) * passo;
+    const fine = Math.ceil(b / passo - 1e-9) * passo;
+    const decimali = Math.max(0, -Math.floor(Math.log10(passo)) + 1);
+    const valori = [];
+    for (let k = 0; inizio + k * passo <= fine + passo * 1e-6 && k < 50; k++) valori.push(Number((inizio + k * passo).toFixed(decimali)));
+    return { min: valori[0], max: valori[valori.length - 1], passo, valori };
+  }
+
+  /**
+   * Gli intervalli di un grafico (§21.1): x e y con le tacche. Le barre partono sempre da 0; per punti e linee lo
+   * 0 entra solo se è già vicino (così l'asse passa per lo 0 quando serve, e misure come 1,58-1,75 non si schiacciano).
+   */
+  function spazioGrafico(g) {
+    const tipo = g && g.tipo;
+    if (tipo === 'barre') {
+      const valori = ((g && g.serie) || []).flatMap((x) => (x.valori || []).map(Number)).filter(Number.isFinite);
+      const ymin = Math.min(0, ...valori);
+      const ymax = Math.max(0, ...valori);
+      return { tipo, categorie: (g.categorie || []).map(String), y: tacche(ymin, ymax === ymin ? ymin + 1 : ymax, 5) };
+    }
+    const punti = ((g && g.serie) || []).flatMap((x) => x.punti || []).filter((p) => Array.isArray(p) && Number.isFinite(Number(p[0])) && Number.isFinite(Number(p[1])));
+    const xs = punti.map((p) => Number(p[0]));
+    const ys = punti.map((p) => Number(p[1]));
+    const intervallo = (v) => {
+      if (!v.length) return [0, 1];
+      let a = Math.min(...v);
+      let b = Math.max(...v);
+      const largo = b - a || Math.abs(a) || 1;
+      if (a > 0 && a <= largo * 0.5) a = 0;
+      if (b < 0 && -b <= largo * 0.5) b = 0;
+      return [a, b];
+    };
+    const [x0, x1] = intervallo(xs);
+    const [y0, y1] = intervallo(ys);
+    return { tipo: tipo === 'linee' ? 'linee' : 'punti', x: tacche(x0, x1, 6), y: tacche(y0, y1, 5) };
   }
 
   /** La riga PER di Nuovo schema e Nuova verifica. */
@@ -1724,7 +1990,9 @@
     minutiLettura, nomeForma, nomeLivello, riassuntoSchema, percentualeLavoro, statoRigaSchema, mancanzeSchema, nomeFilePdf,
     SPUNTI_CHIARIMENTO, MASSIMO_DOMANDA, CONTATORE_DOMANDA_DA, costoChiarimento, etichettaMinuto,
     ESITI_LAMPO, minutiLampo, fraseLampo, fraseFineRipasso,
-    DURATE_SIMULATA, esitoSimulata, voto, statoRigaSimulata, testoTempo, riassuntoSimulata, contaRisposte, unisciRisposte, frasePunti, fraseOltreTempo, puntiDomanda, riepilogoData,
+    DURATE_SIMULATA, esitoSimulata, voto, statoRigaSimulata, testoTempo, riassuntoSimulata, rispostaFatta, contaRisposte, unisciRisposte, frasePunti, fraseOltreTempo, puntiDomanda, riepilogoData,
+    formaDomanda, campiRisultato, ESTENSIONI_ALLEGATO, MASSIMO_ALLEGATI, controllaAllegato, esitoControllo, TASTI_FORMULA, inserisciFormula, daImpaginare, pezziFormula,
+    numeroGrafico, tacche, spazioGrafico,
     FORME_RIASSUNTO, riassuntoDellaForma, statoFormaRiassunto, fraseParole, ultimoRiassunto,
     mappaDelTipo, statoTipoMappa, ultimaMappa, contenutoMappaCorretto,
     SCELTE_NUOVO, schemiPronti, righeNuovo, nuovoSpento,
