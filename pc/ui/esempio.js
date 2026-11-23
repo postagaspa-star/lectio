@@ -901,7 +901,8 @@
         return x ? schemaInLista(x) : null;
       };
       // Come il server 1.4.5: "Dopo la verifica" quando Lectio ha preparato qualcosa e la scheda non è stata chiusa.
-      const preparato = (e) => !!e.lezione_id || s.schemi.some((x) => x.evento_id === e.id && x.stato === 'pronto');
+      const preparato = (e) => !!e.lezione_id || s.schemi.some((x) => x.evento_id === e.id && x.stato === 'pronto')
+        || s.simulate.some((x) => x.evento_id === e.id && ['pronta', 'in_corso', 'in_correzione', 'corretta'].includes(x.stato));
       const ascoltate = s.lezioni.filter((l) => l.stato === 'pronta' && l.ascolto && l.ascolto.posizione_s > 0 && !l.ascolto.finita)
         .sort((a, b) => String(b.ascolto.aggiornato_il).localeCompare(String(a.ascolto.aggiornato_il)));
       return {
@@ -1067,9 +1068,34 @@
         e._nascosto = true;
         return [200, { ok: true }];
       }
+      // Come il server 1.4.6: quello che Lectio aveva preparato per la verifica, da spuntare in "Com'è andata".
+      const previsteDi = (e) => {
+        const gruppi = [];
+        const l = e.lezione_id ? s.lezioni.find((x) => x.id === e.lezione_id) : null;
+        const dl = l ? (l.domande || []).filter((d) => !d.tolta) : [];
+        if (dl.length) gruppi.push({ fonte: 'lezione', id: l.id, voci: dl.map((d) => ({ chiave: 'domanda:' + d.id, testo: d.testo })) });
+        const x = s.simulate.filter((y) => y.evento_id === e.id && ['pronta', 'in_corso', 'in_correzione', 'corretta'].includes(y.stato)).sort((a, b) => b.id - a.id)[0];
+        if (x && (x.domande || []).length) gruppi.push({ fonte: 'simulata', id: x.id, voci: x.domande.map((d) => ({ chiave: 'simulata:' + x.id + ':' + d.n, testo: d.testo })) });
+        const sc = s.schemi.filter((y) => y.evento_id === e.id && y.stato === 'pronto' && y.contenuto).sort((a, b) => b.id - a.id)[0];
+        if (sc) {
+          const sez = sc.contenuto.sezioni || [];
+          const quadro = (z, i) => i === sez.length - 1 && sez.length > 1 && (z.blocchi || []).length === 1 && z.blocchi[0].tipo === 'tabella';
+          const voci = sez.map((z, i) => (z.titolo && !quadro(z, i) ? { chiave: 'schema:' + sc.id + ':' + (i + 1), testo: z.titolo } : null)).filter(Boolean);
+          if (voci.length) gruppi.push({ fonte: 'schema', id: sc.id, voci });
+        }
+        return gruppi;
+      };
+      if ((m = /^\/server\/api\/eventi\/(\d+)\/previste$/.exec(p)) && metodo === 'GET') {
+        const e = s.eventi.find((x) => x.id === Number(m[1]));
+        if (!e) return [404, { errore: 'Verifica o interrogazione non trovata.', codice: 'non_trovato' }];
+        return [200, { gruppi: previsteDi(e) }];
+      }
       if ((m = /^\/server\/api\/eventi\/(\d+)\/esito$/.exec(p))) {
         const e = s.eventi.find((x) => x.id === Number(m[1]));
-        const uscite = (corpo.domande_uscite || []).length;
+        const voci = corpo.voci_uscite || [];
+        const valide = e ? new Set(previsteDi(e).flatMap((g) => g.voci.map((v) => v.chiave))) : new Set();
+        if (voci.some((v) => !valide.has(v))) return [422, { errore: 'Alcune cose indicate non sono tra quelle preparate per questa verifica. Riapri la pagina e riprova.', codice: 'non_valido' }];
+        const uscite = new Set([...(corpo.domande_uscite || []).map((x) => 'domanda:' + x), ...voci]).size;
         const altre = String(corpo.altre_domande || '').split('\n').filter((r) => r.trim()).length;
         const esito = { previste_uscite: uscite, totale_vere: uscite + altre, percentuale: uscite + altre ? Math.round(uscite / (uscite + altre) * 100) : 0 };
         if (e) e.esito = esito;

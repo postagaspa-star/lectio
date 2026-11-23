@@ -119,7 +119,8 @@ montata `/apk`).
 ## 7. Verifiche e interrogazioni in arrivo (eventi)
 
 `Evento`: `{"id":3,"materia_id":1,"tipo":"scritta","argomento":"Impero romano","data":"2026-10-30","esito":null,"lezione_id":12}`
-(`tipo` `scritta` | `orale`; `lezione_id` = l'ultima lezione fatta per questo evento).
+(`tipo` `scritta` | `orale`; `lezione_id` = l'ultima lezione fatta per questo evento; `esito`, se c'è, ha `domande_uscite`, `voci_uscite`,
+`altre_domande`, `voto`, `previste_uscite`, `totale_vere`, `percentuale`).
 - `GET /api/eventi?da=YYYY-MM-DD` (predefinito: oggi meno 30 giorni), `POST /api/materie/{id}/eventi`,
   `PATCH /api/eventi/{id}`, `DELETE /api/eventi/{id}`.
 - `POST /api/eventi/{id}/esito`
@@ -127,6 +128,16 @@ montata `/apk`).
   `{"previste_uscite":3,"totale_vere":5,"percentuale":60}`. Le `domande_uscite` sono id di domande della
   lezione dell'evento; `totale_vere` = uscite + righe non vuote di `altre_domande`. Fa partire l'aggiornamento
   della scheda.
+- `GET /api/eventi/{id}/previste` (server 1.4.6) → `{"gruppi": [{"fonte": "lezione" | "simulata" | "schema", "id": 14,
+  "voci": [{"chiave": "schema:14:3", "testo": "Victor dell'Aveyron"}]}]}`: quello che Lectio aveva preparato per la
+  verifica, da spuntare in "Com'è andata", in quest'ordine: le domande dell'ultima lezione (`domanda:{id}`), le domande
+  dell'ultima verifica simulata pronta, in corso o corretta (`simulata:{id}:{n}`), le parti con un titolo dell'ultimo
+  schema pronto (`schema:{id}:{n}`, n da 1; il quadro d'insieme finale, una sola tabella, resta fuori). Un gruppo
+  senza voci non c'è; 404 se l'evento non c'è.
+- Dal server 1.4.6 l'esito accetta anche `"voci_uscite": ["schema:14:3", "simulata:4:2", "domanda:31"]` (al massimo
+  300, ognuna tra quelle di `/previste`, se no 422 sul campo `voci_uscite`). Le `domanda:` si uniscono alle
+  `domande_uscite` (contate una volta sola); le altre contano tra le `previste_uscite` e restano nell'esito come
+  `voci_uscite`, con il loro testo per la scheda del prof (le parti dello schema come "argomento: …").
 - `POST /api/eventi/{id}/nascondi-racconto` → `{"ok": true}` (server 1.4.5): chiude la scheda "Dopo la verifica" di Oggi
   senza raccontare; l'esito resta `null` e l'evento non torna in `da_raccontare`.
 

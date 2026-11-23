@@ -2,7 +2,7 @@
 mandarne); i tipi sbagliati diventano un 422 in italiano (errori.py)."""
 
 import re
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
@@ -135,6 +135,7 @@ class EventoPatch(Corpo):
 
 class EsitoIn(Corpo):
     domande_uscite: list[StrictInt] = Field(default_factory=list, max_length=200)
+    voci_uscite: list[Annotated[str, Field(max_length=60)]] = Field(default_factory=list, max_length=300)
     altre_domande: str = Field(default="", max_length=4000)
     voto: str | None = Field(default=None, max_length=20)
 

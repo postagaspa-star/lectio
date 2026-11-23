@@ -394,6 +394,7 @@ def _esiti(conn: sqlite3.Connection, materia_id: int) -> list[dict]:
         ids = esito.get("domande_uscite") or []
         uscite = [r["testo"] for r in conn.execute(
             f"SELECT testo FROM domande WHERE id IN ({','.join('?' * len(ids))})", ids)] if ids else []
+        uscite += [str(x) for x in esito.get("testi_uscite") or [] if str(x).strip()]  # 1.4.6: simulata e schema
         altre = [r.strip() for r in (esito.get("altre_domande") or "").split("\n") if r.strip()]
         esiti.append({"quando": e["data"], "tipo": "orale" if e["tipo"] == "orale" else "scritta",
                       "voto": esito.get("voto") or "", "uscite": uscite, "altre": altre})

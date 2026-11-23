@@ -70,6 +70,7 @@ FRASI_CAMPI = {
     "finita": "Va indicato se la lezione è finita (sì o no).",
     "aggiornato_il": "L'ora dell'aggiornamento non va bene.",
     "domande_uscite": "L'elenco delle domande uscite non va bene.",
+    "voci_uscite": "L'elenco delle cose uscite non va bene.",
     "altre_domande": "Le altre domande possono essere lunghe al massimo 4000 caratteri.",
     "voto": "Il voto può avere al massimo 20 caratteri.",
     "tetto_eur": "Il tetto del mese deve essere tra 0,50 e 10 euro.",

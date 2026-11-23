@@ -1,6 +1,6 @@
 {
-  "server": "1.4.5",
+  "server": "1.4.6",
   "android": {"codice": 8, "nome": "1.3.3"},
-  "pc": {"codice": 18, "nome": "1.3.12"},
+  "pc": {"codice": 19, "nome": "1.3.13"},
   "nota": "Gli aggiornamenti si installano da soli: sul telefono quando lasci l'app, sul computer quando chiudi Lectio."
 }

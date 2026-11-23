@@ -1389,21 +1389,23 @@
     if (!ev) { svuota(pag, re.ok ? A.messaggio('errore', 'Questa verifica non c\'è più.') : A.erroreConRiprova(re, () => A.disegna())); return; }
     if (!S.materie) await A.caricaMaterie();
     const m = A.materiaDi(ev.materia_id) || { nome: '', colore: 'ambra', id: ev.materia_id };
-    let domande = [];
-    if (ev.lezione_id) {
-      const rl = await A.dettaglioLezione(ev.lezione_id);
-      if (!vivo()) return;
-      if (rl.ok && rl.dati) domande = rl.dati.domande || [];
-    }
+    // 1.3.13: da spuntare c'è quello che Lectio aveva preparato: domande della lezione o della simulata, parti dello schema.
+    const rp = await A.api.get('/server/api/eventi/' + ev.id + '/previste');
+    if (!vivo()) return;
+    if (!rp.ok) { svuota(pag, A.erroreConRiprova(rp, () => A.disegna())); return; }
+    const gruppi = ((rp.dati && rp.dati.gruppi) || []).filter((g) => (g.voci || []).length);
+    const soloSchema = gruppi.length > 0 && gruppi.every((g) => g.fonte === 'schema');
+    const NOMI = { lezione: 'Le domande della lezione', simulata: 'Le domande della verifica simulata', schema: 'Le parti dello schema' };
     const cosa = ev.tipo === 'orale' ? 'l\'interrogazione' : 'la verifica';
     const uscite = new Set();
     const altre = h('textarea', { class: 'campo', id: 'altre-domande', rows: '4', placeholder: 'Una domanda per riga' });
-    const voto = h('input', { class: 'campo', id: 'voto', maxlength: '10', stile: { width: '140px' } });
+    // Il giorno della verifica il voto non c'è ancora: il campo compare dal giorno dopo, e resta facoltativo.
+    const voto = ev.data < L.iso() ? h('input', { class: 'campo', id: 'voto', maxlength: '10', stile: { width: '140px' } }) : null;
     const esito = h('div');
     const salva = h('button', { type: 'button', class: 'pulsante pieno', 'data-azione': 'salva-esito' }, 'Salva');
     salva.addEventListener('click', async () => {
       salva.disabled = true;
-      const r = await A.api.post('/server/api/eventi/' + ev.id + '/esito', { domande_uscite: Array.from(uscite), altre_domande: altre.value, voto: voto.value.trim() || null });
+      const r = await A.api.post('/server/api/eventi/' + ev.id + '/esito', { voci_uscite: Array.from(uscite), altre_domande: altre.value, voto: voto ? voto.value.trim() || null : null });
       salva.disabled = false;
       if (!r.ok) { svuota(esito, A.messaggio('errore', r.errore)); return; }
       risultato(r.dati || {});
@@ -1425,22 +1427,22 @@
       svuota(pag,
         h('h1', { class: 'titolo-pagina' }, 'Com\'è andata ' + cosa + ' di ' + m.nome + '?'),
         h('div', { class: 'scheda rilievo', stile: { alignItems: 'center', textAlign: 'center', maxWidth: '520px' } },
-          // 1.3.12: con il solo schema non c'erano domande da spuntare, quindi niente "0 di 3 previste".
-          domande.length ? h('div', { class: 'anello' }, svg, h('div', { class: 'numero' }, (d.previste_uscite || 0) + ' di ' + (d.totale_vere || 0), h('span', null, 'domande previste'))) : null,
+          // Senza niente da spuntare non c'è un "0 di 3 previste" da mostrare.
+          gruppi.length ? h('div', { class: 'anello' }, svg, h('div', { class: 'numero' }, (d.previste_uscite || 0) + ' di ' + (d.totale_vere || 0), h('span', null, soloSchema ? 'argomenti previsti' : 'domande previste'))) : null,
           h('p', { class: 'forte' }, 'Ho aggiornato la scheda del prof.'),
           h('button', { type: 'button', class: 'pulsante tenue', onclick: () => { A.vai('#materia/' + m.id); setTimeout(() => { const mm = A.materiaDi(m.id); if (mm) A.apriAggiungi(mm, { tipo: 'verifica' }); }, 120); } }, 'Carica la verifica corretta')));
     }
     svuota(pag,
       h('div', { class: 'testa-pagina' }, h('div', null, h('h1', { class: 'titolo-pagina' }, 'Com\'è andata ' + cosa + ' di ' + m.nome + '?'), h('span', { class: 'sottotitolo' }, L.dataLunga(ev.data)))),
-      domande.length ? h('div', { class: 'sezione' }, h('span', { class: 'etichetta' }, 'Le domande della lezione'),
-        h('div', { class: 'elenco domande-esito' }, domande.map((d) => {
-          const id = 'uscita-' + d.id;
-          const input = h('input', { type: 'checkbox', id, onchange: () => { if (input.checked) uscite.add(d.id); else uscite.delete(d.id); } });
-          return h('label', { class: 'riga interruttore', for: id }, h('span', { class: 'testi' }, h('span', { class: 'forte', stile: { fontSize: '15px' } }, d.testo), h('span', { class: 'secondario' }, 'È uscita')), input, h('span', { class: 'binario', 'aria-hidden': 'true' }));
-        }))) : null,
+      gruppi.map((g) => h('div', { class: 'sezione' }, h('span', { class: 'etichetta' }, NOMI[g.fonte] || 'Preparato da Lectio'),
+        h('div', { class: 'elenco domande-esito', 'data-fonte': g.fonte }, g.voci.map((v) => {
+          const id = 'uscita-' + String(v.chiave).replace(/[^a-z0-9]+/gi, '-');
+          const input = h('input', { type: 'checkbox', id, onchange: () => { if (input.checked) uscite.add(v.chiave); else uscite.delete(v.chiave); } });
+          return h('label', { class: 'riga interruttore', for: id }, h('span', { class: 'testi' }, h('span', { class: 'forte', stile: { fontSize: '15px' } }, v.testo), h('span', { class: 'secondario' }, 'È uscita')), input, h('span', { class: 'binario', 'aria-hidden': 'true' }));
+        })))),
       h('div', { class: 'su-fondo', stile: { display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px' } },
-        h('label', { class: 'campo-gruppo', for: 'altre-domande' }, h('span', { class: 'etichetta' }, 'Altre domande uscite'), altre),
-        h('label', { class: 'campo-gruppo', for: 'voto' }, h('span', { class: 'etichetta' }, 'Voto'), voto)),
+        h('label', { class: 'campo-gruppo', for: 'altre-domande' }, h('span', { class: 'etichetta' }, soloSchema ? 'Domande fuori dallo schema' : gruppi.length ? 'Altre domande uscite' : 'Le domande uscite'), altre),
+        voto ? h('label', { class: 'campo-gruppo', for: 'voto' }, h('span', { class: 'etichetta' }, 'Voto'), voto) : null),
       esito,
       h('div', null, salva));
   };

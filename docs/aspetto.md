@@ -140,8 +140,8 @@ Come `docs/prototipo/Main.dc.html`, dai dati di `GET /api/oggi`:
 - **Dopo la verifica**: per ogni verifica passata senza esito, riga "Com'è andata la verifica di Inglese?" +
   pulsante secondario **Racconta**. Dalla 1.3.12 (PC) compare già il giorno della verifica dalle 13 (le verifiche sono
   al mattino) e anche per le verifiche con il solo schema; a destra una **X** (36 px, trasparente, icona 18 px tenue,
-  "Nascondi") la chiude senza raccontare: la scheda sfuma in 220 ms e non torna. Con il solo schema "Com'è andata" non
-  ha domande da spuntare e alla fine non mostra l'anello delle previste.
+  "Nascondi") la chiude senza raccontare: la scheda sfuma in 220 ms e non torna. Con il solo schema "Com'è andata"
+  fa spuntare le parti dello schema (§8).
 - **Più avanti**: le altre verifiche/interrogazioni (pallino, materia, cosa, quando), al massimo 4, poi
   "Vedi tutte".
 - In fondo, piccolo: **Questo mese 0,80 € di 2 €** con barra sottile; sotto "si azzera il 1° novembre".
@@ -324,9 +324,14 @@ Prototipo `Lettore.dc.html`:
 
 ## 8. Com'è andata (dopo la verifica)
 
-Una pagina: titolo "Com'è andata la verifica di Storia?"; le domande previste dalla lezione come righe con
-interruttore **È uscita**; campo **Altre domande uscite** (una per riga); **Voto** facoltativo; pulsante pieno
-**Salva**. Risultato: anello "4 di 6 domande previste" che si riempie, frase "Ho aggiornato la scheda del prof",
+Una pagina: titolo "Com'è andata la verifica di Storia?"; quello che Lectio aveva preparato, a gruppi con la loro
+etichetta: **Le domande della lezione**, **Le domande della verifica simulata**, **Le parti dello schema** (PC 1.3.13,
+server 1.4.6: prima con il solo schema non c'era niente da spuntare), ogni voce come riga con interruttore
+**È uscita**; campo **Altre domande uscite** (una per riga; con il solo schema si chiama **Domande fuori dallo
+schema**, senza niente preparato **Le domande uscite**); pulsante pieno **Salva**. Il **voto** non c'è il giorno
+della verifica (la scheda compare dalle 13 e il voto non si sa ancora): dal giorno dopo c'è il campo facoltativo
+**Voto** (solo la parola, senza frasi aggiunte). Risultato: anello "4 di 6 domande
+previste" (con il solo schema "argomenti previsti") che si riempie, frase "Ho aggiornato la scheda del prof",
 pulsante **Carica la verifica corretta** (apre Aggiungi con tipo già scelto). Niente feste.
 
 ## 9. Per Gemini

@@ -100,7 +100,7 @@ def lezione_dell_evento(conn: sqlite3.Connection, evento_id: int) -> int | None:
 def evento(conn: sqlite3.Connection, r: sqlite3.Row) -> dict:
     esito = json.loads(r["esito"]) if r["esito"] else None
     if esito:
-        esito = {k: esito.get(k) for k in ("domande_uscite", "altre_domande", "voto", "previste_uscite",
+        esito = {k: esito.get(k) for k in ("domande_uscite", "voci_uscite", "altre_domande", "voto", "previste_uscite",
                                             "totale_vere", "percentuale")}
     return {
         "id": r["id"],

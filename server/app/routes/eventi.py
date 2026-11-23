@@ -65,6 +65,57 @@ def cancella(evento_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     return {"ok": True}
 
 
+# Le verifiche simulate che contano come preparate (come per "Dopo la verifica" in Oggi).
+STATI_SIMULATA_FATTA = ("pronta", "in_corso", "in_correzione", "corretta")
+
+
+def _parti_dello_schema(contenuto: dict) -> list[tuple[int, str]]:
+    """Le parti con un titolo; il quadro d'insieme finale (una sola tabella) non è un argomento della verifica."""
+    sezioni = contenuto.get("sezioni") or []
+    parti = []
+    for n, s in enumerate(sezioni, start=1):
+        blocchi = s.get("blocchi") or []
+        if n == len(sezioni) and n > 1 and len(blocchi) == 1 and blocchi[0].get("tipo") == "tabella":
+            continue
+        titolo = " ".join(str(s.get("titolo") or "").split())
+        if titolo:
+            parti.append((n, titolo))
+    return parti
+
+
+def previste(conn: sqlite3.Connection, evento_id: int) -> list[dict]:
+    """1.4.6: quello che Lectio aveva preparato per la verifica, da spuntare in "Com'è andata": le domande della
+    lezione, le domande della verifica simulata, le parti dello schema. Ogni voce ha una chiave stabile."""
+    gruppi = []
+    lezione_id = forme.lezione_dell_evento(conn, evento_id)
+    if lezione_id is not None:
+        voci = [{"chiave": f"domanda:{d['id']}", "testo": d["testo"]} for d in conn.execute(
+            "SELECT id, testo FROM domande WHERE lezione_id = ? AND tolta = 0 ORDER BY n", (lezione_id,))]
+        if voci:
+            gruppi.append({"fonte": "lezione", "id": lezione_id, "voci": voci})
+    x = conn.execute(
+        f"SELECT id, domande FROM simulate WHERE evento_id = ? AND stato IN ({','.join('?' * len(STATI_SIMULATA_FATTA))})"
+        " ORDER BY id DESC LIMIT 1", (evento_id, *STATI_SIMULATA_FATTA)).fetchone()
+    if x is not None:
+        voci = [{"chiave": f"simulata:{x['id']}:{d['n']}", "testo": " ".join(str(d.get("testo") or "").split())}
+                for d in json.loads(x["domande"] or "[]") if isinstance(d, dict) and d.get("n") is not None and d.get("testo")]
+        if voci:
+            gruppi.append({"fonte": "simulata", "id": x["id"], "voci": voci})
+    s = conn.execute("SELECT id, contenuto FROM schemi WHERE evento_id = ? AND stato = 'pronto' AND contenuto IS NOT NULL"
+                     " ORDER BY id DESC LIMIT 1", (evento_id,)).fetchone()
+    if s is not None:
+        voci = [{"chiave": f"schema:{s['id']}:{n}", "testo": titolo} for n, titolo in _parti_dello_schema(json.loads(s["contenuto"]))]
+        if voci:
+            gruppi.append({"fonte": "schema", "id": s["id"], "voci": voci})
+    return gruppi
+
+
+@router.get("/eventi/{evento_id}/previste")
+def elenco_previste(evento_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    trova_evento(conn, evento_id)
+    return {"gruppi": previste(conn, evento_id)}
+
+
 @router.post("/eventi/{evento_id}/esito")
 def esito(evento_id: int, corpo: EsitoIn, conn: sqlite3.Connection = Depends(get_conn),
           s: Servizi = Depends(servizi)):
@@ -77,12 +128,27 @@ def esito(evento_id: int, corpo: EsitoIn, conn: sqlite3.Connection = Depends(get
         if len(validi) != len(ids):
             raise non_valido("Alcune domande indicate non sono della lezione di questa verifica.",
                              campo="domande_uscite")
+    # 1.4.6: le voci di "Com'è andata" (domande della lezione o della simulata, parti dello schema).
+    chiavi = list(dict.fromkeys(corpo.voci_uscite))
+    voci = {v["chiave"]: (g["fonte"], v["testo"]) for g in previste(conn, evento_id) for v in g["voci"]} if chiavi else {}
+    if any(c not in voci for c in chiavi):
+        raise non_valido("Alcune cose indicate non sono tra quelle preparate per questa verifica. Riapri la pagina e riprova.",
+                         campo="voci_uscite")
+    altre_previste = []
+    for c in chiavi:
+        fonte, testo = voci[c]
+        if fonte == "lezione":
+            ids.append(int(c.split(":")[1]))
+        else:
+            altre_previste.append(f"argomento: {testo}" if fonte == "schema" else testo)
+    ids = list(dict.fromkeys(ids))
     altre = [r.strip() for r in corpo.altre_domande.split("\n") if r.strip()]
-    previste = len(ids)
-    totale = previste + len(altre)
-    risultato = {"previste_uscite": previste, "totale_vere": totale,
-                 "percentuale": int(round(100 * previste / totale)) if totale else 0}
-    salvato = {"domande_uscite": ids, "altre_domande": corpo.altre_domande.strip(),
+    previste_uscite = len(ids) + len(altre_previste)
+    totale = previste_uscite + len(altre)
+    risultato = {"previste_uscite": previste_uscite, "totale_vere": totale,
+                 "percentuale": int(round(100 * previste_uscite / totale)) if totale else 0}
+    salvato = {"domande_uscite": ids, "voci_uscite": [c for c in chiavi if not c.startswith("domanda:")],
+               "testi_uscite": altre_previste, "altre_domande": corpo.altre_domande.strip(),
                "voto": (corpo.voto or "").strip() or None, **risultato, "salvato_il": clock.adesso()}
     with db.transazione(conn):
         conn.execute("UPDATE eventi SET esito = ? WHERE id = ?", (json.dumps(salvato, ensure_ascii=False), evento_id))

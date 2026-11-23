@@ -120,19 +120,54 @@ test('Dopo la verifica: la X la chiude senza raccontare e non torna; se il serve
   assert.doesNotMatch(p.testo(), /Com'è andata la verifica di Inglese/);
 });
 
-test('Com\'è andata con il solo schema: niente domande da spuntare e niente anello delle previste', opz, async () => {
+test('Com\'è andata con il solo schema: si spuntano le parti dello schema; il giorno della verifica niente voto', opz, async () => {
   const p = await apri({}, null, (s) => {
-    s.esempio.stato.eventi.find((e) => e.id === 4).lezione_id = null;
-    s.esempio.stato.schemi.find((x) => x.id === 4).evento_id = 4;
+    const e = s.esempio.stato.eventi.find((x) => x.id === 4);
+    e.lezione_id = null;
+    e.data = '2026-10-27';
+    s.esempio.stato.schemi.find((x) => x.id === 3).evento_id = 4;
   });
-  await p.aspetta(() => p.q('[data-racconta="4"]'));
   p.A.vai('#racconta/4');
   await p.aspetta(() => p.q('[data-azione="salva-esito"]'));
-  assert.equal(p.q('.domande-esito'), null);
-  p.scrivi(p.q('#altre-domande'), 'Quando si usa il present perfect?');
+  assert.match(p.testo(), /Le parti dello schema/);
+  assert.doesNotMatch(p.testo(), /Le domande della lezione/);
+  const righe = Array.from(p.w.document.querySelectorAll('.domande-esito[data-fonte="schema"] label'));
+  assert.equal(righe.length, 5);
+  assert.match(righe[0].textContent, /Augusto e la nascita del principato/);
+  assert.match(righe[0].textContent, /È uscita/);
+  assert.match(p.testo(), /Domande fuori dallo schema/);
+  // Il giorno della verifica il voto non si sa ancora.
+  assert.equal(p.q('#voto'), null);
+  assert.doesNotMatch(p.testo(), /Voto/);
+  p.clic(righe[1].querySelector('input'));
+  p.scrivi(p.q('#altre-domande'), 'Quando morì Nerone?');
   p.clic(p.q('[data-azione="salva-esito"]'));
   await p.aspetta(() => /Ho aggiornato la scheda del prof/.test(p.testo()));
-  assert.equal(p.q('.anello'), null);
+  const corpo = p.s.chiamate('POST', '/server/api/eventi/4/esito')[0].corpo;
+  assert.deepEqual(corpo.voci_uscite, ['schema:3:2']);
+  assert.equal(corpo.voto, null);
+  assert.match(p.q('.anello').textContent.replace(/\s+/g, ' '), /1 di 2 ?argomenti previsti/);
+});
+
+test('Com\'è andata dal giorno dopo: domande della lezione da spuntare e voto facoltativo', opz, async () => {
+  const p = await apri();
+  p.A.vai('#racconta/4');
+  await p.aspetta(() => p.q('[data-azione="salva-esito"]'));
+  assert.match(p.testo(), /Le domande della lezione/);
+  assert.match(p.testo(), /Altre domande uscite/);
+  assert.match(p.testo(), /Voto/);
+  assert.doesNotMatch(p.testo(), /se lo sai/);
+  const righe = Array.from(p.w.document.querySelectorAll('.domande-esito[data-fonte="lezione"] label'));
+  assert.ok(righe.length > 0);
+  p.clic(righe[0].querySelector('input'));
+  p.scrivi(p.q('#voto'), '7');
+  p.clic(p.q('[data-azione="salva-esito"]'));
+  await p.aspetta(() => /Ho aggiornato la scheda del prof/.test(p.testo()));
+  const corpo = p.s.chiamate('POST', '/server/api/eventi/4/esito')[0].corpo;
+  assert.equal(corpo.voci_uscite.length, 1);
+  assert.match(corpo.voci_uscite[0], /^domanda:\d+$/);
+  assert.equal(corpo.voto, '7');
+  assert.match(p.q('.anello').textContent.replace(/\s+/g, ' '), /1 di 1 ?domande previste/);
 });
 
 // --- Il lettore: fermate alle domande e risposte scritte ----------------------------------------------

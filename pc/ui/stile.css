@@ -898,7 +898,7 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 .anello .fondo-anello { stroke: var(--sup2); }
 .anello .pieno-anello { stroke: var(--acc); stroke-linecap: round; transition: stroke-dashoffset .9s cubic-bezier(.2, .8, .2, 1); }
 .anello .numero { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; font-size: 26px; font-weight: 800; }
-.anello .numero span { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.anello .numero span { font-size: 13px; font-weight: 600; color: var(--tenue); max-width: 88px; text-align: center; line-height: 1.25; margin-top: 2px; }
 
 /* ------------------------------------------------------------------ Visita guidata (riflettore) */
 

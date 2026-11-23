@@ -2,10 +2,12 @@
 di oggi sono fatte dalle 13, "Dopo la verifica" si può chiudere e il Ripasso lampo di Oggi conta solo le carte per le
 verifiche in arrivo (contratto 7, 10, 20)."""
 
+import json
+
 import pytest
 
 from aiuti import aggiungi_testo, crea_materia, lezione_pronta
-from app import db
+from app import db, scheda
 from test_eventi_oggi import evento
 from test_studio import crea_schema, materia_pronta, studio_tutto
 
@@ -92,3 +94,76 @@ def test_il_ripasso_lampo_di_oggi_conta_solo_le_verifiche_in_arrivo(client, auth
     orologio.avanza(hours=3)
     assert oggi(client, auth)["lampo"] == {"da_fare": 0, "minuti": 0}
     assert client.get("/api/lampo", params={"solo_verifiche": True}, headers=auth).json()["carte"] == []
+
+
+# --------------------------------------------------------------------------- 1.4.6: "Com'è andata" con lo schema
+
+def _schema_pronto(servizi, materia_id: int, evento_id: int, sezioni: list[dict]) -> int:
+    with db.aperta(servizi.settings.db_path) as conn:
+        return conn.execute(
+            "INSERT INTO schemi (materia_id, evento_id, argomento, titolo, forma, livello, stato, creato_il, in_coda_dal, contenuto)"
+            " VALUES (?, ?, 'Antropologia', 'Antropologia', 'capitoli', 'completo', 'pronto', '2026-10-27T08:00:00+00:00',"
+            " '2026-10-27T08:00:00+00:00', ?)", (materia_id, evento_id, json.dumps({"forma": "capitoli", "sezioni": sezioni}))).lastrowid
+
+
+def _simulata(servizi, materia_id: int, evento_id: int, stato: str, domande: list[dict]) -> int:
+    with db.aperta(servizi.settings.db_path) as conn:
+        return conn.execute(
+            "INSERT INTO simulate (materia_id, evento_id, argomento, minuti, stato, creata_il, in_coda_dal, domande)"
+            " VALUES (?, ?, 'Antropologia', 50, ?, '2026-10-27T08:00:00+00:00', '2026-10-27T08:00:00+00:00', ?)",
+            (materia_id, evento_id, stato, json.dumps(domande))).lastrowid
+
+
+def _esito_salvato(client, auth, evento_id: int) -> dict:
+    return next(x for x in client.get("/api/eventi", headers=auth).json() if x["id"] == evento_id)["esito"]
+
+
+def test_com_e_andata_con_lo_schema_si_spuntano_le_parti(client, auth, servizi):
+    m = crea_materia(client, auth)
+    e = evento(client, auth, m["id"], "2026-10-27")
+    sid = _schema_pronto(servizi, m["id"], e["id"], [
+        {"titolo": "Victor dell'Aveyron", "blocchi": [{"tipo": "paragrafo", "testo": "Il ragazzo selvaggio."}]},
+        {"titolo": "", "blocchi": [{"tipo": "paragrafo", "testo": "Senza titolo."}]},
+        {"titolo": "Malinowski  e la ricerca sul campo", "blocchi": [{"tipo": "punti", "punti": ["Le Trobriand"]}]},
+        {"titolo": "Quadro d'insieme", "blocchi": [{"tipo": "tabella", "righe": [["Boas", "particolarismo"]]}]},
+    ])
+    r = client.get(f"/api/eventi/{e['id']}/previste", headers=auth)
+    assert r.status_code == 200, r.text
+    # Il quadro d'insieme finale non è un argomento; le parti senza titolo non si possono spuntare.
+    assert r.json() == {"gruppi": [{"fonte": "schema", "id": sid, "voci": [
+        {"chiave": f"schema:{sid}:1", "testo": "Victor dell'Aveyron"},
+        {"chiave": f"schema:{sid}:3", "testo": "Malinowski e la ricerca sul campo"}]}]}
+    r = client.post(f"/api/eventi/{e['id']}/esito", headers=auth, json={"voci_uscite": [f"schema:{sid}:4"]})
+    assert r.status_code == 422 and "preparate per questa verifica" in r.json()["errore"]
+    r = client.post(f"/api/eventi/{e['id']}/esito", headers=auth,
+                    json={"voci_uscite": [f"schema:{sid}:3", f"schema:{sid}:3"], "altre_domande": "Chi era Boas?\n\n"})
+    assert r.status_code == 200 and r.json() == {"previste_uscite": 1, "totale_vere": 2, "percentuale": 50}
+    salvato = _esito_salvato(client, auth, e["id"])
+    assert salvato["voci_uscite"] == [f"schema:{sid}:3"] and salvato["domande_uscite"] == [] and salvato["voto"] is None
+    # La scheda del prof sa quale argomento è uscito.
+    with db.aperta(servizi.settings.db_path) as conn:
+        assert scheda._esiti(conn, m["id"])[0]["uscite"] == ["argomento: Malinowski e la ricerca sul campo"]
+    assert client.get("/api/eventi/9999/previste", headers=auth).status_code == 404
+
+
+def test_com_e_andata_con_la_lezione_e_la_simulata(client, auth, servizi):
+    m = crea_materia(client, auth)
+    aggiungi_testo(client, auth, m["id"])
+    e = evento(client, auth, m["id"], "2026-10-27")
+    lez = lezione_pronta(client, auth, servizi, m["id"], evento_id=e["id"])
+    _simulata(servizi, m["id"], e["id"], "errore", [{"n": 1, "testo": "Non conta"}])
+    xid = _simulata(servizi, m["id"], e["id"], "corretta", [{"n": 1, "testo": "Chi era Tylor?"}, {"n": 2, "testo": "Che cos'è il kula?"}])
+    gruppi = client.get(f"/api/eventi/{e['id']}/previste", headers=auth).json()["gruppi"]
+    assert [g["fonte"] for g in gruppi] == ["lezione", "simulata"]
+    assert [v["chiave"] for v in gruppi[0]["voci"]] == [f"domanda:{d['id']}" for d in lez["domande"]]
+    assert gruppi[1]["voci"] == [{"chiave": f"simulata:{xid}:1", "testo": "Chi era Tylor?"},
+                                 {"chiave": f"simulata:{xid}:2", "testo": "Che cos'è il kula?"}]
+    d0 = lez["domande"][0]
+    # La domanda della lezione con la chiave e con il vecchio elenco (telefono 1.3.3) conta una volta sola.
+    r = client.post(f"/api/eventi/{e['id']}/esito", headers=auth, json={
+        "voci_uscite": [f"domanda:{d0['id']}", f"simulata:{xid}:2"], "domande_uscite": [d0["id"]], "voto": "7"})
+    assert r.json() == {"previste_uscite": 2, "totale_vere": 2, "percentuale": 100}
+    salvato = _esito_salvato(client, auth, e["id"])
+    assert salvato["domande_uscite"] == [d0["id"]] and salvato["voci_uscite"] == [f"simulata:{xid}:2"] and salvato["voto"] == "7"
+    with db.aperta(servizi.settings.db_path) as conn:
+        assert scheda._esiti(conn, m["id"])[0]["uscite"] == [d0["testo"], "Che cos'è il kula?"]
