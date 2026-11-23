@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 
-from .. import clock, db, forme, lampo
+from .. import clock, db, forme, lampo, schema_ripasso
 from ..auth import richiede_token
 from ..db import get_conn
 from ..errori import ErroreApi, non_valido
@@ -30,24 +30,40 @@ def _voce_evento(conn: sqlite3.Connection, e: sqlite3.Row, oggi: date, con_lezio
         lezione_id = voce["evento"]["lezione_id"]
         r = conn.execute("SELECT * FROM lezioni WHERE id = ?", (lezione_id,)).fetchone() if lezione_id else None
         voce["lezione"] = forme.lezione(conn, r) if r else None
+        # 1.4.5: anche lo schema (Andrea di solito fa gli schemi): l'ultimo pronto, se no l'ultimo non annullato.
+        r = conn.execute("SELECT * FROM schemi WHERE evento_id = ? AND stato != 'annullato'"
+                         " ORDER BY (stato = 'pronto') DESC, id DESC LIMIT 1", (e["id"],)).fetchone()
+        voce["schema"] = schema_ripasso.per_api(r) if r else None
     voce["tra_giorni"] = clock.giorni_tra(oggi, date.fromisoformat(e["data"]))
     return voce
+
+
+def _preparato(conn: sqlite3.Connection, evento_id: int) -> bool:
+    """Lectio ha preparato qualcosa per questa verifica: una lezione, uno schema o una verifica simulata."""
+    return conn.execute(
+        "SELECT 1 FROM lezioni WHERE evento_id = :e AND stato = 'pronta'"
+        " UNION ALL SELECT 1 FROM schemi WHERE evento_id = :e AND stato = 'pronto'"
+        " UNION ALL SELECT 1 FROM simulate WHERE evento_id = :e AND stato IN ('pronta', 'in_corso', 'in_correzione', 'corretta')"
+        " LIMIT 1", {"e": evento_id}).fetchone() is not None
 
 
 @router.get("/oggi")
 def oggi(conn: sqlite3.Connection = Depends(get_conn), s: Servizi = Depends(servizi)):
     giorno = clock.oggi()
-    futuri = conn.execute("SELECT * FROM eventi WHERE data >= ? ORDER BY data, id LIMIT 5",
-                          (giorno.isoformat(),)).fetchall()
+    # Dalle 13 le verifiche di oggi sono già fatte: escono da "in arrivo" ed entrano in "Dopo la verifica".
+    fatte = clock.verifiche_fatte_fino()
+    futuri = conn.execute("SELECT * FROM eventi WHERE data > ? ORDER BY data, id LIMIT 5",
+                          (fatte.isoformat(),)).fetchall()
     prossima = _voce_evento(conn, futuri[0], giorno, con_lezione=True) if futuri else None
     piu_avanti = [_voce_evento(conn, e, giorno) for e in futuri[1:5]]
     passati = conn.execute(
-        "SELECT * FROM eventi WHERE data < ? AND data >= ? AND esito IS NULL ORDER BY data DESC, id DESC",
-        (giorno.isoformat(), (giorno - timedelta(days=30)).isoformat()),
+        "SELECT * FROM eventi WHERE data <= ? AND data >= ? AND esito IS NULL AND racconto_nascosto_il IS NULL"
+        " ORDER BY data DESC, id DESC",
+        (fatte.isoformat(), (giorno - timedelta(days=30)).isoformat()),
     ).fetchall()
     da_raccontare = []
     for e in passati:
-        if conn.execute("SELECT 1 FROM lezioni WHERE evento_id = ? AND stato = 'pronta' LIMIT 1", (e["id"],)).fetchone():
+        if _preparato(conn, e["id"]):
             voce = _voce_evento(conn, e, giorno)
             da_raccontare.append({"evento": voce["evento"], "materia": voce["materia"]})
     r = conn.execute(

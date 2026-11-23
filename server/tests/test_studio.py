@@ -597,7 +597,8 @@ def test_ripasso_lampo(client, auth, servizi):
     assert client.post(f"/api/lampo/{carta['id']}", json={"esito": "boh"}, headers=auth).status_code == 422
     r = client.post(f"/api/lampo/{carta['id']}", json={"esito": "sapevo"}, headers=auth).json()
     assert r["scatola"] == 2 and r["da_fare"] == 1
-    assert client.get("/api/oggi", headers=auth).json()["lampo"]["da_fare"] == 1
+    # 1.4.5: in Oggi solo le carte per le verifiche in arrivo (questo schema non ha una data).
+    assert client.get("/api/oggi", headers=auth).json()["lampo"]["da_fare"] == 0
     assert client.get(f"/api/materie/{m['id']}", headers=auth).json()["conteggi"]["lampo"] == 1
     assert client.delete(f"/api/lampo/{carta['id']}", headers=auth).json() == {"ok": True}
     assert client.post(f"/api/lampo/{carta['id']}", json={"esito": "sapevo"}, headers=auth).status_code == 404

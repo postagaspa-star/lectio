@@ -402,10 +402,11 @@ def elenco_chiarimenti(materia_id: int, conn: sqlite3.Connection = Depends(get_c
 
 
 @router.get("/lampo")
-def carte(materia_id: int | None = None, limite: int = lampo.LIMITE_PREDEFINITO, conn: sqlite3.Connection = Depends(get_conn)):
+def carte(materia_id: int | None = None, limite: int = lampo.LIMITE_PREDEFINITO, solo_verifiche: bool = False,
+          conn: sqlite3.Connection = Depends(get_conn)):
     if materia_id is not None:
         trova_materia(conn, materia_id)
-    return lampo.elenco(conn, materia_id, max(1, min(50, limite)))
+    return lampo.elenco(conn, materia_id, max(1, min(50, limite)), solo_verifiche)
 
 
 def _carta(conn: sqlite3.Connection, carta_id: int) -> sqlite3.Row:

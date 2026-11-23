@@ -44,6 +44,16 @@ def oggi() -> date:
     return now().astimezone(FUSO).date()
 
 
+# Le verifiche si fanno al mattino (Andrea, 23/11/2026): dalle 13 quelle di oggi sono già fatte.
+ORA_FINE_VERIFICHE = 13
+
+
+def verifiche_fatte_fino() -> date:
+    """L'ultimo giorno con le verifiche già fatte: oggi dalle 13 (ora italiana), prima delle 13 ieri."""
+    ora = now().astimezone(FUSO)
+    return ora.date() if ora.hour >= ORA_FINE_VERIFICHE else ora.date() - timedelta(days=1)
+
+
 def mese(dt: datetime | None = None) -> str:
     """Il mese della spesa, es. "2026-10" (ora italiana)."""
     return (dt or now()).astimezone(FUSO).strftime("%Y-%m")

@@ -314,27 +314,29 @@ test('Non ho capito dal lettore: parte dal minuto e manda lezione_id', opz, asyn
   assert.equal(p.s.chiamate('POST', '/server/api/chiarimenti')[0].corpo.lezione_id, 12);
 });
 
-test('Ripasso lampo da Oggi: la risposta si vede solo a un gesto, i tre esiti si danno anche coi tasti', opz, async () => {
+test('Ripasso lampo da Oggi: solo le schede per le verifiche in arrivo; la risposta si vede solo a un gesto, i tre esiti si danno anche coi tasti', opz, async () => {
   const p = await apri('#oggi');
   await p.aspetta(() => p.q('[data-azione="inizia-lampo"]'));
-  assert.match(p.q('[data-lampo="frase"]').textContent, /8 schede/);
+  // 1.3.12: Inglese (verifica già fatta) e Matematica (schema senza data) restano nella pagina della materia.
+  assert.match(p.q('[data-lampo="frase"]').textContent, /6 schede/);
   p.clic(p.q('[data-azione="inizia-lampo"]'));
   await p.aspetta(() => p.q('[data-lampo="domanda"]'));
+  assert.ok(p.s.chiamate('GET', '/server/api/lampo?').every((c) => /solo_verifiche=true/.test(c.percorso)));
   assert.equal(p.q('[data-lampo="risposta"]'), null);
-  assert.equal(p.q('[data-lampo="conto"]').textContent, '1 di 8');
+  assert.equal(p.q('[data-lampo="conto"]').textContent, '1 di 6');
   p.clic(p.q('[data-azione="mostra-risposta"]'));
   await p.aspetta(() => p.q('[data-lampo="risposta"]') && p.q('[data-esito="quasi"]'));
   await B.dorme(20);
   const prima = p.q('[data-lampo="carta"]').getAttribute('data-carta');
   p.clic(p.q('[data-esito="quasi"]'));
-  await p.aspetta(() => p.q('[data-lampo="conto"]').textContent === '2 di 8');
+  await p.aspetta(() => p.q('[data-lampo="conto"]').textContent === '2 di 6');
   await p.aspetta(() => p.s.chiamate('POST', '/server/api/lampo/' + prima).length === 1 || p.pulsante('Annulla'));
   // Con la tastiera: spazio mostra, 1 è "Non lo sapevo".
   p.tasto(' ');
   await p.aspetta(() => p.q('[data-lampo="risposta"]'));
   await B.dorme(20);
   p.tasto('1');
-  await p.aspetta(() => p.q('[data-lampo="conto"]').textContent === '3 di 8');
+  await p.aspetta(() => p.q('[data-lampo="conto"]').textContent === '3 di 6');
   p.clic(p.q('[data-azione="chiudi-lampo"]'));
   await p.aspetta(() => p.s.chiamate('POST', '/server/api/lampo/').length >= 2);
   const esiti = p.s.chiamate('POST', '/server/api/lampo/').map((c) => c.corpo.esito);
@@ -345,16 +347,16 @@ test('Ripasso lampo: in fondo il conto dei tre esiti, niente festa', opz, async 
   const p = await apri('#oggi');
   await p.aspetta(() => p.q('[data-azione="inizia-lampo"]'));
   p.clic(p.q('[data-azione="inizia-lampo"]'));
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     const c = await p.aspetta(() => p.q('[data-azione="mostra-risposta"]'));
     p.clic(c);
     const e = await p.aspetta(() => p.q('[data-esito="sapevo"]'));
     await B.dorme(15);
     p.clic(e);
-    if (i < 7) await p.aspetta(() => p.q('[data-lampo="conto"]').textContent === (i + 2) + ' di 8');
+    if (i < 5) await p.aspetta(() => p.q('[data-lampo="conto"]').textContent === (i + 2) + ' di 6');
   }
   await p.aspetta(() => p.q('[data-lampo="fine"]'));
-  assert.match(p.q('[data-lampo="durata"]').textContent, /8 schede in 1 minuto/);
+  assert.match(p.q('[data-lampo="durata"]').textContent, /6 schede in 1 minuto/);
   assert.doesNotMatch(p.q('[data-lampo="fine"]').textContent, /[!]|Bravo|Complimenti|Grande/);
 });
 

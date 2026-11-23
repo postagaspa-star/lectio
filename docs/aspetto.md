@@ -131,9 +131,17 @@ Come `docs/prototipo/Main.dc.html`, dai dati di `GET /api/oggi`:
   - pronta → riga "Lezione pronta · 20 min · 6 domande" + pulsante pieno **Ascolta**;
   - in preparazione → fase e barra ("Registro la voce · 3 di 7");
   - nessuna → pulsante pieno **Prepara la lezione**.
+  - Dalla 1.3.12 (PC) viene prima lo **schema** della verifica (Andrea di solito fa gli schemi): pronto → riga con
+    l'icona `testo` degli schemi, "Schema pronto", sotto "A capitoli · Completo · 5 parti · 2 min di lettura" +
+    pulsante pieno **Apri lo schema**; in preparazione → frase del server e barra (si tocca e apre lo schema); non
+    riuscito → messaggio con Riprova. Senza schema resta la lezione se c'è già; senza niente il pulsante pieno è
+    **Prepara lo schema** (apre "Nuovo schema" con quella verifica già scelta).
 - **Riprendi**: la lezione lasciata a metà (piastrella, titolo, barra, "mancano 8 min", play tondo).
 - **Dopo la verifica**: per ogni verifica passata senza esito, riga "Com'è andata la verifica di Inglese?" +
-  pulsante secondario **Racconta**.
+  pulsante secondario **Racconta**. Dalla 1.3.12 (PC) compare già il giorno della verifica dalle 13 (le verifiche sono
+  al mattino) e anche per le verifiche con il solo schema; a destra una **X** (36 px, trasparente, icona 18 px tenue,
+  "Nascondi") la chiude senza raccontare: la scheda sfuma in 220 ms e non torna. Con il solo schema "Com'è andata" non
+  ha domande da spuntare e alla fine non mostra l'anello delle previste.
 - **Più avanti**: le altre verifiche/interrogazioni (pallino, materia, cosa, quando), al massimo 4, poi
   "Vedi tutte".
 - In fondo, piccolo: **Questo mese 0,80 € di 2 €** con barra sottile; sotto "si azzera il 1° novembre".
@@ -372,7 +380,8 @@ nei passi da leggere, "Salta la visita" sempre. Nei passi pratici si va avanti s
 riapre da Impostazioni.
 
 Passi (telefono):
-1. **La prossima verifica** (scheda in Oggi): "Qui c'è sempre la prossima verifica e la sua lezione." Avanti.
+1. **La prossima verifica** (scheda in Oggi): "Qui c'è sempre la prossima verifica e il suo schema." (fino alla 1.3.11 "e la
+   sua lezione") Avanti.
 2. **Apri la materia** (tocca la pillola Storia): pratico.
 3. **Cosa chiede il prof** (la scheda): "L'ho scritta io dalle tue verifiche. Puoi correggerla." Avanti.
 4. **Aggiungi una verifica** (tocca Aggiungi): pratico; il foglio si apre.
@@ -483,6 +492,8 @@ min" 14/500 tenue (da `lampo.da_fare` e `lampo.minuti`, "1 scheda" al singolare)
 **Inizia**
 (accento tenue, alto 48).
 - `da_fare` a 0: una riga alta 56 con la spunta verde e "Ripasso lampo · niente per oggi" 15/600 tenue. Non si tocca.
+- Dalla 1.3.12 (PC) la scheda di Oggi conta e apre solo le schede per le verifiche in arrivo (schemi, lezioni e
+  simulate fatti per una data che deve ancora esserci); le altre si ripassano dalla pagina della materia.
 - Mai conteggi di giorni, serie o "hai saltato".
 - Sul telefono senza rete, se ci sono schede salvate, **Inizia** resta acceso (sezione 35.5).
 

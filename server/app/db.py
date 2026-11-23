@@ -522,6 +522,12 @@ CREATE INDEX modifiche_materiali_file ON modifiche_materiali (materiale_id)
 """
 
 
+# 1.4.5 (23/11): la scheda "Dopo la verifica" di Oggi si può chiudere senza raccontare.
+SCHEMA_9 = """
+ALTER TABLE eventi ADD COLUMN racconto_nascosto_il TEXT
+"""
+
+
 # Migrazioni: (versione, sql, semina). Si aggiunge in fondo, mai si modifica una già rilasciata.
 MIGRAZIONI = [
     (1, SCHEMA_1, _semina_1),
@@ -532,6 +538,7 @@ MIGRAZIONI = [
     (6, SCHEMA_6, None),
     (7, SCHEMA_7, None),
     (8, SCHEMA_8, None),
+    (9, SCHEMA_9, None),
 ]
 
 

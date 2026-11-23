@@ -6,6 +6,6 @@ namespace Lectio;
 /// </summary>
 public static class Versione
 {
-    public const string Nome = "1.3.11";
-    public const int Codice = 17;
+    public const string Nome = "1.3.12";
+    public const int Codice = 18;
 }

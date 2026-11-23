@@ -22,9 +22,13 @@
       h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'inizia-lampo', 'data-visita': 'lampo-inizia' }, 'Inizia'));
   };
 
-  /** o.materiaId = solo quella materia (allora in fondo si torna alla materia). */
+  /**
+   * o.materiaId = solo quella materia (allora in fondo si torna alla materia); o.soloVerifiche = solo le schede per le
+   * verifiche in arrivo (quella di Oggi, dalla 1.3.12).
+   */
   A.apriLampo = function (opzioni) {
     const o = opzioni || {};
+    const indirizzo = () => '/server/api/lampo?limite=12' + (o.materiaId ? '&materia_id=' + o.materiaId : '') + (o.soloVerifiche ? '&solo_verifiche=true' : '');
     const st = {
       carte: [], i: 0, aperta: false, fermoFino: 0, pendente: null, ritenta: [], conti: { sapevo: 0, quasi: 0, non_sapevo: 0 }, t0: Date.now(), fatte: 0, domani: 0, daFare: 0,
       fase: 'carico', chiusa: false, conferma: false, inUscita: false, errore: null,
@@ -51,7 +55,7 @@
     async function carica() {
       st.fase = 'carico';
       disegna();
-      const r = await A.api.get('/server/api/lampo?limite=12' + (o.materiaId ? '&materia_id=' + o.materiaId : ''));
+      const r = await A.api.get(indirizzo());
       if (st.chiusa) return;
       if (r.rete || (r.ok && r.memoria)) { st.errore = FRASE_SENZA_RETE; st.fase = 'errore'; disegna(); return; }
       if (!r.ok || !r.dati) { st.errore = r.errore; st.fase = 'errore'; disegna(); return; }
@@ -199,7 +203,7 @@
       await mandaPendente();
       if (st.chiusa) return;
       // POST /lampo/{id} conta solo la materia di quella scheda: per "Domani" e "Continua" si richiede tutto.
-      const r = await A.api.get('/server/api/lampo?limite=12' + (o.materiaId ? '&materia_id=' + o.materiaId : ''));
+      const r = await A.api.get(indirizzo());
       if (st.chiusa) return;
       if (r.ok && r.dati && !r.memoria) {
         st.domani = Number(r.dati.domani) || 0;

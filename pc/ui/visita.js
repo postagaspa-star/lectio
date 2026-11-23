@@ -37,7 +37,7 @@
 
   const PASSI = [
     {
-      titolo: 'La prossima verifica', frase: 'Qui c\'è sempre la prossima verifica e la sua lezione.', leggi: true,
+      titolo: 'La prossima verifica', frase: 'Qui c\'è sempre la prossima verifica e il suo schema.', leggi: true,
       bersaglio: ['[data-visita="prossima"]'],
       prepara: async () => { A.chiudiTuttiIVeli(); A.chiudiLettore(false); await vaiA('#oggi', '[data-visita="prossima"]'); },
     },

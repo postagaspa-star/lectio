@@ -90,3 +90,11 @@ def esito(evento_id: int, corpo: EsitoIn, conn: sqlite3.Connection = Depends(get
     s.lavoro.sveglia("sfondo")
     return risultato
 
+
+@router.post("/eventi/{evento_id}/nascondi-racconto")
+def nascondi_racconto(evento_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    """1.4.5: chiude la scheda "Dopo la verifica" di Oggi senza raccontare (l'esito resta vuoto)."""
+    trova_evento(conn, evento_id)
+    conn.execute("UPDATE eventi SET racconto_nascosto_il = ? WHERE id = ?", (clock.adesso(), evento_id))
+    return {"ok": True}
+

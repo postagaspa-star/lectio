@@ -127,6 +127,8 @@ montata `/apk`).
   `{"previste_uscite":3,"totale_vere":5,"percentuale":60}`. Le `domande_uscite` sono id di domande della
   lezione dell'evento; `totale_vere` = uscite + righe non vuote di `altre_domande`. Fa partire l'aggiornamento
   della scheda.
+- `POST /api/eventi/{id}/nascondi-racconto` → `{"ok": true}` (server 1.4.5): chiude la scheda "Dopo la verifica" di Oggi
+  senza raccontare; l'esito resta `null` e l'evento non torna in `da_raccontare`.
 
 ## 8. Voci, stime e spesa
 
@@ -259,7 +261,7 @@ simulate restano su Medium. OCR `mistral-ocr-3`
 `GET /api/oggi` →
 ```json
 {"oggi": "2026-10-28",
- "prossima": {"evento": {…Evento}, "materia": {"id":1,"nome":"Storia","colore":"ambra"}, "lezione": {…Lezione o null}, "tra_giorni": 2},
+ "prossima": {"evento": {…Evento}, "materia": {"id":1,"nome":"Storia","colore":"ambra"}, "lezione": {…Lezione o null}, "schema": {…Schema senza contenuto, o null}, "tra_giorni": 2},
  "riprendi": {…Lezione con posizione, o null},
  "da_raccontare": [{"evento": {…}, "materia": {…}}],
  "piu_avanti": [{"evento": {…}, "materia": {…}, "tra_giorni": 6}],
@@ -269,6 +271,16 @@ simulate restano su Medium. OCR `mistral-ocr-3`
 `prossima` = l'evento futuro (o di oggi) più vicino; `riprendi` = l'ultima lezione ascoltata non finita;
 `da_raccontare` = eventi passati (fino a 30 giorni) senza esito con una lezione; `piu_avanti` = i 4 eventi
 seguenti; `avviso` = spesa ≥ 80% del tetto.
+
+Dal server 1.4.5 (richieste di Andrea del 23/11/2026):
+- **Le verifiche si fanno al mattino**: dalle 13 (ora italiana) gli eventi di oggi sono già fatti. Prima delle 13 sono
+  ancora in `prossima`/`piu_avanti`; dalle 13 passano a `da_raccontare` (e la prossima diventa quella dopo).
+- `prossima.schema`: lo schema fatto per quella verifica (l'ultimo pronto, se no l'ultimo non annullato), come nella
+  lista di `GET /api/schemi`. Le app lo mostrano prima della lezione; senza schema e senza lezione propongono
+  **Prepara lo schema**.
+- `da_raccontare`: eventi già fatti, senza esito e non nascosti (`POST /api/eventi/{id}/nascondi-racconto`), per cui
+  Lectio ha preparato qualcosa: una lezione pronta, uno schema pronto o una verifica simulata.
+- `lampo` conta solo le carte per le verifiche in arrivo (sezione 20).
 
 ## 11. Novità (per le notifiche)
 
@@ -589,6 +601,11 @@ Tetto finito: come le lezioni. `GET /api/chiarimenti?materia_id=7` → gli ultim
 lezioni, dalle domande sbagliate nella verifica simulata. Costo: niente per ripassare. Scatole: 1, 2, 4, 9, 21 giorni; con una
 verifica vicina di quella materia la carta torna prima della verifica.
 `GET /api/oggi` ha in più `"lampo": {"da_fare": 8, "minuti": 3}`. `Materia.conteggi` ha in più `"schemi"`, `"lampo"`, `"simulate"`.
+
+Dal server 1.4.5 `GET /api/lampo?solo_verifiche=true` dà solo le carte nate da uno schema, da una lezione o da una
+verifica simulata fatti per una verifica che deve ancora esserci (dalle 13 quelle di oggi sono già fatte, sezione 10).
+`lampo` di `GET /api/oggi` conta solo queste: la scheda di Oggi apre `/api/lampo?solo_verifiche=true`. Le altre carte
+restano nella pagina della materia (`materia_id`, `Materia.conteggi.lampo`), che le conta tutte.
 
 ## 21. Verifica simulata
 `POST /api/simulate/stima` `{"materia_id": 7, "argomento": "…", "materiali": [1, 2], "minuti": 50, "indicazioni": ""}` → stessi campi della stima

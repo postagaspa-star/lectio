@@ -61,18 +61,78 @@ test('primo avvio: abbinamento con l\'indirizzo Tailscale già scritto, Collega 
   assert.match(p.q('.visita-fumetto').textContent, /1 di 9/);
 });
 
-test('Oggi: la prossima verifica con la sua lezione, Riprendi, Dopo la verifica, Più avanti e la spesa nel menu', opz, async () => {
+test('Oggi: la prossima verifica con il suo schema, Riprendi, Dopo la verifica, Più avanti e la spesa nel menu', opz, async () => {
   const p = await apri();
   await p.aspetta(() => p.q('[data-visita="prossima"]'));
   const t = p.testo();
   assert.match(t, /LA PROSSIMA|La prossima/i);
   assert.match(t, /Impero romano da Augusto a Nerone/);
   assert.match(t, /giovedì 29 ottobre · scritta/);
-  assert.ok(p.q('[data-azione="ascolta-prossima"]'));
+  // 1.3.12: lo schema della verifica viene prima della lezione (Andrea di solito fa gli schemi).
+  assert.match(t, /Schema pronto/);
+  assert.equal(p.q('[data-azione="ascolta-prossima"]'), null);
+  await p.aspetta(() => /\d+ parti · \d+ min di lettura/.test(p.q('[data-visita="prossima"]').textContent));
   assert.match(t, /Le fonti del diritto/);
   assert.match(t, /Com'è andata la verifica di Inglese\?/);
   assert.match(t, /Scienze umane/);
   await p.aspetta(() => /Questo mese 0,80 € di 2 €/.test(p.q('.menu').textContent));
+  p.clic(p.q('[data-azione="apri-schema-prossima"]'));
+  await p.aspetta(() => p.w.location.hash === '#schema/3');
+});
+
+test('Oggi: senza schema resta la lezione già fatta; senza niente propone Prepara lo schema per quella verifica', opz, async () => {
+  const p = await apri({}, null, (s) => { s.esempio.stato.schemi = s.esempio.stato.schemi.filter((x) => x.evento_id !== 3); });
+  await p.aspetta(() => p.q('[data-azione="ascolta-prossima"]'));
+  assert.match(p.q('[data-visita="prossima"]').textContent, /Lezione pronta/);
+  p.s.esempio.stato.eventi.find((e) => e.id === 3).lezione_id = null;
+  p.A.disegna();
+  const prepara = await p.aspetta(() => p.q('[data-azione="prepara-prossima"]'));
+  assert.equal(prepara.textContent, 'Prepara lo schema');
+  p.clic(prepara);
+  await p.aspetta(() => p.q('.nl-pillola[aria-pressed="true"]'));
+  assert.notEqual(p.q('.nl-pillola[aria-pressed="true"]').textContent, 'Nessuna data');
+  assert.match(p.q('.nl-pillola[aria-pressed="true"]').textContent, /29/);
+});
+
+test('Oggi: lo schema della verifica in preparazione si vede con la barra e si apre', opz, async () => {
+  const p = await apri({}, null, (s) => { s.esempio.stato.schemi.find((x) => x.id === 5).evento_id = 3; s.esempio.stato.schemi.find((x) => x.id === 3).evento_id = null; });
+  const fasi = await p.aspetta(() => p.q('[data-azione="schema-in-preparazione"]'));
+  assert.match(fasi.textContent, /Scrivo la parte|In preparazione|Schema/);
+  assert.ok(fasi.querySelector('.barra, [role="progressbar"]'));
+  p.clic(fasi);
+  await p.aspetta(() => p.w.location.hash === '#schema/5');
+});
+
+test('Dopo la verifica: la X la chiude senza raccontare e non torna; se il server non risponde resta', opz, async () => {
+  const p = await apri();
+  await p.aspetta(() => p.q('[data-racconta="4"] [data-azione="nascondi-racconto"]'));
+  p.s.risposta = (m, percorso) => (percorso.endsWith('/nascondi-racconto') ? [500, { errore: 'Il server non ha risposto. Riprova tra poco.', codice: 'interno' }] : undefined);
+  p.clic(p.q('[data-racconta="4"] [data-azione="nascondi-racconto"]'));
+  await p.aspetta(() => /Il server non ha risposto/.test(p.testo()));
+  assert.ok(p.q('[data-racconta="4"]') && !p.q('[data-racconta="4"]').classList.contains('esce'));
+  p.s.risposta = null;
+  p.clic(p.q('[data-racconta="4"] [data-azione="nascondi-racconto"]'));
+  await p.aspetta(() => !p.q('[data-racconta="4"]'));
+  assert.equal(p.s.chiamate('POST', '/server/api/eventi/4/nascondi-racconto').length, 2);
+  await p.aspetta(() => p.s.chiamate('GET', '/server/api/oggi').length >= 2);
+  await B.dorme(30);
+  assert.equal(p.q('[data-racconta="4"]'), null);
+  assert.doesNotMatch(p.testo(), /Com'è andata la verifica di Inglese/);
+});
+
+test('Com\'è andata con il solo schema: niente domande da spuntare e niente anello delle previste', opz, async () => {
+  const p = await apri({}, null, (s) => {
+    s.esempio.stato.eventi.find((e) => e.id === 4).lezione_id = null;
+    s.esempio.stato.schemi.find((x) => x.id === 4).evento_id = 4;
+  });
+  await p.aspetta(() => p.q('[data-racconta="4"]'));
+  p.A.vai('#racconta/4');
+  await p.aspetta(() => p.q('[data-azione="salva-esito"]'));
+  assert.equal(p.q('.domande-esito'), null);
+  p.scrivi(p.q('#altre-domande'), 'Quando si usa il present perfect?');
+  p.clic(p.q('[data-azione="salva-esito"]'));
+  await p.aspetta(() => /Ho aggiornato la scheda del prof/.test(p.testo()));
+  assert.equal(p.q('.anello'), null);
 });
 
 // --- Il lettore: fermate alle domande e risposte scritte ----------------------------------------------

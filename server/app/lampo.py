@@ -33,25 +33,43 @@ def _carta(r: sqlite3.Row) -> dict:
             "domanda": r["domanda"], "risposta": r["risposta"], "fonti": json.loads(r["fonti"] or "[]"), "scatola": r["scatola"]}
 
 
-def _filtro(materia_id: int | None) -> tuple[str, list]:
-    return (" AND c.materia_id = ?", [materia_id]) if materia_id is not None else ("", [])
+# Le carte nate da uno schema, da una lezione o da una verifica simulata fatti per una verifica che deve ancora
+# esserci (Andrea, 23/11/2026: in Oggi le altre non servono; restano nella pagina della materia).
+_PER_VERIFICHE = (
+    " AND c.id IN ("
+    "SELECT k.id FROM carte k JOIN schemi s ON k.origine = 'schema' AND k.chiave LIKE 'schema:' || s.id || ':%'"
+    " JOIN eventi e ON e.id = s.evento_id AND e.data > ?"
+    " UNION SELECT k.id FROM carte k JOIN domande d ON k.origine = 'lezione' AND k.chiave = 'lezione:' || d.id"
+    " JOIN lezioni l ON l.id = d.lezione_id JOIN eventi e ON e.id = l.evento_id AND e.data > ?"
+    " UNION SELECT k.id FROM carte k JOIN simulate x ON k.origine = 'simulata' AND k.chiave LIKE 'simulata:' || x.id || ':%'"
+    " JOIN eventi e ON e.id = x.evento_id AND e.data > ?)"
+)
 
 
-def da_fare(conn: sqlite3.Connection, materia_id: int | None = None, giorno: date | None = None) -> int:
-    sql, parametri = _filtro(materia_id)
+def _filtro(materia_id: int | None, solo_verifiche: bool = False) -> tuple[str, list]:
+    sql, parametri = (" AND c.materia_id = ?", [materia_id]) if materia_id is not None else ("", [])
+    if solo_verifiche:
+        fatte = clock.verifiche_fatte_fino().isoformat()
+        sql, parametri = sql + _PER_VERIFICHE, [*parametri, fatte, fatte, fatte]
+    return sql, parametri
+
+
+def da_fare(conn: sqlite3.Connection, materia_id: int | None = None, giorno: date | None = None,
+            solo_verifiche: bool = False) -> int:
+    sql, parametri = _filtro(materia_id, solo_verifiche)
     return conn.execute(f"SELECT COUNT(*) FROM carte c WHERE c.prossima <= ?{sql}",
                         [(giorno or clock.oggi()).isoformat(), *parametri]).fetchone()[0]
 
 
-def elenco(conn: sqlite3.Connection, materia_id: int | None, limite: int) -> dict:
+def elenco(conn: sqlite3.Connection, materia_id: int | None, limite: int, solo_verifiche: bool = False) -> dict:
     oggi = clock.oggi()
-    sql, parametri = _filtro(materia_id)
+    sql, parametri = _filtro(materia_id, solo_verifiche)
     righe = conn.execute(
         "SELECT c.*, m.nome AS materia, m.colore FROM carte c JOIN materie m ON m.id = c.materia_id"
         f" WHERE c.prossima <= ?{sql} ORDER BY c.scatola, c.prossima, c.id LIMIT ?",
         [oggi.isoformat(), *parametri, limite]).fetchall()
-    quante = da_fare(conn, materia_id)
-    domani = da_fare(conn, materia_id, oggi + timedelta(days=1)) - quante
+    quante = da_fare(conn, materia_id, solo_verifiche=solo_verifiche)
+    domani = da_fare(conn, materia_id, oggi + timedelta(days=1), solo_verifiche) - quante
     return {"carte": [_carta(r) for r in righe], "da_fare": quante, "domani": domani}
 
 
@@ -83,5 +101,6 @@ def rispondi(conn: sqlite3.Connection, carta: sqlite3.Row, esito: str) -> dict:
 
 
 def per_oggi(conn: sqlite3.Connection) -> dict:
-    quante = da_fare(conn)
+    """La scheda di Oggi: solo le carte per le verifiche in arrivo."""
+    quante = da_fare(conn, solo_verifiche=True)
     return {"da_fare": quante, "minuti": ceil(quante * SECONDI_A_CARTA / 60)}

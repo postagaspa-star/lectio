@@ -70,15 +70,16 @@
       const destra = h('div', { class: 'colonna' });
       if (d.riprendi) destra.append(schedaRiprendi(d.riprendi));
       // §31.1 Tra Riprendi e Dopo la verifica.
-      if (d.lampo) destra.append(A.schedaLampo(d.lampo.da_fare, d.lampo.minuti, () => { if (A.visitaEvento) A.visitaEvento('lampo-apri'); A.apriLampo(); }));
-      for (const x of d.da_raccontare || []) destra.append(schedaRacconta(x));
+      // 1.3.12: qui solo le schede per le verifiche in arrivo (le altre restano nella pagina della materia).
+      if (d.lampo) destra.append(A.schedaLampo(d.lampo.da_fare, d.lampo.minuti, () => { if (A.visitaEvento) A.visitaEvento('lampo-apri'); A.apriLampo({ soloVerifiche: true }); }));
+      for (const x of d.da_raccontare || []) destra.append(schedaRacconta(x, riempi));
       // Più avanti sotto la prossima se a destra c'è già qualcosa (le due colonne restano in equilibrio).
       if ((d.piu_avanti || []).length) (destra.childElementCount ? sinistra : destra).append(sezionePiuAvanti(d.piu_avanti));
       if (!destra.childElementCount) destra.append(h('div'));
       svuota(corpo, sinistra, destra);
-      // Una lezione in preparazione: si chiede ogni 20 secondi (§11).
-      const lez = d.prossima && d.prossima.lezione;
-      if (lez && (lez.stato === 'in_coda' || lez.stato === 'in_preparazione')) ripeti(vivo, riempi, T.preparazione);
+      // Una lezione o uno schema in preparazione: si chiede ogni 20 secondi (§11).
+      const inCorso = (x) => x && ['in_coda', 'in_preparazione'].includes(x.stato);
+      if (d.prossima && (inCorso(d.prossima.schema) || (!d.prossima.schema && inCorso(d.prossima.lezione)))) ripeti(vivo, riempi, T.preparazione);
       if (A.visitaDopoDisegno) A.visitaDopoDisegno();
     }
     S.aggiornaPagina = riempi;
@@ -94,9 +95,12 @@
     const m = A.materiaDi(p.materia && p.materia.id) || p.materia;
     const ev = p.evento || {};
     const lez = p.lezione;
+    const sch = p.schema && p.schema.stato !== 'annullato' ? p.schema : null;
     const stato = h('div', { class: 'stato-prossima', stile: { display: 'flex', flexDirection: 'column', gap: '16px' } });
-    if (!lez || lez.stato === 'annullata') {
-      stato.append(h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'prepara-prossima', onclick: () => A.nuovaLezione(m.id, { eventoId: ev.id }) }, 'Prepara la lezione'));
+    // 1.3.12 (Andrea di solito fa gli schemi): prima lo schema della verifica; la lezione resta solo se c'è già.
+    if (sch) statoSchema(stato, sch, m, riempi);
+    else if (!lez || lez.stato === 'annullata') {
+      stato.append(h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'prepara-prossima', onclick: () => A.nuovoSchema(m.id, { eventoId: ev.id }) }, 'Prepara lo schema'));
     } else if (lez.stato === 'pronta') {
       const sotto = h('span', { class: 'secondario' }, L.riassuntoLezione(lez));
       A.dettaglioLezione(lez.id).then((r) => { if (r.ok && r.dati) sotto.textContent = L.riassuntoLezione(r.dati); });
@@ -124,6 +128,28 @@
         stato));
   }
 
+  /** Lo schema della prossima verifica: pronto (Apri lo schema), in preparazione (frase e barra), non riuscito (Riprova). */
+  function statoSchema(stato, x, m, riempi) {
+    const st = L.statoRigaSchema(x);
+    const apri = () => A.vai('#schema/' + x.id);
+    if (st.tipo === 'pronto') {
+      const sotto = h('span', { class: 'secondario' }, st.frase);
+      A.api.get('/server/api/schemi/' + x.id).then((r) => { if (r.ok && r.dati) sotto.textContent = L.riassuntoSchema(r.dati); });
+      stato.append(
+        // L'icona delle righe degli schemi (le barrette della piastrella sono delle lezioni, cioè dell'audio).
+        h('div', { class: 'riga-lezione' }, h('span', { class: 'piastrella-icona ' + A.classeMateria(m.colore), 'aria-hidden': 'true' }, icona('testo')),
+          h('div', { class: 'testi' }, h('span', { class: 'forte' }, 'Schema pronto'), sotto)),
+        h('button', { type: 'button', class: 'pulsante pieno largo', 'data-azione': 'apri-schema-prossima', onclick: apri }, 'Apri lo schema'));
+    } else if (st.tipo === 'errore') {
+      stato.append(A.messaggio('errore', x.errore || 'Lo schema non è riuscito.', [
+        h('button', { type: 'button', class: 'pulsante bianco', onclick: async () => { const r = await A.api.post('/server/api/schemi/' + x.id + '/riprova', {}); if (!r.ok) A.avviso(r.errore); riempi(); } }, 'Riprova')]));
+    } else {
+      stato.append(h('button', { type: 'button', class: 'mini-fasi', 'data-azione': 'schema-in-preparazione', stile: { border: 'none', background: 'none', padding: '0', textAlign: 'left' }, onclick: apri },
+        h('span', { class: 'frase' }, st.tipo === 'coda' ? 'Schema in coda: parte appena finisce l\'altro lavoro' : (x.frase || 'Schema in preparazione')),
+        A.barra(st.percentuale || 0, 'spessa')));
+    }
+  }
+
   function schedaRiprendi(l) {
     const m = A.materiaDi(l.materia_id) || { nome: '', colore: 'ambra' };
     const durata = l.durata_s || l.durata_min * 60;
@@ -136,14 +162,24 @@
         h('button', { type: 'button', class: 'tondo accento', 'aria-label': 'Riprendi la lezione', onclick: () => A.ascolta(l.id, { suona: true }) }, icona('play'))));
   }
 
-  function schedaRacconta(x) {
+  function schedaRacconta(x, riempi) {
     const m = A.materiaDi(x.materia && x.materia.id) || x.materia || { nome: '' };
     const cosa = x.evento.tipo === 'orale' ? 'l\'interrogazione' : 'la verifica';
-    return h('div', { class: 'scheda racconta' },
+    const scheda = h('div', { class: 'scheda racconta', 'data-racconta': String(x.evento.id) },
       h('div', { class: 'testi' }, h('span', { class: 'etichetta' }, 'Dopo la verifica'),
         h('span', { class: 'forte' }, 'Com\'è andata ' + cosa + ' di ' + m.nome + '?'),
         h('span', { class: 'secondario' }, L.dataLunga(x.evento.data))),
-      h('button', { type: 'button', class: 'pulsante tenue', onclick: () => A.vai('#racconta/' + x.evento.id) }, 'Racconta'));
+      h('button', { type: 'button', class: 'pulsante tenue', onclick: () => A.vai('#racconta/' + x.evento.id) }, 'Racconta'),
+      // 1.3.12: si chiude senza raccontare; non torna più.
+      h('button', { type: 'button', class: 'tondo chiudi-racconta', 'aria-label': 'Nascondi', title: 'Nascondi', 'data-azione': 'nascondi-racconto', onclick: nascondi }, icona('chiudi')));
+    async function nascondi() {
+      scheda.classList.add('esce');
+      const [r] = await Promise.all([A.api.post('/server/api/eventi/' + x.evento.id + '/nascondi-racconto', {}), new Promise((ok) => setTimeout(ok, A.conMovimenti() ? 220 : 0))]);
+      if (!r.ok) { scheda.classList.remove('esce'); A.avviso(r.errore); return; }
+      scheda.remove();
+      if (riempi) riempi();
+    }
+    return scheda;
   }
 
   function rigaEvento(e, materia, traGiorni) {
@@ -1389,7 +1425,8 @@
       svuota(pag,
         h('h1', { class: 'titolo-pagina' }, 'Com\'è andata ' + cosa + ' di ' + m.nome + '?'),
         h('div', { class: 'scheda rilievo', stile: { alignItems: 'center', textAlign: 'center', maxWidth: '520px' } },
-          h('div', { class: 'anello' }, svg, h('div', { class: 'numero' }, (d.previste_uscite || 0) + ' di ' + (d.totale_vere || 0), h('span', null, 'domande previste'))),
+          // 1.3.12: con il solo schema non c'erano domande da spuntare, quindi niente "0 di 3 previste".
+          domande.length ? h('div', { class: 'anello' }, svg, h('div', { class: 'numero' }, (d.previste_uscite || 0) + ' di ' + (d.totale_vere || 0), h('span', null, 'domande previste'))) : null,
           h('p', { class: 'forte' }, 'Ho aggiornato la scheda del prof.'),
           h('button', { type: 'button', class: 'pulsante tenue', onclick: () => { A.vai('#materia/' + m.id); setTimeout(() => { const mm = A.materiaDi(m.id); if (mm) A.apriAggiungi(mm, { tipo: 'verifica' }); }, 120); } }, 'Carica la verifica corretta')));
     }

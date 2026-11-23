@@ -423,7 +423,7 @@
   }
 
   function carteLampo() {
-    const carta = (id, materia_id, materia, colore, domanda, risposta, fonti, scatola) => ({ id, materia_id, materia, colore, domanda, risposta, fonti: fonti.map((k) => copia(FONTI[k])), scatola });
+    const carta = (id, materia_id, materia, colore, domanda, risposta, fonti, scatola) => ({ id, materia_id, materia, colore, domanda, risposta, fonti: fonti.map((k) => copia(FONTI[k])), scatola, per_verifica: [1, 2].includes(materia_id) });
     return [
       carta(1, 1, 'Storia', 'ambra', 'Perché Augusto non si fece mai chiamare re?', 'Perché a Roma la parola re ricordava la tirannia. Si presentò come princeps, il primo cittadino.', ['B1'], 2),
       carta(2, 1, 'Storia', 'ambra', 'Che differenza c\'è tra principato e monarchia?', 'Nel principato le istituzioni della Repubblica restano in piedi, ma il potere vero è di un solo uomo.', ['A1', 'I1'], 1),
@@ -894,16 +894,24 @@
         if (l) avanza(l);
         return l ? listaLezione(l) : null;
       };
+      const schemaDi = (e) => {
+        const tutti = e ? s.schemi.filter((x) => x.evento_id === e.id && x.stato !== 'annullato') : [];
+        tutti.forEach(avanzaSchema);
+        const x = tutti.filter((y) => y.stato === 'pronto').sort((a, b) => b.id - a.id)[0] || tutti.sort((a, b) => b.id - a.id)[0];
+        return x ? schemaInLista(x) : null;
+      };
+      // Come il server 1.4.5: "Dopo la verifica" quando Lectio ha preparato qualcosa e la scheda non è stata chiusa.
+      const preparato = (e) => !!e.lezione_id || s.schemi.some((x) => x.evento_id === e.id && x.stato === 'pronto');
       const ascoltate = s.lezioni.filter((l) => l.stato === 'pronta' && l.ascolto && l.ascolto.posizione_s > 0 && !l.ascolto.finita)
         .sort((a, b) => String(b.ascolto.aggiornato_il).localeCompare(String(a.ascolto.aggiornato_il)));
       return {
         oggi: s.oggi,
-        prossima: p ? { evento: copia(p), materia: breve(materia(p.materia_id)), lezione: lezioneDi(p), tra_giorni: tra(p.data) } : null,
+        prossima: p ? { evento: copia(p), materia: breve(materia(p.materia_id)), lezione: lezioneDi(p), schema: schemaDi(p), tra_giorni: tra(p.data) } : null,
         riprendi: ascoltate[0] ? listaLezione(ascoltate[0]) : null,
-        da_raccontare: s.eventi.filter((e) => tra(e.data) < 0 && tra(e.data) >= -30 && !e.esito && e.lezione_id).map((e) => ({ evento: copia(e), materia: breve(materia(e.materia_id)) })),
+        da_raccontare: s.eventi.filter((e) => tra(e.data) < 0 && tra(e.data) >= -30 && !e.esito && !e._nascosto && preparato(e)).map((e) => ({ evento: copia(e), materia: breve(materia(e.materia_id)) })),
         piu_avanti: futuri.slice(1, 5).map((e) => ({ evento: copia(e), materia: breve(materia(e.materia_id)), tra_giorni: tra(e.data) })),
         spesa: Object.assign(spesa(), { avviso: s.spesa.speso_eur >= 0.8 * s.spesa.tetto_eur }),
-        lampo: { da_fare: s.lampo.length, minuti: Math.ceil(s.lampo.length * 20 / 60) },
+        lampo: { da_fare: s.lampo.filter((c) => c.per_verifica).length, minuti: Math.ceil(s.lampo.filter((c) => c.per_verifica).length * 20 / 60) },
         modalita_prova: false,
       };
     };
@@ -1052,6 +1060,12 @@
         const e = { id: s.prossimoId++, materia_id: Number(m[1]), tipo: corpo.tipo || 'scritta', argomento: corpo.argomento || '', data: corpo.data, esito: null, lezione_id: null };
         s.eventi.push(e);
         return [201, copia(e)];
+      }
+      if ((m = /^\/server\/api\/eventi\/(\d+)\/nascondi-racconto$/.exec(p)) && metodo === 'POST') {
+        const e = s.eventi.find((x) => x.id === Number(m[1]));
+        if (!e) return [404, { errore: 'Verifica o interrogazione non trovata.', codice: 'non_trovato' }];
+        e._nascosto = true;
+        return [200, { ok: true }];
       }
       if ((m = /^\/server\/api\/eventi\/(\d+)\/esito$/.exec(p))) {
         const e = s.eventi.find((x) => x.id === Number(m[1]));
@@ -1359,8 +1373,9 @@
       if (p === '/server/api/lampo' && metodo === 'GET') {
         const id = Number(qs.get('materia_id')) || null;
         const limite = Number(qs.get('limite')) || 12;
-        const da = s.lampo.filter((c) => !id || c.materia_id === id);
-        return [200, { carte: copia(da).slice(0, limite), da_fare: da.length, domani: s.lampo_domani }];
+        const solo = qs.get('solo_verifiche') === 'true';
+        const da = s.lampo.filter((c) => (!id || c.materia_id === id) && (!solo || c.per_verifica));
+        return [200, { carte: copia(da).slice(0, limite).map((c) => { delete c.per_verifica; return c; }), da_fare: da.length, domani: s.lampo_domani }];
       }
       if ((m = /^\/server\/api\/lampo\/(\d+)$/.exec(p))) {
         const c = s.lampo.find((y) => y.id === Number(m[1]));
