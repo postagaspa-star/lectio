@@ -52,8 +52,9 @@ def scheda(client, auth, materia_id):
 def test_scheda_vuota_ha_il_modulo_vuoto(client, auth):
     m = crea_materia(client, auth)
     s = scheda(client, auth, m["id"])
-    assert s["verifiche"] == {"struttura": "", "consegne": [], "punti": "", "punti_totali": None, "sufficienza": None,
-                              "regole_punti": [], "difficolta": "", "approfondimento": "", "cosa_da": "", "richieste": []}
+    assert s["verifiche"] == {"struttura": "", "contesto": "", "consegne": [], "punti": "", "punti_totali": None,
+                              "sufficienza": None, "regole_punti": [], "difficolta": "", "approfondimento": "",
+                              "cosa_da": "", "richieste": []}
     assert s["interrogazioni"] == {"inizio": "", "andamento": "", "durata": "", "profondita": "", "cosa_vuole": [], "esempi": []}
 
 
@@ -76,9 +77,11 @@ def test_modulo_dalle_verifiche_e_dalle_interrogazioni_con_le_prove(client, auth
     assert i["inizio"] == "Parte con una domanda larga."
     assert i["andamento"] == ""  # la prova viene da una verifica, non da un'interrogazione
     assert i["esempi"] == ["Ti ricordi perché per i pitagorici il numero è il principio?"]
-    # Il prompt dice che le verifiche possono anche non essere corrette e chiede il modulo.
-    richiesta = next(d for p, d in server.chiamate if p == "/v1/chat/completions" and "Studia come interroga" in d["messages"][1]["content"])["messages"]
-    assert "corrette o no" in richiesta[0]["content"] and '"verifiche": il modulo' in richiesta[1]["content"]
+    # Il modulo ha la sua chiamata, dopo la scheda; tutte e due sanno che le verifiche possono non essere corrette.
+    chat = [d["messages"] for p, d in server.chiamate if p == "/v1/chat/completions"]
+    assert "Studia come interroga" in chat[0][1]["content"] and "corrette o no" in chat[0][0]["content"]
+    assert "Descrivi come fa le verifiche" in chat[1][1]["content"] and "corrette o no" in chat[1][0]["content"]
+    assert '"contesto"' in chat[1][1]["content"] and '"verifiche"' not in chat[0][1]["content"]
 
 
 @pagamento
@@ -276,4 +279,42 @@ def test_consegne_solo_dalle_verifiche_e_leggibili():
     vecchia = {"dati": json.dumps({"argomenti": [{"nome": "Densità", "volte": 1, "esempio": r"3) Esprimi in $$\frac{kg}{m^3}$$"}]})}
     assert schede.dati_di(vecchia)["argomenti"][0]["esempio"] == "Esprimi in kg/m³"
     testo = prompt.messaggi_scheda({"nome": "Fisica", "prof": None}, documenti, esiti)[1]["content"]
-    assert "niente id dei documenti" in testo and "è una voce sola" in testo and "Al massimo 60 voci" in testo
+    assert "è una voce sola" in testo and "Al massimo 60 voci" in testo
+    assert "niente id dei documenti" in prompt.messaggi_modulo({"nome": "Fisica", "prof": None}, documenti, esiti)[1]["content"]
+
+
+def test_modulo_a_punti_con_il_contesto():
+    """24/11/2026 sera (Andrea: "alcune parti non le mette, mette le cose nei posti sbagliati e certe cose non le dice
+    tutte", e manca il contesto): ogni campo è una lista di punti con la sua prova; si perde solo il punto senza prova."""
+    documenti = [{"id": "V1", "tipo": "verifica", "titolo": "Verifica",
+                  "testo": VERIFICA + "\n3) Esprimi il risultato in $$\frac{kg}{m^3}$$"}]
+    m = {"verifiche": {
+        "struttura": [{"frase": "1) Tabella di equivalenze da completare", "prova": "Completa la seguente tabella"},
+                      {"frase": "2) Un problema da ragionare", "prova": "Quanti cubetti da 2 cm servono"},
+                      {"frase": "Tre esercizi sulle forze", "prova": "una cosa che non c'è"}],
+        "contesto": [{"frase": "Problemi con oggetti di tutti i giorni: cubetti e una scatola.",
+                      "prova": "per riempire una scatola da 10 cm"}],
+        "richieste": [{"frase": "Il risultato in kg/m³", "prova": "Esprimi il risultato in kg/m³"}],  # il documento ha il LaTeX
+        "totale": 30, "sufficienza": 18}, "interrogazioni": None}
+    v = schede.modulo_da(m, documenti, [])["verifiche"]
+    assert v["struttura"] == "1) Tabella di equivalenze da completare.\n2) Un problema da ragionare."
+    assert v["contesto"] == "Problemi con oggetti di tutti i giorni: cubetti e una scatola."
+    assert v["richieste"] == ["Il risultato in kg/m³"]
+    assert v["punti_totali"] == 30 and v["sufficienza"] == 18
+    # Nel prompt della verifica di prova ogni riga diventa un punto, e c'è il contesto.
+    righe = prompt.scheda_in_parole({**schede.vuota(), "verifiche": v}, verifiche=True)
+    assert "Com'è fatta: 1) Tabella di equivalenze da completare; 2) Un problema da ragionare" in righe
+    assert "Contesto delle domande: Problemi con oggetti" in righe
+
+
+def test_put_del_modulo_a_righe(client, auth):
+    m = crea_materia(client, auth)
+    url = f"/api/materie/{m['id']}/scheda"
+    righe = "Prima riga.\n\n  Seconda   riga.  \nTerza riga."
+    r = client.put(url, json={"verifiche": {"contesto": righe, "struttura": "x" * 800}}, headers=auth)
+    assert r.status_code == 200, r.text
+    assert r.json()["verifiche"]["contesto"] == "Prima riga.\nSeconda riga.\nTerza riga."
+    assert client.put(url, json={"verifiche": {"difficolta": "x" * 801}}, headers=auth).status_code == 422
+    # Un computer 1.5.0 manda l'oggetto senza "contesto": il contesto resta.
+    r = client.put(url, json={"verifiche": {"struttura": "Due esercizi."}}, headers=auth)
+    assert r.json()["verifiche"]["contesto"] == "Prima riga.\nSeconda riga.\nTerza riga."

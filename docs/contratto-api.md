@@ -89,14 +89,16 @@ montata `/apk`).
 - Si aggiorna da sola (in sottofondo, ~1 centesimo) quando arriva materiale di tipo `verifica` o
   `interrogazione` o un esito; `POST /api/materie/{id}/scheda/aggiorna` la rifà a mano.
 
-### 5.1 Il modulo delle verifiche (server 1.6.0, computer 1.5.0)
+### 5.1 Il modulo delle verifiche (server 1.6.0, computer 1.5.0; a righe e con il contesto dal server 1.6.1, computer 1.5.1)
 Richiesta di Andrea del 24/11/2026: oltre alla scheda, quando legge una verifica o un'interrogazione (corretta o no) Lectio
 compila un secondo modulo che serve solo a fare verifiche di prova e interrogazioni il più possibile uguali a quelle del prof.
-Si compila nella stessa chiamata della scheda (stessi documenti, nessun costo in più a parte poche righe di risposta).
+Dal server 1.6.1 si compila in una chiamata sua, subito dopo quella della scheda, con gli stessi documenti (circa 0,2
+centesimi in più per ogni aggiornamento); se quella chiamata non riesce, resta il modulo di prima.
 `GET /api/materie/{id}/scheda` ha in più (un'app che non li conosce li ignora):
 ```json
 "verifiche": {
-  "struttura": "Una tabella di equivalenze, poi 4-5 problemi brevi; l'ultimo chiede di motivare il ragionamento.",
+  "struttura": "1) Tabella da completare: 6 equivalenze e 8 numeri in notazione scientifica.\n2) Tre problemi brevi.\n3) L'ultimo problema chiede di motivare il ragionamento.",
+  "contesto": "Problemi con situazioni reali: un terreno su cui costruire case, la distanza Terra-Luna.",
   "consegne": ["Scomponi i seguenti polinomi [8 punti]:", "ILLUSTRA IL RAGIONAMENTO: motiva i passaggi logici."],
   "punti": "Punti scritti accanto a ogni esercizio.", "punti_totali": 30, "sufficienza": 18,
   "regole_punti": ["0,5 con imprecisione", "Il participio passato deve essere corretto"],
@@ -121,13 +123,18 @@ Si compila nella stessa chiamata della scheda (stessi documenti, nessun costo in
   arrivano senza il numero davanti e con le formule in testo normale; ogni altra voce l'AI la scrive solo con una prova
   copiata dai documenti, e il server scarta quelle senza prova. `punti_totali` (intero) e `sufficienza` (numero, anche con
   il mezzo punto) solo se sono scritti nei documenti.
-- Limiti: frasi al massimo 300 caratteri; `consegne` al massimo 6 voci da 300 caratteri; `regole_punti`, `richieste`,
+- I campi di testo (`struttura`, `contesto`, `punti`, `difficolta`, `approfondimento`, `cosa_da`, `inizio`, `andamento`,
+  `durata`, `profondita`) dal server 1.6.1 possono avere più righe (a capo nel
+  testo JSON): una cosa per riga, ognuna con la sua prova (una riga senza prova si scarta, le altre restano). `contesto` (server 1.6.1, computer 1.5.1) dice come il prof
+  presenta le domande e di cosa parlano: situazioni reali, personaggi, frasi della vita di tutti i giorni, un libro letto in
+  classe, oppure esercizi astratti. Un computer che non conosce `contesto` lo ignora e, nel `PUT`, non lo manda: resta.
+- Limiti: campi di testo al massimo 800 caratteri (prima della 1.6.1: 300); `consegne` al massimo 6 voci da 300 caratteri; `regole_punti`, `richieste`,
   `cosa_vuole` al massimo 6 voci da 200; `esempi` al massimo 6 da 200; `punti_totali` da 1 a 1000; `sufficienza` maggiore di
   0 e minore di `punti_totali`.
 - `PUT /api/materie/{id}/scheda` accetta anche `verifiche` e `interrogazioni`, anche con solo alcuni campi: i campi mandati
   diventano quelli di Andrea e un aggiornamento dell'AI non li cambia più (come il resto della scheda: le liste ricordano le
   voci aggiunte e tolte, i testi e i numeri restano quelli scritti da lui; un testo svuotato resta vuoto).
-- Dove si usa: la verifica di prova segue `verifiche` (struttura, consegne, totale dei punti, difficoltà, approfondimento,
+- Dove si usa: la verifica di prova segue `verifiche` (struttura, contesto, consegne, totale dei punti, difficoltà, approfondimento,
   testi da leggere, richieste) anche quando tra i materiali scelti non c'è una verifica; la correzione segue `regole_punti`
   e, se ci sono `punti_totali` e `sufficienza`, la sufficienza del prof (la soglia dell'esito e il voto stimato: la
   sufficienza vale 6). Le lezioni fanno le domande dell'interrogazione come dice `interrogazioni`.
@@ -733,6 +740,12 @@ Nessun cambio al formato: sono controlli del server su quello che scrive l'AI.
   resta, il server la toglie dal testo (o scarta l'esercizio se senza formula non si capisce cosa chiede).
 - La correzione giudica il significato: simboli diversi per la stessa grandezza, altre parole o un altro ordine sono giusti; una parola
   imprecisa toglie al massimo mezzo punto.
+- Esercizi che si capiscono (server 1.6.1): una tabella con righe «x1, x2…», «completa la tabella» quando i risultati vanno nei campi,
+  gli stessi dati nel testo e nella tabella o un risultato lungo (come 1/49) senza chiedere di arrotondare si chiedono di sistemare. Se
+  il calcolo arrotonda ma il testo non lo chiede, il server aggiunge la frase («Arrotonda il risultato a due cifre significative.»); se il
+  testo dice «a due cifre», il server precisa «significative» o «decimali» come nel calcolo. Contano come teoria anche «spiega quando»,
+  «quando si dice» e «in che cosa consiste».
+- Il controllo dei fatti non tocca le consegne delle domande, solo le risposte attese.
 
 ## 22. Colori delle materie
 Sono 16: `ambra`, `rosa`, `petrolio`, `viola`, `blu`, `verde`, `arancio`, `oliva`, `giada`, `senape`, `orchidea`, `prugna`, `cacao`, `lavagna`, `salvia`, `lavanda`. I valori sono in `docs/aspetto.md`. `POST` e `PATCH` delle materie accettano solo questi; un nome che un'app non conosce diventa ambra.

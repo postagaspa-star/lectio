@@ -44,6 +44,11 @@ def _elenco_frasi(oggetto) -> list[tuple]:
             continue  # un esercizio con i numeri nuovi: i numeri non sono fatti da cercare nei documenti (contratto 21.1)
         if isinstance(contenitore, dict) and chiave == "testo" and "da" in contenitore and contenitore.get("id"):
             continue  # un testo da leggere della verifica (21.2): è copiato dai documenti e lo controlla il programma
+        if isinstance(contenitore, dict) and chiave == "testo" and "risposta_attesa" in contenitore:
+            # La consegna di una domanda della verifica di prova: i fatti stanno nella risposta attesa, che si
+            # controlla. 24/11/2026, fisica: "Stabilisci se le due misure sono compatibili." non era nei documenti
+            # (per forza: l'esercizio è nuovo) ed è stata tolta, lasciando solo «ILLUSTRA IL RAGIONAMENTO».
+            continue
         for i, frase in enumerate(stile.dividi_frasi(contenitore[chiave])):
             if not frase.rstrip().endswith("?"):
                 elenco.append((contenitore, chiave, i, frase))

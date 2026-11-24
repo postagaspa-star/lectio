@@ -135,7 +135,8 @@ def domande_rotte(o: dict, brani: list[dict] | None = None, numeri: bool = False
             except esercizi.EsercizioRotto as e:
                 problema, conti = f"ha questo problema: {e}", {}
             else:
-                problema = (esercizio_incompleto(d) if conti is None else None) or manca_figura(d, conti) or procedimento_dato(d, conti)
+                problema = ((esercizio_incompleto(d) if conti is None else None) or manca_figura(d, conti)
+                            or procedimento_dato(d, conti) or tabella_confusa(d, conti) or risultato_lungo(conti))
         voci.append((i, d, conti))
         if problema:
             problemi[i] = problema
@@ -150,7 +151,8 @@ _TEORIA = re.compile(
     r"\b(?:che\s+)?cos['’]\s*è(?!\w)|\bche\s+cosa\s+è(?!\w)|\b(?:che\s+)?cosa\s+(?:si\s+intende|significa|vuol\s+dire)\b"
     r"|\bdefinisci\b|\b(?:dai|dare|scrivi|fornisci)\s+la\s+definizione\b|\benuncia\b"
     r"|\bdescrivi\s+(?:i\s+passaggi|il\s+procedimento|il\s+metodo|come)\b"
-    r"|\bspiega\s+(?:come\s+si|che\s+cosa|cosa|il\s+significato)\b"
+    r"|\bspiega\s+(?:come\s+si|che\s+cosa|cosa|il\s+significato|quando)\b"
+    r"|\bquando\s+si\s+(?:può\s+dire|dice|parla)\b|\bin\s+(?:che\s+)?cosa\s+consiste\b"
     r"|\bcome\s+si\s+(?:rappresenta|calcola|definisce|esprime|scrive|ottiene|chiama)\b", re.I)
 _TEORIA_DESCRITTA = re.compile(r"teori|definizion|domand[ae]\s+apert", re.I)
 
@@ -270,6 +272,40 @@ def procedimento_dato(d: dict, conti: dict | None) -> str | None:
             "si calcola: il testo dice solo i dati e cosa calcolare (per esempio «Calcola l'errore relativo»)")
 
 
+# 24/11/2026, fisica (Andrea: "che esercizio è questo? la consegna non si capisce"): «Le misure riportate in tabella
+# sono espresse in cm» con le righe x1, x2…; «Completa la seguente tabella» quando i risultati vanno nei campi; gli
+# stessi dati nel testo e nella tabella; 2/98 = 1/49 senza chiedere di arrotondare. Si chiede di sistemarli; se
+# restano, la domanda non si toglie.
+_COMPLETA_TABELLA = re.compile(r"\bcomplet\w*\s+(?:la\s+|le\s+)?(?:seguent[ei]\s+)?tabell", re.I)
+_NOME_DI_RIGA = re.compile(r"^[A-Za-zΔ]\s*[0-9₀-₉]{1,2}$")
+_NUMERO_DI_TABELLA = re.compile(r"^-?\d+,\d+$|^-?\d{2,}$")
+
+
+def tabella_confusa(d: dict, conti: dict | None) -> str | None:
+    testo = str(d.get("testo") or "")
+    if conti and _COMPLETA_TABELLA.search(testo):
+        return ('dice di completare la tabella, ma i risultati lo studente li scrive nei campi sotto la domanda: chiedi di '
+                'calcolarli («Calcola…»)')
+    tab = conti["tabella"] if conti else esercizi.tabella(d.get("tabella"))
+    if not tab:
+        return None
+    celle = [str(c).strip() for riga in tab["valori"] for c in riga]
+    if any(_NOME_DI_RIGA.match(c) for c in celle):
+        return 'ha nella tabella righe chiamate «x1», «x2»…: togli quella colonna o chiamala «Prova» con 1, 2, 3'
+    numeri = [c for c in celle if _NUMERO_DI_TABELLA.match(c)]
+    if len(numeri) >= 3 and all(re.search(rf"(?<![\d,]){re.escape(n)}(?![\d,])", testo) for n in numeri):
+        return "ha gli stessi dati nel testo e nella tabella: lasciali solo nella tabella"
+    return None
+
+
+def risultato_lungo(conti: dict | None) -> str | None:
+    lunghi = (conti or {}).get("lunghi") or []
+    if not lunghi:
+        return None
+    return (f"ha un risultato lungo da scrivere («{lunghi[0]}»): cambia i dati perché venga un numero corto, come nelle "
+            'verifiche del prof, oppure chiedi nel testo di arrotondare (per esempio a due cifre significative) e metti "arrotonda"')
+
+
 def manca_figura(d: dict, conti: dict | None) -> str | None:
     testo = str(d.get("testo") or "")
     tab = conti["tabella"] if conti else esercizi.tabella(d.get("tabella"))
@@ -366,6 +402,10 @@ def normalizza(o: dict, brani: list[dict], numeri: bool = False, scheda: dict | 
                 continue
             log.info("simulata: tolta dal testo la formula del procedimento")
             testo = senza
+        if conti:
+            testo = esercizi.arrotonda_chiaro(testo, conti)
+            if conti.get("arrotonda_da_dire"):
+                testo = f"{testo.rstrip()} {conti['arrotonda_da_dire']}"
         try:
             punti = max(1, int(float(d.get("punti") or 0)))
         except (TypeError, ValueError):

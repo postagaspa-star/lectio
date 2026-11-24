@@ -778,16 +778,20 @@ test('modulo nella Modifica: testi una voce per riga, numeri all\'italiana, limi
   assert.equal(vuoti.verifiche.punti_totali, null);
   assert.equal(vuoti.verifiche.sufficienza, null);
   assert.equal(L.controllaScheda(vuoti), null);
-  assert.match(L.controllaScheda(manda({ struttura: 'x'.repeat(301) })), /Com'è fatta: al massimo 300 caratteri/);
+  assert.equal(L.controllaScheda(manda({ struttura: 'x'.repeat(800) })), null);
+  assert.match(L.controllaScheda(manda({ struttura: 'x'.repeat(801) })), /Com'è fatta: al massimo 800 caratteri/);
   assert.match(L.controllaScheda(manda({ consegne: Array(7).fill('c').join('\n') })), /Consegne: al massimo 6 righe/);
   assert.match(L.controllaScheda(manda({ regole_punti: 'r'.repeat(201) })), /Regole dei punti: ogni riga al massimo 200/);
-  assert.match(L.controllaScheda(manda({}, { andamento: 'a'.repeat(301) })), /Come va avanti: al massimo 300/);
+  assert.match(L.controllaScheda(manda({}, { andamento: 'a'.repeat(801) })), /Come va avanti: al massimo 800/);
   assert.match(L.controllaScheda(manda({ punti_totali: '0' })), /Punti in tutto: un numero intero da 1 a 1\.000/);
   assert.match(L.controllaScheda(manda({ punti_totali: '30,5' })), /Punti in tutto/);
   assert.match(L.controllaScheda(manda({ punti_totali: 'trenta' })), /Punti in tutto/);
   assert.match(L.controllaScheda(manda({ punti_totali: '', sufficienza: '18' })), /Sufficienza: scrivi anche i punti in tutto/);
   assert.match(L.controllaScheda(manda({ sufficienza: '30' })), /Sufficienza: meno dei punti in tutto/);
   assert.match(L.controllaScheda(manda({ sufficienza: '0' })), /Sufficienza: un numero più grande di 0/);
+  // 1.5.1: i testi hanno più righe, una cosa per riga; le righe vuote e gli spazi in più spariscono.
+  const righe = manda({ contesto: 'Problemi con un terreno.\n\n  Frasi sulla famiglia.  ' });
+  assert.equal(righe.verifiche.contesto, 'Problemi con un terreno.\nFrasi sulla famiglia.');
   // Senza i campi del modulo (una chiamata vecchia) il PUT resta quello di prima.
   assert.equal('verifiche' in L.schedaDaMandare({}, base), false);
 });
@@ -820,7 +824,7 @@ test('pagina della materia: sotto la scheda "Come fa le verifiche" e "Come inter
 test('Modifica della scheda: i campi del modulo sono pieni, Salva manda verifiche e interrogazioni; sufficienza troppo alta ferma', opz, async () => {
   const p = await apri('#materia/1/scheda');
   await p.aspetta(() => p.q('[data-azione="salva-scheda"]') && p.q('#sc-v-struttura'));
-  assert.match(p.q('#sc-v-struttura').value, /Due parti/);
+  assert.match(p.q('#sc-v-struttura').value, /Il principato: un brano del libro/);
   assert.equal(p.q('#sc-v-punti-totali').value, '90');
   assert.equal(p.q('#sc-v-sufficienza').value, '54');
   assert.match(p.q('#sc-i-esempi').value, /Capri\?\nChe cosa cambiò/);
@@ -856,4 +860,15 @@ test('verifica di prova: il testo da leggere sta sopra la prima domanda del grup
   await p2.aspetta(() => p2.q('[data-simulata="corretta"]'));
   assert.equal(p2.tutti('[data-brano]').length, 1);
   assert.ok(p2.q('[data-brano]').compareDocumentPosition(p2.q('.sim-esito[data-domanda="1"]')) & 4);
+});
+
+test('modulo 1.5.1: il contesto dopo "Com\'è fatta" e ogni riga di un testo come una voce', () => {
+  const sc = { verifiche: { struttura: '1) Tabella da completare.\n2) Tre problemi.', contesto: 'Problemi su un terreno e sui pianeti.' } };
+  const v = L.righeModulo(sc, 'verifiche');
+  assert.deepEqual(v.map((r) => r.nome), ['Com\'è fatta', 'Contesto']);
+  assert.deepEqual(v[0].voci, ['1) Tabella da completare.', '2) Tre problemi.']);
+  assert.equal(L.campiModulo(sc).verifiche.struttura, '1) Tabella da completare.\n2) Tre problemi.');
+  assert.equal(L.TESTO_MODULO, 800);
+  // Un server vecchio senza il contesto: il campo è vuoto e non si vede.
+  assert.equal(L.modulo({ verifiche: { struttura: 'Due parti' } }).verifiche.contesto, '');
 });

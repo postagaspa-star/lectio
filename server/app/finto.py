@@ -509,3 +509,10 @@ class TestoFinto:
                     premia.append({"frase": m.group(1).strip()[:150], "prova": m.group(1).strip()})
         return {"domande": domande, "cosa_corregge": corregge, "cosa_premia": premia, "lunghezza_risposte": None,
                 "consigli": []}
+
+    def _modulo(self, d: dict) -> dict:
+        """Il modulo delle verifiche (5.1) in prova: la struttura dalla prima consegna di ogni verifica."""
+        righe = [r.strip() for doc in d.get("documenti") or [] if doc.get("tipo") == "verifica"
+                 for r in (doc.get("testo") or "").split("\n")[:3] if len(r.split()) >= 4]
+        punti = [{"frase": f"Comincia con «{r[:80]}».", "prova": r} for r in righe[:2]]
+        return {"verifiche": {"struttura": punti} if punti else None, "interrogazioni": None}

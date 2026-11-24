@@ -144,6 +144,7 @@ class ServerFinto:
         self.chat_rotta = 0  # quante risposte di chat non valide dare prima di quelle buone
         self.chat_forzata = None  # un testo fisso per la prossima chat
         self.scheda_forzata = None
+        self.modulo_forzato = None
         self.correttore = {"esito": "parziale", "punteggio": 0.5,
                            "commento": "Giusto il senato. Manca chi governava al posto suo.",
                            "mancava": ["il ruolo di Seiano"]}
@@ -448,6 +449,11 @@ class ServerFinto:
                 "cosa_premia": [{"frase": "I collegamenti", "prova": "Buoni i collegamenti tra i fatti."}],
                 "lunghezza_risposte": None, "consigli": [{"frase": "Parti dalla definizione", "prova": "Manca la definizione di princeps"}],
             }
+        elif "Descrivi come fa le verifiche e le interrogazioni" in primo:
+            # Il modulo delle verifiche (5.1) ha la sua chiamata: le prove prendono le parti del modulo anche dalla
+            # scheda forzata, come le scrivevano fino al 24/11.
+            forzata = self.scheda_forzata or {}
+            oggetto = self.modulo_forzato or {k: forzata.get(k) for k in ("verifiche", "interrogazioni")}
         elif "Risposta attesa:" in primo:
             oggetto = self.correttore
         else:

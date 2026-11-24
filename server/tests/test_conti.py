@@ -79,8 +79,9 @@ def test_l_esercizio_deve_tornare_con_il_suo_testo():
     assert r["soluzione"] == "Semidispersione massima: (1,73 - 1,58) / 2 = 0,075 cm."
     with pytest.raises(esercizi.EsercizioRotto, match="non è scritto"):
         esercizi.risolvi({"calcolo": {**valore, "dati": {"a": 1.74, "b": 1.58}}}, testo, visibili)
-    with pytest.raises(esercizi.EsercizioRotto, match="non chiede di arrotondare"):
-        esercizi.risolvi({"calcolo": {**valore, "richieste": [{**valore["richieste"][0], "arrotonda": {"decimali": 2}}]}}, testo, visibili)
+    # "arrotonda" senza chiederlo nel testo: la frase la aggiunge il programma (prima l'esercizio si buttava).
+    r = esercizi.risolvi({"calcolo": {**valore, "richieste": [{**valore["richieste"][0], "arrotonda": {"decimali": 2}}]}}, testo, visibili)
+    assert r["arrotonda_da_dire"] == "Arrotonda il risultato a due cifre decimali."
     with pytest.raises(esercizi.EsercizioRotto, match="non è un dato"):
         esercizi.risolvi({"calcolo": {**valore, "richieste": [{**valore["richieste"][0], "formula": "(a - c) / 2"}]}}, testo, visibili)
     with pytest.raises(esercizi.EsercizioRotto, match="non è scritta uguale"):
@@ -284,7 +285,7 @@ TEORIA = [_aperta("Come si rappresenta una misura con il suo errore assoluto?"),
           _aperta("Descrivi i passaggi per calcolare la deviazione standard."),
           _aperta("Spiega come si calcola la semidispersione massima di una serie di misure.")]
 ESERCIZI = [_errore_relativo("3,20", "0,08"), _errore_relativo("5,60", "0,07"),
-            _errore_relativo("8,40", "0,12"), _errore_relativo("2,50", "0,05")]
+            _errore_relativo("6,40", "0,16"), _errore_relativo("2,50", "0,05")]
 
 
 def test_niente_teoria_se_il_prof_non_la_fa():
@@ -368,3 +369,84 @@ def test_regole_nuove_nei_prompt():
                "scheda": None, "brani": BRANI_FISICA}
     verifica = prompt_studio.messaggi_simulata(lettura, 50, 8)[1]["content"]
     assert "Stesse proporzioni tra i tipi di domanda" in verifica and "solo se il prof le fa" in verifica
+
+
+def test_esercizi_che_si_capiscono():
+    """24/11/2026, simulata 4 di fisica (Andrea: "che esercizio è questo? la consegna non si capisce")."""
+    tabella = {"titolo": None, "colonne": ["Misura", "x (cm)"], "valori": [["x1", "3,21"], ["x2", "3,25"], ["x3", "3,18"]]}
+    d = {"tipo": "esercizio", "testo": "Le misure riportate in tabella sono espresse in cm. Calcola la media.", "tabella": tabella}
+    assert "x1" in simulata.tabella_confusa(d, None)
+    doppia = {**d, "testo": "Calcola la media delle misure 3,21 cm; 3,25 cm; 3,18 cm.",
+              "tabella": {**tabella, "colonne": ["Prova", "x (cm)"], "valori": [["1", "3,21"], ["2", "3,25"], ["3", "3,18"]]}}
+    assert "nel testo e nella tabella" in simulata.tabella_confusa(doppia, None)
+    buona = {**doppia, "testo": "Con un righello misuri tre volte una matita. Calcola la media."}
+    assert simulata.tabella_confusa(buona, None) is None
+    completa = {**buona, "testo": "Completa la seguente tabella: calcola l'errore relativo."}
+    assert "nei campi" in simulata.tabella_confusa(completa, {"tabella": None})
+    # 2 / 98 = 1/49 senza chiedere di arrotondare: si chiede di cambiare i dati o di arrotondare.
+    lungo = _errore_relativo("98", "2")
+    rotte = simulata.domande_rotte({"domande": [lungo]}, BRANI_FISICA, numeri=True)
+    assert len(rotte) == 1 and "risultato lungo" in rotte[0]
+    assert not simulata.domande_rotte({"domande": [_errore_relativo("3,20", "0,08")]}, BRANI_FISICA, numeri=True)
+
+
+def test_il_controllo_non_tocca_le_consegne():
+    """24/11/2026: il controllo dei fatti aveva tolto «Stabilisci se le misure sono compatibili.» (un esercizio nuovo
+    non è nei documenti) e la domanda 8 era rimasta solo «ILLUSTRA IL RAGIONAMENTO: motiva i passaggi logici.»."""
+    from app import controllo
+    o = {"domande": [{"tipo": "aperta", "testo": "ILLUSTRA IL RAGIONAMENTO: motiva i passaggi logici. Due gruppi misurano "
+                      "un banco. Stabilisci se le misure sono compatibili.", "risposta_attesa": "Gli intervalli si toccano."}]}
+    frasi = [f[3] for f in controllo._elenco_frasi(o)]
+    assert frasi == ["Gli intervalli si toccano."]
+
+
+def test_regole_per_esercizi_chiari_nel_prompt():
+    from app import prompt_studio
+    lettura = {"argomento": "Errori", "indicazioni": "", "materia": {"nome": "Fisica", "prof": None}, "evento": None,
+               "scheda": {"verifiche": {"struttura": "Una tabella e tre problemi.", "contesto": "Problemi su un terreno."}},
+               "brani": BRANI_FISICA}
+    testo = prompt_studio.messaggi_simulata(lettura, 50, 8)[1]["content"]
+    assert "Mai dati senza storia" in testo and "mai x1, x2" in testo and "non frazioni come" in testo
+    assert "domande nello stesso contesto" in testo and "Contesto delle domande: Problemi su un terreno" in testo
+
+
+def _con_arrotonda(d: dict, testo: str, regola: dict) -> dict:
+    c = d["calcolo"]
+    return {**d, "testo": testo, "calcolo": {**c, "richieste": [{**c["richieste"][0], "arrotonda": regola}]}}
+
+
+def test_arrotondare_detto_nel_testo():
+    """24/11/2026, prova di fisica: due esercizi su sei buttati perché "arrotonda" era nel calcolo ma il testo non lo
+    chiedeva; e «arrotonda a due cifre» non diceva se significative o decimali."""
+    base = _errore_relativo("2,36", "0,04")
+    muto = _con_arrotonda(base, base["testo"], {"cifre": 2})
+    assert not simulata.domande_rotte({"domande": [muto]}, BRANI_FISICA, numeri=True)
+    d = simulata.normalizza({"domande": [muto]}, BRANI_FISICA, numeri=True)[0]
+    assert d["testo"].endswith("Calcola l'errore relativo. Arrotonda il risultato a due cifre significative.")
+    assert "0,017" in d["risposta_attesa"]
+    vago = _con_arrotonda(base, base["testo"][:-1] + " e arrotonda il risultato a due cifre.", {"cifre": 2})
+    d = simulata.normalizza({"domande": [vago]}, BRANI_FISICA, numeri=True)[0]
+    assert d["testo"].endswith("arrotonda il risultato a due cifre significative.") and "Arrotonda il" not in d["testo"]
+    vago = _con_arrotonda(base, base["testo"][:-1] + " e arrotonda a una cifra.", {"decimali": 1})
+    assert simulata.normalizza({"domande": [vago]}, BRANI_FISICA, numeri=True)[0]["testo"].endswith("a una cifra decimale.")
+    chiaro = _con_arrotonda(base, base["testo"][:-1] + " e arrotonda a tre cifre decimali.", {"decimali": 3})
+    assert simulata.normalizza({"domande": [chiaro]}, BRANI_FISICA, numeri=True)[0]["testo"] == chiaro["testo"]
+    # Più richieste: si dice quali arrotondare.
+    pulite = [{"cosa": "Media", "arrotonda": None}, {"cosa": "Deviazione standard", "arrotonda": {"cifre": 2}}]
+    assert esercizi.frase_arrotonda(pulite) == "Arrotonda a due cifre significative il risultato «Deviazione standard»."
+    pulite = [{"cosa": "Errore relativo 1", "arrotonda": {"cifre": 2}}, {"cosa": "Errore relativo 2", "arrotonda": {"cifre": 2}}]
+    assert esercizi.frase_arrotonda(pulite) == "Arrotonda i risultati a due cifre significative."
+    assert esercizi.frase_arrotonda([{"cosa": "Media", "arrotonda": {"decimali": 0}}]) == "Arrotonda il risultato all'unità."
+
+
+def test_altre_forme_di_teoria():
+    """24/11/2026, prova di fisica: «Spiega quando si può dire che le due misure sono compatibili» era passata."""
+    for testo in ["Spiega quando si può dire che le due misure sono compatibili.",
+                  "Quando si dice che due misure sono compatibili?", "In che cosa consiste la semidispersione massima?"]:
+        assert simulata._TEORIA.search(testo), testo
+    assert not simulata._TEORIA.search("Spiega che rapporto c'è tra le densità dei due oggetti.")
+    scheda = {"tipi_domanda": [{"tipo": "esercizio", "quota": 1.0}],
+              "verifiche": {"struttura": "Esercizi e problemi.", "consegne": ["Completa la seguente tabella:"]}}
+    o = {"domande": ESERCIZI[:3] + [_aperta("Due misure hanno i loro intervalli. Spiega quando si può dire che sono compatibili.")]}
+    rotte = simulata.domande_rotte(o, BRANI_FISICA, numeri=True, scheda=scheda)
+    assert len(rotte) == 1 and rotte[0].startswith("la domanda 4") and "teoria" in rotte[0]

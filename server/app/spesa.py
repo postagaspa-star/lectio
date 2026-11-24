@@ -50,6 +50,8 @@ CARATTERI_BLOCCO_MASSIMI = 14_000
 # Un aggiornamento della scheda: fino a 60.000 caratteri di verifiche + risposta.
 TOKEN_SCHEDA_ENTRATA = 20_000
 TOKEN_SCHEDA_USCITA = 8_000
+TOKEN_MODULO_ENTRATA = 15_000  # la chiamata del modulo delle verifiche (5.1): stessi documenti, risposta più corta
+TOKEN_MODULO_USCITA = 4_000
 
 # Schemi e verifiche simulate (contratto 18 e 21).
 CARATTERI_MAPPA_SCHEMA = 40_000  # il modello piccolo legge il materiale a gruppi di questa misura e segna i punti
@@ -286,7 +288,8 @@ class Cassa:
                 pagine = len(json.loads(r["pagine_ocr"])) if r["pagine_ocr"] else int(r["pagine"] or 1)
                 eur += max(0.0, self.prezzi.costo_ocr(modello_ocr, pagine) - float(r["speso"]))
             schede = conn.execute("SELECT COUNT(*) FROM schede WHERE da_aggiornare > 0").fetchone()[0]
-            eur += schede * self.prezzi.costo_testo(modello_piano, TOKEN_SCHEDA_ENTRATA, TOKEN_SCHEDA_USCITA)
+            eur += schede * (self.prezzi.costo_testo(modello_piano, TOKEN_SCHEDA_ENTRATA, TOKEN_SCHEDA_USCITA)
+                             + self.prezzi.costo_testo(modello_piano, TOKEN_MODULO_ENTRATA, TOKEN_MODULO_USCITA))
         except PrezzoSconosciuto:
             pass  # quelle chiamate restano comunque ferme finché manca il prezzo
         return eur, caratteri

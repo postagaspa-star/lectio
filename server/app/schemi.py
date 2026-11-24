@@ -74,6 +74,9 @@ class TipoDomandaIn(Corpo):
     quota: float = Field(ge=0, le=1)
 
 
+TESTO_MODULO = 800  # come scheda.TESTO_MODULO
+
+
 def _voci(massimo: int):
     def controlla(v):
         if v is not None and any(len(x) > massimo for x in v):
@@ -83,16 +86,18 @@ def _voci(massimo: int):
 
 
 class VerificheIn(Corpo):
-    """Il modulo delle verifiche (contratto 5.1): solo i campi mandati cambiano."""
-    struttura: str | None = Field(default=None, max_length=300)
+    """Il modulo delle verifiche (contratto 5.1): solo i campi mandati cambiano. I campi di testo possono avere più
+    righe, una cosa per riga (dalla sera del 24/11/2026), fino a TESTO_MODULO caratteri."""
+    struttura: str | None = Field(default=None, max_length=TESTO_MODULO)
+    contesto: str | None = Field(default=None, max_length=TESTO_MODULO)
     consegne: list[str] | None = Field(default=None, max_length=6)
-    punti: str | None = Field(default=None, max_length=300)
+    punti: str | None = Field(default=None, max_length=TESTO_MODULO)
     punti_totali: int | None = Field(default=None, ge=1, le=1000)
     sufficienza: float | None = Field(default=None, gt=0, le=1000)
     regole_punti: list[str] | None = Field(default=None, max_length=6)
-    difficolta: str | None = Field(default=None, max_length=300)
-    approfondimento: str | None = Field(default=None, max_length=300)
-    cosa_da: str | None = Field(default=None, max_length=300)
+    difficolta: str | None = Field(default=None, max_length=TESTO_MODULO)
+    approfondimento: str | None = Field(default=None, max_length=TESTO_MODULO)
+    cosa_da: str | None = Field(default=None, max_length=TESTO_MODULO)
     richieste: list[str] | None = Field(default=None, max_length=6)
 
     _consegne = field_validator("consegne")(_voci(300))
@@ -100,10 +105,10 @@ class VerificheIn(Corpo):
 
 
 class InterrogazioniIn(Corpo):
-    inizio: str | None = Field(default=None, max_length=300)
-    andamento: str | None = Field(default=None, max_length=300)
-    durata: str | None = Field(default=None, max_length=300)
-    profondita: str | None = Field(default=None, max_length=300)
+    inizio: str | None = Field(default=None, max_length=TESTO_MODULO)
+    andamento: str | None = Field(default=None, max_length=TESTO_MODULO)
+    durata: str | None = Field(default=None, max_length=TESTO_MODULO)
+    profondita: str | None = Field(default=None, max_length=TESTO_MODULO)
     cosa_vuole: list[str] | None = Field(default=None, max_length=6)
     esempi: list[str] | None = Field(default=None, max_length=6)
 

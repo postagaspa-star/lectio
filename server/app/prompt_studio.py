@@ -437,9 +437,11 @@ def messaggi_simulata(lettura: dict, minuti: int, domande_circa: int) -> list[di
     if modulo_verifiche(scheda):
         come_lui = ("- Questo prof lo conosciamo: in <scheda> c'è «Come fa le verifiche». La verifica di prova deve sembrare "
                     "fatta da lui: stessa struttura e stesso ordine delle parti, consegne scritte come le sue (stesse parole, "
-                    "stessa lingua, stessa indicazione dei punti), stessa difficoltà e stesso approfondimento, le cose che "
-                    "chiede sempre nelle consegne. Vale anche se tra i materiali non ci sono sue verifiche; gli argomenti e i "
-                    "fatti però vengono solo dal materiale.\n")
+                    "stessa lingua, stessa indicazione dei punti), domande nello stesso contesto (se lui mette i conti dentro "
+                    "problemi con situazioni reali, anche qui: situazioni dello stesso tipo, adatte all'argomento), stessa "
+                    "difficoltà e stesso approfondimento, le cose che chiede sempre nelle consegne. Vale anche se tra i "
+                    "materiali non ci sono sue verifiche o se l'argomento è diverso da quello delle sue verifiche: allora "
+                    "pensa a come chiederebbe lui questo argomento. Gli argomenti e i fatti però vengono solo dal materiale.\n")
     punti = (f'- "punti": numeri interi, come nelle sue verifiche: in tutto {totale}.' if totale else
              '- "punti": numeri interi, come nelle verifiche vere. Se non si capiscono, in tutto 100.')
     utente = f"""{_testa(lettura, f"Prepara una verifica di prova da {minuti} minuti.")}
@@ -465,6 +467,16 @@ In "dal_documento" metti l'id del materiale da cui viene il modello. Il risultat
 un programma, dal "calcolo". Esercizi che non stanno nelle forme di "calcolo" (dimostrazioni, costruzioni, disegni) non li metti.
 - Il "testo" di un esercizio deve bastare da solo, come in una verifica vera: tutti i dati con le loro unità di misura \
 (o nella tabella) e la richiesta di tutto quello che vuoi; se vuoi il risultato arrotondato, il testo dice come arrotondare.
+- Quando i numeri sono misure o dati (non un'equazione o un'espressione da risolvere), il testo dice di cosa sono e da \
+dove vengono, in parole semplici: cosa è stato misurato, con che cosa, in che situazione (per esempio «Con un righello \
+misuri quattro volte la lunghezza di una matita e ottieni: …»). Mai dati senza storia come «le misure riportate in \
+tabella sono espresse in cm». Uno studente deve capire al primo colpo cosa gli chiedi.
+- Tabelle: colonne con nomi chiari («Prova», «Lunghezza (cm)»), mai x1, x2 o «Misura» per dire il numero della prova; \
+i dati della tabella non si ripetono nel testo. Il testo non dice «completa la tabella»: i risultati lo studente li \
+scrive nei campi sotto la domanda.
+- Numeri come quelli del prof: scegli dati che danno risultati puliti (per esempio 0,035 o 2,5), non frazioni come \
+1/49; se il risultato viene per forza lungo (una radice), il testo chiede di arrotondare (per esempio «a due cifre \
+significative»).
 - Il testo di un esercizio non dà mai il procedimento: niente formula da usare (per esempio «Δx/x», \
 «(xmax − xmin)/2», «v = Δs/Δt») e niente «dividi…», «usa la formula…». Dice i dati e cosa calcolare, come in una \
 verifica vera («Calcola l'errore relativo»): il procedimento lo deve sapere lo studente ed è quello che la verifica \

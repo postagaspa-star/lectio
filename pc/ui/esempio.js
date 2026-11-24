@@ -55,7 +55,8 @@
         stato: 'pronta',
         // §5.1 Il modulo delle verifiche, con le due parti piene.
         verifiche: {
-          struttura: 'Due parti: prima il principato con un brano del libro da leggere, poi gli imperatori. Sei-otto domande in tutto.',
+          struttura: '1) Il principato: un brano del libro da leggere con tre domande sotto.\n2) Gli imperatori: tre-cinque domande aperte.',
+          contesto: 'Le domande partono da un fatto preciso: una data, un nome, una frase del brano.',
           consegne: ['Leggi il brano e rispondi alle domande. (15 punti)', 'Spiega con parole tue, in 5-8 righe.'],
           punti: 'I punti sono scritti accanto a ogni domanda.', punti_totali: 90, sufficienza: 54,
           regole_punti: ['Mezzo punto in meno per una data sbagliata di poco'],
@@ -81,7 +82,7 @@
         lunghezza_risposte: '3-5 righe', consigli: ['Comincia sempre dalla definizione'], note_mie: '', stato: 'pronta',
         // Solo verifiche: senza interrogazioni la parte "Come interroga" resta vuota e non si vede.
         verifiche: {
-          struttura: 'Dieci domande brevi: definizioni e vero o falso.', consegne: ['Indica se è vero o falso e correggi le frasi false.'],
+          struttura: 'Dieci domande brevi: definizioni e vero o falso.', contesto: '', consegne: ['Indica se è vero o falso e correggi le frasi false.'],
           punti: '', punti_totali: null, sufficienza: null, regole_punti: [], difficolta: '', approfondimento: '', cosa_da: '', richieste: [],
         },
         interrogazioni: { inizio: '', andamento: '', durata: '', profondita: '', cosa_vuole: [], esempi: [] },
@@ -1097,7 +1098,7 @@
       if ((m = /^\/server\/api\/materie\/(\d+)\/scheda$/.exec(p))) {
         const sc = s.schede[m[1]] || {
           materia_id: Number(m[1]), aggiornata_il: null, basata_su: { verifiche: 0, interrogazioni: 0, esiti: 0 }, argomenti: [], tipi_domanda: [], cosa_corregge: [], cosa_premia: [], lunghezza_risposte: '', consigli: [], note_mie: '', stato: 'vuota',
-          verifiche: { struttura: '', consegne: [], punti: '', punti_totali: null, sufficienza: null, regole_punti: [], difficolta: '', approfondimento: '', cosa_da: '', richieste: [] },
+          verifiche: { struttura: '', contesto: '', consegne: [], punti: '', punti_totali: null, sufficienza: null, regole_punti: [], difficolta: '', approfondimento: '', cosa_da: '', richieste: [] },
           interrogazioni: { inizio: '', andamento: '', durata: '', profondita: '', cosa_vuole: [], esempi: [] },
         };
         if (metodo === 'PUT') { s.schede[m[1]] = Object.assign(sc, corpo, { stato: sc.stato === 'vuota' ? 'pronta' : sc.stato }); return [200, copia(s.schede[m[1]])]; }

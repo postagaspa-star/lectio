@@ -809,24 +809,27 @@
   // ------------------------------------------------------------------ §5.1 Il modulo delle verifiche
 
   /**
-   * I campi del modulo, nell'ordine in cui si mostrano: chiave, etichetta, forma ('frase' testo breve, 'voci' una per
-   * riga, 'citazioni' una per riga copiate dai documenti) e il limite del server (contratto §5.1).
+   * I campi del modulo, nell'ordine in cui si mostrano: chiave, etichetta, forma ('righe' un testo con una cosa per
+   * riga, 'voci' una per riga, 'citazioni' una per riga copiate dai documenti) e il limite del server (contratto §5.1).
+   * Dalla 1.5.1 i testi hanno più righe (fino a 800 caratteri in tutto) e c'è il contesto delle domande.
    */
+  const TESTO_MODULO = 800;
   const CAMPI_VERIFICHE = [
-    { chiave: 'struttura', nome: 'Com\'è fatta', forma: 'frase', max: 300 },
+    { chiave: 'struttura', nome: 'Com\'è fatta', forma: 'righe', max: TESTO_MODULO },
+    { chiave: 'contesto', nome: 'Contesto', forma: 'righe', max: TESTO_MODULO },
     { chiave: 'consegne', nome: 'Consegne', forma: 'citazioni', max: 300, voci: 6 },
-    { chiave: 'punti', nome: 'Punti', forma: 'frase', max: 300 },
+    { chiave: 'punti', nome: 'Punti', forma: 'righe', max: TESTO_MODULO },
     { chiave: 'regole_punti', nome: 'Regole dei punti', forma: 'voci', max: 200, voci: 6 },
-    { chiave: 'difficolta', nome: 'Difficoltà', forma: 'frase', max: 300 },
-    { chiave: 'approfondimento', nome: 'Approfondimento', forma: 'frase', max: 300 },
-    { chiave: 'cosa_da', nome: 'Cosa dà', forma: 'frase', max: 300 },
+    { chiave: 'difficolta', nome: 'Difficoltà', forma: 'righe', max: TESTO_MODULO },
+    { chiave: 'approfondimento', nome: 'Approfondimento', forma: 'righe', max: TESTO_MODULO },
+    { chiave: 'cosa_da', nome: 'Cosa dà', forma: 'righe', max: TESTO_MODULO },
     { chiave: 'richieste', nome: 'Richieste', forma: 'voci', max: 200, voci: 6 },
   ];
   const CAMPI_INTERROGAZIONI = [
-    { chiave: 'inizio', nome: 'Come comincia', forma: 'frase', max: 300 },
-    { chiave: 'andamento', nome: 'Come va avanti', forma: 'frase', max: 300 },
-    { chiave: 'durata', nome: 'Quanto dura', forma: 'frase', max: 300 },
-    { chiave: 'profondita', nome: 'Approfondimento', forma: 'frase', max: 300 },
+    { chiave: 'inizio', nome: 'Come comincia', forma: 'righe', max: TESTO_MODULO },
+    { chiave: 'andamento', nome: 'Come va avanti', forma: 'righe', max: TESTO_MODULO },
+    { chiave: 'durata', nome: 'Quanto dura', forma: 'righe', max: TESTO_MODULO },
+    { chiave: 'profondita', nome: 'Approfondimento', forma: 'righe', max: TESTO_MODULO },
     { chiave: 'cosa_vuole', nome: 'Cosa vuole', forma: 'voci', max: 200, voci: 6 },
     { chiave: 'esempi', nome: 'Domande', forma: 'citazioni', max: 200, voci: 6 },
   ];
@@ -843,7 +846,7 @@
     const fuori = {};
     for (const c of campi) {
       const v = scritti[c.chiave];
-      fuori[c.chiave] = c.forma === 'frase' ? String(v || '').replace(/\s+/g, ' ').trim() : righe(v);
+      fuori[c.chiave] = c.forma === 'righe' ? righe(v).join('\n') : righe(v);
     }
     if (campi === CAMPI_VERIFICHE) {
       fuori.punti_totali = numeroScritto(scritti.punti_totali);
@@ -858,7 +861,7 @@
       const fuori = {};
       for (const c of campi) {
         const v = (o || {})[c.chiave];
-        fuori[c.chiave] = c.forma === 'frase' ? (typeof v === 'string' ? v.trim() : '') : (Array.isArray(v) ? v.map((x) => String(x || '').trim()).filter(Boolean) : []);
+        fuori[c.chiave] = c.forma === 'righe' ? (typeof v === 'string' ? v.trim() : '') : (Array.isArray(v) ? v.map((x) => String(x || '').trim()).filter(Boolean) : []);
       }
       return fuori;
     };
@@ -886,7 +889,7 @@
     const campi = parte === 'verifiche' ? CAMPI_VERIFICHE : CAMPI_INTERROGAZIONI;
     const fuori = [];
     for (const c of campi) {
-      let voci = c.forma === 'frase' ? (mod[c.chiave] ? [mod[c.chiave]] : []) : mod[c.chiave];
+      let voci = c.forma === 'righe' ? mod[c.chiave].split('\n').map((x) => x.trim()).filter(Boolean) : mod[c.chiave];
       if (c.chiave === 'punti') {
         const numeri = frasePuntiModulo(mod);
         if (numeri) voci = [numeri].concat(voci);
@@ -900,7 +903,7 @@
   /** I testi per i campi della Modifica: liste una per riga, numeri all'italiana. */
   function campiModulo(sc) {
     const mod = modulo(sc);
-    const testi = (campi, o) => Object.fromEntries(campi.map((c) => [c.chiave, c.forma === 'frase' ? o[c.chiave] : o[c.chiave].join('\n')]));
+    const testi = (campi, o) => Object.fromEntries(campi.map((c) => [c.chiave, c.forma === 'righe' ? o[c.chiave] : o[c.chiave].join('\n')]));
     const v = testi(CAMPI_VERIFICHE, mod.verifiche);
     v.punti_totali = mod.verifiche.punti_totali == null ? '' : voto(mod.verifiche.punti_totali);
     v.sufficienza = mod.verifiche.sufficienza == null ? '' : voto(mod.verifiche.sufficienza);
@@ -910,7 +913,7 @@
   function controllaModulo(campi, o) {
     for (const c of campi) {
       const v = o[c.chiave];
-      if (c.forma === 'frase') {
+      if (c.forma === 'righe') {
         if (v.length > c.max) return c.nome + ': al massimo ' + c.max + ' caratteri.';
       } else {
         if (v.length > c.voci) return c.nome + ': al massimo ' + c.voci + ' righe.';
@@ -2137,7 +2140,7 @@
     nomeCartellaDi, contaFile, messiDaLectio, materialeFuori, materialeDentro, gruppiMetti, sottoMetti, fraseMettiQui, fraseFattoMetti,
     articoloNumero, fraseEliminaConFile, fraseDentro, fraseCartellaEliminata, pulisciNomeCartella, cartelleConPronti, cartellaTuttaScelta, alternaCartella,
     LIMITI_SCHEDA, schedaDaMandare, controllaScheda,
-    CAMPI_VERIFICHE, CAMPI_INTERROGAZIONI, LIMITI_MODULO, numeroScritto, modulo, frasePuntiModulo, righeModulo, campiModulo, braniDaMostrare,
+    CAMPI_VERIFICHE, CAMPI_INTERROGAZIONI, LIMITI_MODULO, TESTO_MODULO, numeroScritto, modulo, frasePuntiModulo, righeModulo, campiModulo, braniDaMostrare,
     creaSequenza, voceDi, statoVoci, sceltaVoce, etichettaPrepara, prontaIn,
     estensione, controllaFile, eImmagine, righe, testoInterrogazione, codiceValido, prof, plurale, sottoMateria, basataSu, leggiRotta,
     FORME_SCHEMA, LIVELLI_SCHEMA, SPUNTI_SCHEMA, TIPI_BLOCCO, BLOCCHI_CHIARIBILI, pezziGrassetto, senzaGrassetto, blocchiNoti, passaggioDelBlocco, fontiDelBlocco, segnoFonti, segniDeiBlocchi, testaOpera,

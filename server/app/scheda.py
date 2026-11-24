@@ -13,7 +13,7 @@ import sqlite3
 
 from . import ai, clock, db, prompt, stile
 from .rete import ErroreFornitore
-from .spesa import TOKEN_SCHEDA_USCITA, TettoRaggiunto
+from .spesa import TOKEN_MODULO_USCITA, TOKEN_SCHEDA_USCITA, TettoRaggiunto
 
 log = logging.getLogger("uvicorn.error")
 
@@ -22,16 +22,19 @@ CAMPI = ("argomenti", "tipi_domanda", "cosa_corregge", "cosa_premia", "lunghezza
 CARATTERI_DOCUMENTI_MASSIMI = 60_000
 
 # Il modulo delle verifiche (contratto 5.1, richiesta di Andrea del 24/11/2026): serve solo a fare verifiche di prova
-# e interrogazioni uguali a quelle del prof. Nome del campo → "testo" (una frase), "lista" (voci brevi), "numero".
+# e interrogazioni uguali a quelle del prof. Nome del campo → "testo" (dalla 1.6.0 della sera: una o più righe, una
+# cosa per riga), "lista" (voci brevi), "numero". Dalla stessa sera c'è anche il contesto delle domande.
 MODULO = {
-    "verifiche": {"struttura": "testo", "consegne": "lista", "punti": "testo", "punti_totali": "numero",
-                  "sufficienza": "numero", "regole_punti": "lista", "difficolta": "testo", "approfondimento": "testo",
-                  "cosa_da": "testo", "richieste": "lista"},
+    "verifiche": {"struttura": "testo", "contesto": "testo", "consegne": "lista", "punti": "testo",
+                  "punti_totali": "numero", "sufficienza": "numero", "regole_punti": "lista", "difficolta": "testo",
+                  "approfondimento": "testo", "cosa_da": "testo", "richieste": "lista"},
     "interrogazioni": {"inizio": "testo", "andamento": "testo", "durata": "testo", "profondita": "testo",
                        "cosa_vuole": "lista", "esempi": "lista"},
 }
 LUNGHEZZA_VOCI = {"consegne": 300}  # le altre liste: 200 caratteri a voce
 COPIATE = ("consegne", "esempi")  # voci copiate parola per parola dai documenti (le altre hanno la loro prova)
+TESTO_MODULO = 800  # un campo "testo": al massimo 800 caratteri in tutto
+RIGHE_MODULO = 6  # e al massimo 6 righe scritte dall'AI, una per punto
 
 
 def modulo_vuoto(parte: str) -> dict:
@@ -116,6 +119,26 @@ def sufficienza_del_prof(scheda: dict | None) -> float | None:
 
 def _testo(v, massimo: int) -> str:
     return " ".join(str(v).split())[:massimo] if isinstance(v, (str, int, float)) else ""
+
+
+def _righe(v, massimo: int = TESTO_MODULO) -> str:
+    """Un campo "testo" del modulo: le righe pulite (una cosa per riga), al massimo `massimo` caratteri in tutto;
+    una riga che non ci sta più resta fuori intera."""
+    if isinstance(v, list):
+        voci = [_testo(x, massimo) for x in v]
+    elif isinstance(v, (str, int, float)):
+        voci = [_testo(x, massimo) for x in str(v).split("\n")]
+    else:
+        return ""
+    uscita = ""
+    for x in voci:
+        if not x:
+            continue
+        nuovo = f"{uscita}\n{x}" if uscita else x
+        if len(nuovo) > massimo:
+            break
+        uscita = nuovo
+    return uscita
 
 
 def _lista_testi(v, massimo_voci: int = 10, massimo: int = 200) -> list[str]:
@@ -256,7 +279,7 @@ def normalizza_modulo(parte: str, v: dict, base: dict | None = None) -> dict:
         if k not in v:
             continue
         if tipo == "testo":
-            uscita[k] = _testo(v[k] or "", 300)
+            uscita[k] = _righe(v[k] or "")
         elif tipo == "lista":
             uscita[k] = _lista_testi(v[k], massimo_voci=6, massimo=LUNGHEZZA_VOCI.get(k, 200))
         else:
@@ -284,25 +307,59 @@ def modulo_dai_documenti(parte: str, v, testo: str, parole: set[str], copie: tup
     for k, tipo in MODULO[parte].items():
         x = v.get(k)
         if tipo == "testo":
-            if isinstance(x, dict) and _trovata(x.get("prova") or "", testo, parole):
-                uscita[k] = _testo(x.get("frase") or "", 300)
+            # Una lista di punti, ognuno con la sua prova: se una prova non si trova si perde quel punto, non il campo.
+            punti = x if isinstance(x, list) else [x] if isinstance(x, dict) else []
+            uscita[k] = _righe([_frase_chiusa(f) for f in _con_prova(punti, testo, parole, massimo_voci=RIGHE_MODULO)])
         elif tipo == "lista" and k in COPIATE:
             dove, dove_parole = copie if copie is not None else (testo, parole)
             voci = _lista_testi(x, massimo_voci=12, massimo=LUNGHEZZA_VOCI.get(k, 200))
             uscita[k] = [copiata_pulita(t, LUNGHEZZA_VOCI.get(k, 200)) for t in voci if dove and _trovata(t, dove, dove_parole)][:6]
         elif tipo == "lista":
             uscita[k] = _con_prova(x, testo, parole, massimo_voci=6)
-    punti = v.get("punti") if parte == "verifiche" else None
-    if isinstance(punti, dict):
-        totale, sufficienza = _intero(punti.get("totale")), _numero(punti.get("sufficienza"))
+    if parte == "verifiche":
+        vecchi = v.get("punti") if isinstance(v.get("punti"), dict) else {}  # come lo scriveva la scheda fino al 24/11
+        totale = _intero(v.get("totale", vecchi.get("totale")))
+        sufficienza = _numero(v.get("sufficienza", vecchi.get("sufficienza")))
         uscita["punti_totali"] = totale if totale is not None and _numero_scritto(totale, testo) else None
         uscita["sufficienza"] = sufficienza if sufficienza is not None and _numero_scritto(sufficienza, testo) else None
     _sistema_numeri(uscita)
     return uscita
 
 
-def conta(o: dict, documenti: list[dict], esiti: list[dict]) -> dict:
-    """La scheda dalle domande vere: il modello le elenca, i numeri li fa il codice."""
+def _frase_chiusa(f: str) -> str:
+    return f if not f or f[-1] in ".!?:;»\"" else f + "."
+
+
+def per_le_prove(testo: str) -> str:
+    """Il testo di un documento dove cercare le prove del modulo: com'è e con le formule in testo normale, perché la
+    prova il modello la copia a volte dal LaTeX della lettura delle foto e a volte già leggibile."""
+    leggibile = stile.formule_in_testo(testo)
+    return _normale(testo if leggibile == testo else f"{testo}\n{leggibile}")
+
+
+def modulo_da(m: dict, documenti: list[dict], esiti: list[dict]) -> dict:
+    """Le due parti del modulo dalla risposta della sua chiamata (5.1): ogni parte con le prove dei suoi documenti."""
+    prove = {d["id"]: per_le_prove(d["testo"]) for d in documenti}
+    esiti_t = [(e.get("tipo"), _normale(" ".join(e["uscite"] + e["altre"]))) for e in esiti]
+    solo_verifiche = " ".join(prove[d["id"]] for d in documenti if d.get("tipo") == "verifica")
+    scritti = " ".join([solo_verifiche] + [t for tipo, t in esiti_t if tipo != "orale"])
+    orali = " ".join([prove[d["id"]] for d in documenti if d.get("tipo") == "interrogazione"]
+                     + [t for tipo, t in esiti_t if tipo == "orale"])
+    return {
+        "verifiche": modulo_dai_documenti("verifiche", m.get("verifiche"), scritti, set(scritti.split()),
+                                          copie=(solo_verifiche, set(solo_verifiche.split()))),
+        "interrogazioni": modulo_dai_documenti("interrogazioni", m.get("interrogazioni"), orali, set(orali.split())),
+    }
+
+
+def valida_modulo(o: dict) -> list[str]:
+    return [f'"{parte}" deve essere un oggetto, oppure null' for parte in MODULO
+            if o.get(parte) is not None and not isinstance(o[parte], dict)]
+
+
+def conta(o: dict, documenti: list[dict], esiti: list[dict], modulo: dict | None = None) -> dict:
+    """La scheda dalle domande vere: il modello le elenca, i numeri li fa il codice. Il modulo viene dalla sua
+    chiamata (`modulo`); senza, da `o` (le schede scritte prima, le prove)."""
     testi = {d["id"]: _normale(d["testo"]) for d in documenti}
     for i, e in enumerate(esiti, start=1):
         testi[f"E{i}"] = _normale(" ".join(e["uscite"] + e["altre"]))
@@ -334,14 +391,8 @@ def conta(o: dict, documenti: list[dict], esiti: list[dict]) -> dict:
     tutto = " ".join(testi.values())
     parole = set(tutto.split())
     lunghezza = o.get("lunghezza_risposte")
-    solo_verifiche = " ".join(testi[d["id"]] for d in documenti if d.get("tipo") == "verifica")
-    scritti = " ".join([solo_verifiche] + [testi[f"E{i}"] for i, e in enumerate(esiti, start=1) if e.get("tipo") != "orale"])
-    orali = " ".join([testi[d["id"]] for d in documenti if d.get("tipo") == "interrogazione"]
-                     + [testi[f"E{i}"] for i, e in enumerate(esiti, start=1) if e.get("tipo") == "orale"])
     return {
-        "verifiche": modulo_dai_documenti("verifiche", o.get("verifiche"), scritti, set(scritti.split()),
-                                          copie=(solo_verifiche, set(solo_verifiche.split()))),
-        "interrogazioni": modulo_dai_documenti("interrogazioni", o.get("interrogazioni"), orali, set(orali.split())),
+        **modulo_da(modulo if modulo is not None else o, documenti, esiti),
         "argomenti": argomenti,
         "tipi_domanda": tipi,
         "cosa_corregge": _con_prova(o.get("cosa_corregge"), tutto, parole),
@@ -657,6 +708,27 @@ def aggiorna(ctx, materia_id: int) -> None:
         log.exception("scheda %s: errore inatteso", materia_id)
         chiudi("errore", errore="Lectio ha avuto un problema aggiornando la scheda. Riprova con Aggiorna.")
         return
+    modulo = _modulo_ai(ctx, materia_id, nome_materia, documenti, esiti)
+    dati = conta(oggetto, documenti, esiti, modulo=modulo or {})
+    if modulo is None:  # la chiamata del modulo non è riuscita: resta quello di prima
+        vecchi = dati_di(r)
+        dati.update(verifiche=vecchi["verifiche"], interrogazioni=vecchi["interrogazioni"])
     prof = (materia["prof"] or "").strip()
-    chiudi("pronta", dati=conta(oggetto, documenti, esiti),
+    chiudi("pronta", dati=dati,
            novita=f"Ho aggiornato la scheda del prof {prof}" if prof else f"Ho aggiornato la scheda di {materia['nome']}")
+
+
+def _modulo_ai(ctx, materia_id: int, materia: dict, documenti: list[dict], esiti: list[dict]) -> dict | None:
+    """La chiamata del modulo delle verifiche (5.1), dopo quella della scheda. None se non è riuscita."""
+    try:
+        return ai.chiedi_json(
+            cassa=ctx.cassa, fornitore=ctx.testo, compito="modulo",
+            messaggi=prompt.messaggi_modulo(materia, documenti, esiti),
+            modello=ctx.settings.modello_piano, valida=valida_modulo, max_token=TOKEN_MODULO_USCITA,
+            cosa=f"Modulo delle verifiche di {materia['nome']}",
+            dati={"materia": materia, "documenti": documenti, "esiti": esiti},
+            materia_id=materia_id,
+        )
+    except (TettoRaggiunto, ErroreFornitore, ai.RispostaNonUsabile) as e:
+        log.warning("scheda %s: modulo delle verifiche non aggiornato (%s)", materia_id, getattr(e, "frase", e))
+        return None

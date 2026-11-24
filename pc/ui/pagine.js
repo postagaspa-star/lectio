@@ -1036,8 +1036,8 @@
     const campiModulo = { verifiche: {}, interrogazioni: {} };
     const campoModulo = (parte, c) => {
       const id = 'sc-' + (parte === 'verifiche' ? 'v' : 'i') + '-' + c.chiave.replace(/_/g, '-');
-      const el = c.forma === 'frase'
-        ? h('textarea', { class: 'campo', id, rows: '2', maxlength: String(c.max) }, testiModulo[parte][c.chiave])
+      const el = c.forma === 'righe'
+        ? h('textarea', { class: 'campo', id, rows: '4', maxlength: String(c.max) }, testiModulo[parte][c.chiave])
         : area(testiModulo[parte][c.chiave], id, 3);
       campiModulo[parte][c.chiave] = el;
       return el;

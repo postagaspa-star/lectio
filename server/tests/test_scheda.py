@@ -117,7 +117,7 @@ def test_una_correzione_basta(client, auth, servizi, server):
     aggiungi_testo(client, auth, m["id"], VERIFICA_GEMINI, tipo="verifica")
     sfondo_tutto(servizi)
     assert scheda(client, auth, m["id"])["stato"] == "pronta"
-    assert server.conta("/v1/chat/completions") == 2
+    assert server.conta("/v1/chat/completions") == 3  # la scheda (con una correzione) e poi il modulo delle verifiche
 
 
 def test_put_valida_i_campi(client, auth):

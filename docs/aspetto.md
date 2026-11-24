@@ -1077,7 +1077,7 @@ prova e interrogazioni uguali a quelle del prof. Andrea lo vuole anche modificab
 
 **Nella pagina della materia**, dentro la scheda "Cosa chiede il prof", sotto "Quanto scrivere" e prima di "Basata
 su…", due parti, ognuna con una riga sottile sopra (`border-top` `--riga`) e un titolo da 16 px/800:
-- **Come fa le verifiche**: `COM'È FATTA`, `CONSEGNE`, `PUNTI`, `REGOLE DEI PUNTI`, `DIFFICOLTÀ`, `APPROFONDIMENTO`,
+- **Come fa le verifiche**: `COM'È FATTA`, `CONTESTO` (dal PC 1.5.1), `CONSEGNE`, `PUNTI`, `REGOLE DEI PUNTI`, `DIFFICOLTÀ`, `APPROFONDIMENTO`,
   `COSA DÀ`, `RICHIESTE`.
 - **Come interroga**: `COME COMINCIA`, `COME VA AVANTI`, `QUANTO DURA`, `APPROFONDIMENTO`, `COSA VUOLE`, `DOMANDE`.
 
@@ -1091,8 +1091,9 @@ un'interrogazione." (vale anche per le verifiche non corrette).
 **Nella Modifica** (`#materia/{id}/scheda`), sotto i campi di sempre, due titoli di sezione "Come fa le verifiche" e
 "Come interroga", ognuno con i suoi campi su due colonne (una sotto i 900 px), con gli stessi nomi della pagina della
 materia:
-- i testi (Com'è fatta, Punti, Difficoltà, Approfondimento, Cosa dà, Come comincia, Come va avanti, Quanto dura) sono
-  caselle di due righe, al massimo 300 caratteri;
+- i testi (Com'è fatta, Contesto, Punti, Difficoltà, Approfondimento, Cosa dà, Come comincia, Come va avanti, Quanto
+  dura) sono caselle di quattro righe, al massimo 800 caratteri, una cosa per riga (dal PC 1.5.1; prima due righe e 300
+  caratteri). Nella pagina della materia ogni riga di un testo è una riga dell'elenco, come le voci delle liste;
 - le liste (Consegne, Regole dei punti, Richieste, Cosa vuole, Domande) sono caselle "una voce per riga" come Cosa
   corregge: al massimo 6 righe, 300 caratteri per riga le Consegne, 200 le altre;
 - sotto Punti due campi piccoli affiancati, `PUNTI IN TUTTO` (intero da 1 a 1.000) e `SUFFICIENZA` (anche con la

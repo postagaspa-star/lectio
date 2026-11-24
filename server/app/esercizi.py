@@ -247,7 +247,7 @@ def _valore(c: dict, testo_visibile: str, numeri: set[Fraction]) -> dict:
     richieste = c.get("richieste") or []
     if not isinstance(richieste, list) or not 1 <= len(richieste) <= RICHIESTE_MASSIME:
         raise EsercizioRotto(f'in "calcolo" servono da 1 a {RICHIESTE_MASSIME} "richieste"')
-    pulite, frasi, attesi = [], [], []
+    pulite, frasi, attesi, lunghi = [], [], [], []
     arrotonda_testo = bool(_ARROTONDA.search(testo_visibile))
     for r in richieste:
         if not isinstance(r, dict):
@@ -256,11 +256,11 @@ def _valore(c: dict, testo_visibile: str, numeri: set[Fraction]) -> dict:
         if not cosa or not formula:
             raise EsercizioRotto('ogni richiesta ha "cosa" e "formula"')
         regola = _regola(r.get("arrotonda"))
-        if regola and not arrotonda_testo:
-            raise EsercizioRotto(f'«{cosa}» ha "arrotonda" ma il "testo" non chiede di arrotondare: chiedilo nel testo o togli "arrotonda"')
         albero = calcolo.leggi(formula, set(valori))
         v = calcolo.calcola(albero, valori)
         esatto, u = calcolo.scrivi(v), f" {unita}" if unita else ""
+        if not regola and not _corto(v, esatto):
+            lunghi.append(cosa)
         conto = "" if albero[0] in ("var", "num") else f"{calcolo.stampa(albero, valori)} = "
         if len(conto) > 140:  # una deviazione standard scritta per intero non si legge: basta il risultato
             conto = ""
@@ -275,7 +275,63 @@ def _valore(c: dict, testo_visibile: str, numeri: set[Fraction]) -> dict:
     if arrotonda_testo and not any(p["arrotonda"] for p in pulite):
         raise EsercizioRotto('il "testo" chiede di arrotondare ma nessuna richiesta ha "arrotonda"')
     return {"calcolo": {"tipo": "valore", "dati": {k: _testo_numero(v) for k, v in valori.items()}, "richieste": pulite},
-            "risultati": [p["cosa"] for p in pulite], "soluzione": " ".join(frasi), "atteso": attesi}
+            "risultati": [p["cosa"] for p in pulite], "soluzione": " ".join(frasi), "atteso": attesi, "lunghi": lunghi,
+            "arrotonda_da_dire": None if arrotonda_testo else frase_arrotonda(pulite)}
+
+
+_IN_PAROLE = ["zero", "una", "due", "tre", "quattro", "cinque", "sei", "sette", "otto"]
+
+
+def _a_quanto(regola: dict) -> str:
+    if "decimali" in regola:
+        n = regola["decimali"]
+        return "all'unità" if n == 0 else ("a una cifra decimale" if n == 1 else f"a {_IN_PAROLE[n]} cifre decimali")
+    n = regola["cifre"]
+    return "a una cifra significativa" if n == 1 else f"a {_IN_PAROLE[n]} cifre significative"
+
+
+def frase_arrotonda(pulite: list[dict]) -> str | None:
+    """La frase che chiede di arrotondare, quando il modello ha messo "arrotonda" nel calcolo ma non l'ha chiesto nel
+    testo (24/11/2026, prova di fisica: due esercizi su sei buttati per questo). Prima si scartava l'esercizio; ora la
+    aggiunge il programma, con le cifre giuste: «Arrotonda i risultati a due cifre significative.»"""
+    gruppi: dict[str, list[str]] = {}
+    for p in pulite:
+        if p["arrotonda"]:
+            gruppi.setdefault(_a_quanto(p["arrotonda"]), []).append(p["cosa"])
+    if not gruppi:
+        return None
+    frasi = []
+    for quanto, cose in gruppi.items():
+        if len(cose) == len(pulite):
+            frasi.append(f"Arrotonda {'il risultato' if len(cose) == 1 else 'i risultati'} {quanto}.")
+        else:
+            nomi = " e ".join(f"«{c}»" for c in cose) if len(cose) <= 2 else ", ".join(f"«{c}»" for c in cose[:-1]) + f" e «{cose[-1]}»"
+            frasi.append(f"Arrotonda {quanto} {'il risultato' if len(cose) == 1 else 'i risultati'} {nomi}.")
+    return " ".join(frasi)
+
+
+# «arrotonda a due cifre»: significative o decimali? (24/11/2026, prova di fisica). Il programma lo sa dal calcolo.
+_CIFRE_VAGHE = re.compile(r"(\b(?:una|due|tre|quattro|cinque|[1-5])\s+cifr[ae])(?!\s+(?:significativ|decimal|dopo))", re.I)
+
+
+def arrotonda_chiaro(testo: str, conti: dict | None) -> str:
+    """Il testo con «a due cifre» precisato in «a due cifre significative» o «decimali», se tutte le richieste
+    arrotondano nello stesso modo; se no il testo com'è."""
+    if not conti or not _ARROTONDA.search(testo) or not _CIFRE_VAGHE.search(testo):
+        return testo
+    modi = {next(iter(r["arrotonda"])) for r in conti["calcolo"].get("richieste") or [] if r.get("arrotonda")}
+    if len(modi) != 1:
+        return testo
+    plurale, singolare = ("significative", "significativa") if modi == {"cifre"} else ("decimali", "decimale")
+    return _CIFRE_VAGHE.sub(lambda m: f"{m.group(1)} {plurale if m.group(1).lower().endswith('e') else singolare}", testo)
+
+
+def _corto(v, scritto: str) -> bool:
+    """Un risultato come quelli del prof: esatto e con al massimo 4 decimali (0,035 sì; 1/49 o una radice no).
+    24/11/2026, fisica: "2 / 98 = 1/49 (circa 0,02041)" senza chiedere di arrotondare."""
+    if not isinstance(v, Fraction) or "circa" in scritto:
+        return False
+    return len(scritto.partition(",")[2]) <= 4
 
 
 def stessi_numeri(calcolo_pulito: dict, compatti_materiali: str, numeri_materiali: set[Fraction]) -> bool:
