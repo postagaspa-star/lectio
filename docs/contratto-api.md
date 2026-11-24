@@ -746,6 +746,10 @@ Nessun cambio al formato: sono controlli del server su quello che scrive l'AI.
   testo dice «a due cifre», il server precisa «significative» o «decimali» come nel calcolo. Contano come teoria anche «spiega quando»,
   «quando si dice» e «in che cosa consiste».
 - Il controllo dei fatti non tocca le consegne delle domande, solo le risposte attese.
+- Passaggi (server 1.6.2): i risultati scritti nei campi fanno parte della risposta. Un esercizio che chiede solo risultati,
+  con tutti i risultati giusti secondo il programma, vale tutti i punti anche con pochi passaggi o nessuno (`commento` «Tutti i
+  risultati sono giusti.»); se chiede anche altro (dire se le misure sono compatibili, spiegare, illustrare il ragionamento)
+  decide la correzione, che toglie punti solo per quella parte.
 
 ## 22. Colori delle materie
 Sono 16: `ambra`, `rosa`, `petrolio`, `viola`, `blu`, `verde`, `arancio`, `oliva`, `giada`, `senape`, `orchidea`, `prugna`, `cacao`, `lavagna`, `salvia`, `lavanda`. I valori sono in `docs/aspetto.md`. `POST` e `PATCH` delle materie accettano solo questi; un nome che un'app non conosce diventa ambra.

@@ -558,8 +558,13 @@ altro ordine, una formula equivalente. Togli punti solo per un errore di contenu
 che la domanda chiede e che manca davvero; una parola imprecisa che non cambia il senso toglie al massimo mezzo punto.
 - Un numero scritto in un altro modo ma uguale (0,025 e 2,5·10⁻²) è giusto.
 - Quando c'è il "Controllo del programma sul risultato", il programma ha già fatto il conto ed è sicuro: usalo per dire se \
-il risultato è giusto; tu giudichi il metodo dai passaggi e dal testo letto dai file, se c'è. Risultato giusto e passaggi \
-giusti o non chiesti: tutti i punti. "Non arrotondato come chiesto": togli al massimo mezzo punto.
+il risultato è giusto. I «Risultati scritti nei campi» fanno parte della risposta: quello che c'è lì non manca, anche se i \
+passaggi non lo ripetono. Se tutti i risultati sono giusti, il metodo è giusto: tutti i punti anche con pochi passaggi, \
+passaggi saltati o nessun passaggio. Allora togli punti solo per un errore di contenuto scritto nei passaggi, per una \
+parte della domanda che non è un risultato (per esempio dire se le misure sono compatibili) sbagliata o mancante, o se il \
+testo chiede di illustrare il ragionamento e il ragionamento manca. Con un risultato sbagliato giudichi il metodo dai \
+passaggi e dal testo letto dai file, se c'è. "Non arrotondato come chiesto": togli al massimo mezzo punto. Un passaggio \
+intermedio non scritto non va mai in «mancava».
 - Se in <scheda> ci sono le «Regole dei punti» del prof, valgono loro dove dicono qualcosa di preciso (per esempio \
 mezzo punto in meno per un'imprecisione); per il resto le regole qui sopra.
 "giusta" se c'è l'essenziale, "parziale" se c'è una parte giusta ma manca qualcosa di importante o c'è un errore di \

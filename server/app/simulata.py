@@ -560,6 +560,22 @@ def _mezzi(x: float) -> int | float:
     return int(x) if x.is_integer() else x
 
 
+# Andrea, 24/11/2026: «se nei passaggi non li scrivo tutti mi dà errore e mi toglie punti». Simulata 4, domanda 4: i
+# quattro estremi giusti nei campi e la conclusione giusta, ma 2,5 su 4 perché i passaggi non ripetevano gli intervalli.
+# Un esercizio che chiede solo numeri, con tutti i numeri giusti, vale tutti i punti; se chiede anche altro (dire se
+# sono compatibili, spiegare, illustrare il ragionamento) decide la correzione, con la regola nel prompt.
+_CHIEDE_ALTRO = re.compile(
+    r"\b(?:stabilisci|indica\s+se|di['’]\s+se|dire\s+se|dici\s+se|verifica\s+se|confronta|spiega|motiva|illustra|giustifica"
+    r"|commenta|descrivi|perch[ée]|disegna|rappresenta|ragionamento)|compatibil|più\s+precis", re.I)
+
+
+def tutti_i_punti(d: dict, controllo: list[dict] | None) -> bool:
+    """Vero se l'esercizio chiede solo dei risultati e il programma li ha trovati tutti giusti."""
+    if not d.get("calcolo") or not controllo or _CHIEDE_ALTRO.search(str(d.get("testo") or "")):
+        return False
+    return all(x.get("esito") == "giusto" for x in controllo)
+
+
 def _valida_correzione(o: dict) -> list[str]:
     domande = o.get("domande")
     if not isinstance(domande, list) or any(not isinstance(d, dict) for d in domande):
@@ -587,10 +603,12 @@ def correggi(ctx, simulata_id: int) -> None:
         letti = [(a["nome"], allegati.testo(ctx, simulata_id, r["materia_id"], a)) for a in file_di.get(n) or []] if d["risposta_attesa"] else []
         if d.get("calcolo") and (passaggi or any(miei) or letti):
             controlli[d["n"]] = esercizi.controlla(d, passaggi + "\n" + "\n".join(t for _, t in letti), miei)
-        parti = [passaggi] if passaggi else []
+        parti = []
         nomi = d.get("risultati") or []
         if any(miei):
-            parti.append("Risultati scritti: " + "; ".join(f"{nomi[i] if i < len(nomi) else 'Risultato'}: {x}" for i, x in enumerate(miei) if x))
+            parti.append("Risultati scritti nei campi: " + "; ".join(f"{nomi[i] if i < len(nomi) else 'Risultato'}: {x}" for i, x in enumerate(miei) if x))
+        if passaggi:
+            parti.append(f"Passaggi: {passaggi}" if d.get("calcolo") else passaggi)
         parti += [f"Testo letto dal file «{nome}»:\n{t}" if t else f"(il file «{nome}» non si è riuscito a leggere)" for nome, t in letti]
         if parti:
             scritto[d["n"]] = "\n".join(parti)
@@ -630,6 +648,8 @@ def correggi(ctx, simulata_id: int) -> None:
                 presi = 0
             commento = stile.ripulisci(" ".join(str(c.get("commento") or "").split()))[:400]
             mancava = [" ".join(str(m).split())[:80] for m in _lista(c.get("mancava")) if str(m).strip()][:3]
+            if esito != "giusta" and tutti_i_punti(d, base.get("controllo")):
+                esito, presi, commento, mancava = "giusta", _mezzi(float(d["punti"])), "Tutti i risultati sono giusti.", []
         punti += presi
         da_rifare += int(esito != "giusta")
         uscita.append({**base, "esito": esito, "punti": presi, "commento": commento, "mancava": mancava})

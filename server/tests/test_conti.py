@@ -182,7 +182,7 @@ def test_verifica_di_fisica_con_numeri_nuovi(client, auth, servizi, server):
 
     # La correzione: il programma controlla i risultati, il modello giudica il metodo, anche con il mezzo punto.
     server.correzione = {"domande": [
-        {"n": 1, "esito": "giusta", "punti": 3, "commento": "Conto e arrotondamento giusti.", "mancava": []},
+        {"n": 1, "esito": "parziale", "punti": 2, "commento": "Mancano i passaggi.", "mancava": ["Passaggi"]},
         {"n": 2, "esito": "parziale", "punti": 1.5, "commento": "Il metodo è giusto, ma 16 / 2 fa 8.", "mancava": []}]}
     n = server.conta("/v1/chat/completions")
     assert client.post(f"/api/simulate/{sid}/consegna", headers=auth).json()["stato"] == "in_correzione"
@@ -195,12 +195,15 @@ def test_verifica_di_fisica_con_numeri_nuovi(client, auth, servizi, server):
     assert e["domande"][0]["controllo"] == [{"cosa": "Semidispersione massima", "scritto": "0,08 cm", "atteso": "0,08 cm", "esito": "giusto"}]
     assert e["domande"][1]["controllo"][0]["esito"] == "sbagliato" and e["domande"][1]["controllo"][0]["atteso"] == "x = 8"
     assert "controllo" not in e["domande"][2]
+    # Il risultato giusto nel campo vale tutti i punti anche se la correzione voleva più passaggi (24/11/2026).
+    assert e["domande"][0]["esito"] == "giusta" and e["domande"][0]["commento"] == "Tutti i risultati sono giusti."
+    assert e["domande"][0]["mancava"] == []
     assert "0,075 cm, che arrotondato fa 0,08 cm" in e["domande"][0]["risposta_attesa"]
     correzione = next(c["messages"][-1]["content"] for p, c in server.chiamate[n:]
                       if p == "/v1/chat/completions" and "Correggi ogni risposta confrontandola" in c["messages"][-1]["content"])
     assert "Controllo del programma sul risultato (sicuro)" in correzione and "giusto 0,08 cm" in correzione
     assert "Tabella: x (cm)" in correzione and "Testo letto dal file «foglio.png»" in correzione
-    assert "Risultati scritti: Soluzione: x = 9" in correzione
+    assert "Risultati scritti nei campi: Soluzione: x = 9" in correzione
     # Nel Ripasso lampo l'esercizio sbagliato arriva con i suoi dati.
     carte = client.get("/api/lampo", params={"materia_id": m["id"]}, headers=auth).json()
     assert carte["da_fare"] >= 1
@@ -450,3 +453,21 @@ def test_altre_forme_di_teoria():
     o = {"domande": ESERCIZI[:3] + [_aperta("Due misure hanno i loro intervalli. Spiega quando si può dire che sono compatibili.")]}
     rotte = simulata.domande_rotte(o, BRANI_FISICA, numeri=True, scheda=scheda)
     assert len(rotte) == 1 and rotte[0].startswith("la domanda 4") and "teoria" in rotte[0]
+
+
+
+def test_i_passaggi_non_scritti_non_tolgono_punti():
+    """Andrea, 24/11/2026: «se nei passaggi non li scrivo tutti mi dà errore e mi toglie punti»."""
+    tutti = [{"cosa": "Errore relativo", "scritto": "0,025", "atteso": "0,025", "esito": "giusto"}]
+    solo_numeri = _errore_relativo("3,20", "0,08")
+    assert simulata.tutti_i_punti(solo_numeri, tutti)
+    assert not simulata.tutti_i_punti(solo_numeri, [{**tutti[0], "esito": "sbagliato"}])
+    assert not simulata.tutti_i_punti(solo_numeri, [{**tutti[0], "esito": "non_arrotondato"}])
+    assert not simulata.tutti_i_punti(solo_numeri, [])
+    for altro in ["Determina gli estremi degli intervalli e stabilisci se le misure sono compatibili.",
+                  "Calcola la densità e spiega quale oggetto galleggia.", "ILLUSTRA IL RAGIONAMENTO: calcola la distanza."]:
+        assert not simulata.tutti_i_punti({**solo_numeri, "testo": altro}, tutti), altro
+    from app import prompt_studio
+    testo = prompt_studio.messaggi_correzione_simulata([], None)[1]["content"]
+    assert "Se tutti i risultati sono giusti, il metodo è giusto" in testo and "non va mai in «mancava»" in testo
+
