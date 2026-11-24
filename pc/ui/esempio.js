@@ -53,6 +53,25 @@
         consigli: ['Parti dalla definizione, poi un esempio'],
         note_mie: 'Chiede quasi sempre di Seiano.',
         stato: 'pronta',
+        // §5.1 Il modulo delle verifiche, con le due parti piene.
+        verifiche: {
+          struttura: 'Due parti: prima il principato con un brano del libro da leggere, poi gli imperatori. Sei-otto domande in tutto.',
+          consegne: ['Leggi il brano e rispondi alle domande. (15 punti)', 'Spiega con parole tue, in 5-8 righe.'],
+          punti: 'I punti sono scritti accanto a ogni domanda.', punti_totali: 90, sufficienza: 54,
+          regole_punti: ['Mezzo punto in meno per una data sbagliata di poco'],
+          difficolta: 'Domande dirette sui fatti; l\'ultima chiede un confronto.',
+          approfondimento: 'Vuole il perché dei fatti, non solo il nome.',
+          cosa_da: 'Un brano del libro con le domande sotto.',
+          richieste: ['Scrivere le date con l\'anno preciso'],
+        },
+        interrogazioni: {
+          inizio: 'Parte con una domanda larga sull\'imperatore e lascia parlare.',
+          andamento: 'Rilancia sui nomi che dici: «e chi era Seiano?».',
+          durata: 'Circa dieci minuti, quattro-cinque domande.',
+          profondita: 'Vuole le cause e le conseguenze.',
+          cosa_vuole: ['Le date precise', 'I collegamenti tra imperatori'],
+          esempi: ['Perché Tiberio si ritirò a Capri?', 'Che cosa cambiò con Claudio?'],
+        },
       },
       2: {
         materia_id: 2, aggiornata_il: '2026-10-20T17:00:00+02:00', basata_su: { verifiche: 3, interrogazioni: 1, esiti: 1 },
@@ -60,6 +79,12 @@
         tipi_domanda: [{ tipo: 'definizione', quota: 0.5 }, { tipo: 'aperta', quota: 0.3 }, { tipo: 'vero_falso', quota: 0.2 }],
         cosa_corregge: ['Vuole le parole tecniche giuste.'], cosa_premia: ['Gli esempi presi dalla vita di tutti i giorni'],
         lunghezza_risposte: '3-5 righe', consigli: ['Comincia sempre dalla definizione'], note_mie: '', stato: 'pronta',
+        // Solo verifiche: senza interrogazioni la parte "Come interroga" resta vuota e non si vede.
+        verifiche: {
+          struttura: 'Dieci domande brevi: definizioni e vero o falso.', consegne: ['Indica se è vero o falso e correggi le frasi false.'],
+          punti: '', punti_totali: null, sufficienza: null, regole_punti: [], difficolta: '', approfondimento: '', cosa_da: '', richieste: [],
+        },
+        interrogazioni: { inizio: '', andamento: '', durata: '', profondita: '', cosa_vuole: [], esempi: [] },
       },
     };
   }
@@ -436,10 +461,16 @@
     ];
   }
 
+  // §21.2 Un testo da leggere per le prime due domande (lo stesso brano: si vede una volta sola).
+  const BRANO_AUGUSTO = {
+    testo: 'Augusto non volle mai il titolo di re: a Roma quella parola ricordava la tirannia di Tarquinio il Superbo.\nSi fece chiamare princeps, cioè primo cittadino, e lasciò al loro posto il senato e i magistrati della Repubblica.\nIl potere vero, però, restava nelle sue mani: comandava l\'esercito e sceglieva i governatori delle province più importanti.',
+    fonte: 'Storia antica, pag. 212',
+  };
+
   function domandeSimulata() {
     return [
-      { n: 1, tipo: 'aperta', testo: 'Perché Augusto non si fece mai chiamare re?', punti: 15, sezione: 'Prima parte: il principato' },
-      { n: 2, tipo: 'definizione', testo: 'Che cos\'è il principato?', punti: 10, sezione: 'Prima parte: il principato' },
+      { n: 1, tipo: 'aperta', testo: 'Perché Augusto non si fece mai chiamare re?', punti: 15, sezione: 'Prima parte: il principato', brano: copia(BRANO_AUGUSTO) },
+      { n: 2, tipo: 'definizione', testo: 'Che cos\'è il principato?', punti: 10, sezione: 'Prima parte: il principato', brano: copia(BRANO_AUGUSTO) },
       { n: 3, tipo: 'aperta', testo: 'Quali poteri tenne per sé Augusto?', punti: 15, sezione: 'Prima parte: il principato' },
       { n: 4, tipo: 'date', testo: 'In che anno Tiberio si ritirò a Capri?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
       { n: 5, tipo: 'aperta', testo: 'Chi era Seiano e perché cadde?', punti: 15, sezione: 'Seconda parte: gli imperatori' },
@@ -1064,7 +1095,11 @@
         return [200, { spostati: ids.length }];
       }
       if ((m = /^\/server\/api\/materie\/(\d+)\/scheda$/.exec(p))) {
-        const sc = s.schede[m[1]] || { materia_id: Number(m[1]), aggiornata_il: null, basata_su: { verifiche: 0, interrogazioni: 0, esiti: 0 }, argomenti: [], tipi_domanda: [], cosa_corregge: [], cosa_premia: [], lunghezza_risposte: '', consigli: [], note_mie: '', stato: 'vuota' };
+        const sc = s.schede[m[1]] || {
+          materia_id: Number(m[1]), aggiornata_il: null, basata_su: { verifiche: 0, interrogazioni: 0, esiti: 0 }, argomenti: [], tipi_domanda: [], cosa_corregge: [], cosa_premia: [], lunghezza_risposte: '', consigli: [], note_mie: '', stato: 'vuota',
+          verifiche: { struttura: '', consegne: [], punti: '', punti_totali: null, sufficienza: null, regole_punti: [], difficolta: '', approfondimento: '', cosa_da: '', richieste: [] },
+          interrogazioni: { inizio: '', andamento: '', durata: '', profondita: '', cosa_vuole: [], esempi: [] },
+        };
         if (metodo === 'PUT') { s.schede[m[1]] = Object.assign(sc, corpo, { stato: sc.stato === 'vuota' ? 'pronta' : sc.stato }); return [200, copia(s.schede[m[1]])]; }
         return [200, copia(sc)];
       }

@@ -184,6 +184,9 @@
         await vai('#materia/1', '.scheda-prof .pillola');
         break;
       case 'aggiungi': await vai('#materia/1', '[data-visita="aggiungi"]'); A.apriAggiungi(A.materiaDi(1)); break;
+      // §5.1 Il modulo delle verifiche: nella pagina della materia e nella Modifica della scheda.
+      case 'scheda-modulo': await vai('#materia/1', '[data-modulo="verifiche"]'); document.querySelector('[data-modulo="verifiche"]').scrollIntoView(); break;
+      case 'scheda-modifica': await vai('#materia/1/scheda', '#sc-v-struttura'); document.querySelector('[data-modulo-modifica="verifiche"]').scrollIntoView(); break;
       case 'nuova-materia': {
         await vai('#materie', '.scheda-materia');
         A.apriMateria(null);

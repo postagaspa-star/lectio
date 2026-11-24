@@ -11,7 +11,7 @@ import logging
 import re
 import sqlite3
 
-from . import ai, clock, db, prompt
+from . import ai, clock, db, prompt, stile
 from .rete import ErroreFornitore
 from .spesa import TOKEN_SCHEDA_USCITA, TettoRaggiunto
 
@@ -21,10 +21,34 @@ CAMPI_LISTA = ("cosa_corregge", "cosa_premia", "consigli")
 CAMPI = ("argomenti", "tipi_domanda", "cosa_corregge", "cosa_premia", "lunghezza_risposte", "consigli")
 CARATTERI_DOCUMENTI_MASSIMI = 60_000
 
+# Il modulo delle verifiche (contratto 5.1, richiesta di Andrea del 24/11/2026): serve solo a fare verifiche di prova
+# e interrogazioni uguali a quelle del prof. Nome del campo → "testo" (una frase), "lista" (voci brevi), "numero".
+MODULO = {
+    "verifiche": {"struttura": "testo", "consegne": "lista", "punti": "testo", "punti_totali": "numero",
+                  "sufficienza": "numero", "regole_punti": "lista", "difficolta": "testo", "approfondimento": "testo",
+                  "cosa_da": "testo", "richieste": "lista"},
+    "interrogazioni": {"inizio": "testo", "andamento": "testo", "durata": "testo", "profondita": "testo",
+                       "cosa_vuole": "lista", "esempi": "lista"},
+}
+LUNGHEZZA_VOCI = {"consegne": 300}  # le altre liste: 200 caratteri a voce
+COPIATE = ("consegne", "esempi")  # voci copiate parola per parola dai documenti (le altre hanno la loro prova)
+
+
+def modulo_vuoto(parte: str) -> dict:
+    return {k: "" if t == "testo" else [] if t == "lista" else None for k, t in MODULO[parte].items()}
+
+
+def modulo_pieno(m: dict | None) -> bool:
+    return any(v not in ("", None, []) for v in (m or {}).values())
+
 
 def vuota() -> dict:
     return {"argomenti": [], "tipi_domanda": [], "cosa_corregge": [], "cosa_premia": [], "lunghezza_risposte": "",
-            "consigli": []}
+            "consigli": [], "verifiche": modulo_vuoto("verifiche"), "interrogazioni": modulo_vuoto("interrogazioni")}
+
+
+def ha_contenuto(dati: dict) -> bool:
+    return any(dati.get(k) for k in CAMPI) or any(modulo_pieno(dati.get(p)) for p in MODULO)
 
 
 def crea(conn: sqlite3.Connection, materia_id: int) -> None:
@@ -38,6 +62,14 @@ def _riga(conn: sqlite3.Connection, materia_id: int) -> sqlite3.Row | None:
 def dati_di(riga: sqlite3.Row) -> dict:
     d = vuota()
     d.update(json.loads(riga["dati"] or "{}"))
+    for parte in MODULO:  # le schede scritte prima della 1.6.0 non hanno il modulo
+        d[parte] = {**modulo_vuoto(parte), **{k: v for k, v in (d.get(parte) or {}).items() if k in MODULO[parte]}}
+        for k in COPIATE:  # anche quelle salvate prima della pulizia delle consegne
+            if isinstance(d[parte].get(k), list):
+                d[parte][k] = [copiata_pulita(str(t), LUNGHEZZA_VOCI.get(k, 200)) for t in d[parte][k]]
+    for a in d.get("argomenti") or []:  # gli esempi copiati dalle domande vere, come le consegne
+        if isinstance(a, dict) and isinstance(a.get("esempio"), str):
+            a["esempio"] = copiata_pulita(a["esempio"])
     return d
 
 
@@ -52,6 +84,8 @@ def per_api(conn: sqlite3.Connection, materia_id: int) -> dict:
         "aggiornata_il": clock.per_utente(r["aggiornata_il"]),
         "basata_su": json.loads(r["basata_su"]),
         **{k: d[k] for k in CAMPI},
+        "verifiche": d["verifiche"],
+        "interrogazioni": d["interrogazioni"],
         "note_mie": r["note_mie"],
         "stato": r["stato"],
         "errore": r["errore"] if r["stato"] == "errore" else None,
@@ -63,9 +97,19 @@ def per_lezione(conn: sqlite3.Connection, materia_id: int) -> dict | None:
     if r is None:
         return None
     d = dati_di(r)
-    if not any(d[k] for k in CAMPI) and not r["note_mie"]:
+    if not ha_contenuto(d) and not r["note_mie"]:
         return None
-    return {**{k: d[k] for k in CAMPI}, "note_mie": r["note_mie"]}
+    return {**{k: d[k] for k in CAMPI}, "verifiche": d["verifiche"], "interrogazioni": d["interrogazioni"],
+            "note_mie": r["note_mie"]}
+
+
+def sufficienza_del_prof(scheda: dict | None) -> float | None:
+    """La parte dei punti che fa la sufficienza per questo prof (18 su 30 → 0,6), se il modulo la sa."""
+    v = (scheda or {}).get("verifiche") or {}
+    totale, sufficienza = v.get("punti_totali"), v.get("sufficienza")
+    if isinstance(totale, int) and isinstance(sufficienza, (int, float)) and 0 < sufficienza < totale:
+        return sufficienza / totale
+    return None
 
 
 # --------------------------------------------------------------------------- forma dei dati
@@ -174,6 +218,89 @@ def _con_prova(voci, testi: str, parole: set[str], massimo_voci: int = 10) -> li
     return uscita[:massimo_voci]
 
 
+def _intero(v) -> int | None:
+    n = _numero(v)
+    return int(n) if n is not None and n == int(n) else None
+
+
+def _numero(v) -> int | float | None:
+    if isinstance(v, bool) or v is None:
+        return None
+    try:
+        n = round(float(str(v).replace(",", ".")), 2)
+    except (TypeError, ValueError):
+        return None
+    if not 0 < n <= 1000:
+        return None
+    return int(n) if n == int(n) else n
+
+
+def _sistema_numeri(m: dict) -> None:
+    """La sufficienza ha senso solo con i punti in tutto, e sotto di loro (come controlla il computer)."""
+    totale, sufficienza = m.get("punti_totali"), m.get("sufficienza")
+    if sufficienza is not None and (totale is None or sufficienza >= totale):
+        m["sufficienza"] = None
+
+
+def _numero_scritto(n: int | float, testo_normale: str) -> bool:
+    """Il numero si legge nei documenti (già passati da `_normale`: "18,5" è diventato "18 5")?"""
+    intero, _, decimali = f"{n}".partition(".")
+    forma = intero + (f" {decimali}" if decimali else "")
+    return re.search(rf"(?<![0-9]){re.escape(forma)}(?![0-9])", testo_normale) is not None
+
+
+def normalizza_modulo(parte: str, v: dict, base: dict | None = None) -> dict:
+    """I campi mandati da Andrea (PUT) sopra quelli che ci sono già."""
+    uscita = dict(base) if base else modulo_vuoto(parte)
+    for k, tipo in MODULO[parte].items():
+        if k not in v:
+            continue
+        if tipo == "testo":
+            uscita[k] = _testo(v[k] or "", 300)
+        elif tipo == "lista":
+            uscita[k] = _lista_testi(v[k], massimo_voci=6, massimo=LUNGHEZZA_VOCI.get(k, 200))
+        else:
+            uscita[k] = _intero(v[k]) if k == "punti_totali" else _numero(v[k])
+    _sistema_numeri(uscita)
+    return uscita
+
+
+_NUMERO_INIZIALE = re.compile(r"^\s*(?:\d{1,2}|[a-hA-H])\s*[).]\s+")
+
+
+def copiata_pulita(voce: str, massimo: int = 200) -> str:
+    """Una consegna o una domanda copiata dai documenti, da leggere: senza il numero davanti ("2) …") e con le formule
+    in testo normale al posto del LaTeX della lettura delle foto."""
+    return _testo(stile.formule_in_testo(_NUMERO_INIZIALE.sub("", voce)), massimo)
+
+
+def modulo_dai_documenti(parte: str, v, testo: str, parole: set[str], copie: tuple[str, set[str]] | None = None) -> dict:
+    """La parte del modulo scritta dall'AI: resta solo quello che ha una prova nei documenti di quella parte (le verifiche
+    per `verifiche`, le interrogazioni per `interrogazioni`), come il resto della scheda. Le voci copiate (consegne,
+    domande) si cercano in `copie` quando c'è: le consegne solo nelle verifiche vere, mai nei racconti degli esiti."""
+    uscita = modulo_vuoto(parte)
+    if not isinstance(v, dict) or not testo:
+        return uscita
+    for k, tipo in MODULO[parte].items():
+        x = v.get(k)
+        if tipo == "testo":
+            if isinstance(x, dict) and _trovata(x.get("prova") or "", testo, parole):
+                uscita[k] = _testo(x.get("frase") or "", 300)
+        elif tipo == "lista" and k in COPIATE:
+            dove, dove_parole = copie if copie is not None else (testo, parole)
+            voci = _lista_testi(x, massimo_voci=12, massimo=LUNGHEZZA_VOCI.get(k, 200))
+            uscita[k] = [copiata_pulita(t, LUNGHEZZA_VOCI.get(k, 200)) for t in voci if dove and _trovata(t, dove, dove_parole)][:6]
+        elif tipo == "lista":
+            uscita[k] = _con_prova(x, testo, parole, massimo_voci=6)
+    punti = v.get("punti") if parte == "verifiche" else None
+    if isinstance(punti, dict):
+        totale, sufficienza = _intero(punti.get("totale")), _numero(punti.get("sufficienza"))
+        uscita["punti_totali"] = totale if totale is not None and _numero_scritto(totale, testo) else None
+        uscita["sufficienza"] = sufficienza if sufficienza is not None and _numero_scritto(sufficienza, testo) else None
+    _sistema_numeri(uscita)
+    return uscita
+
+
 def conta(o: dict, documenti: list[dict], esiti: list[dict]) -> dict:
     """La scheda dalle domande vere: il modello le elenca, i numeri li fa il codice."""
     testi = {d["id"]: _normale(d["testo"]) for d in documenti}
@@ -199,7 +326,7 @@ def conta(o: dict, documenti: list[dict], esiti: list[dict]) -> dict:
     gruppi: dict[str, dict] = {}
     for d in domande:
         if d["argomento"]:
-            g = gruppi.setdefault(d["argomento"].casefold(), {"nome": d["argomento"], "docs": set(), "esempio": d["testo"][:200], "n": 0})
+            g = gruppi.setdefault(d["argomento"].casefold(), {"nome": d["argomento"], "docs": set(), "esempio": copiata_pulita(d["testo"]), "n": 0})
             g["docs"].add(d["doc"])
             g["n"] += 1
     argomenti = [{"nome": g["nome"], "volte": len(g["docs"]), "esempio": g["esempio"]}
@@ -207,7 +334,14 @@ def conta(o: dict, documenti: list[dict], esiti: list[dict]) -> dict:
     tutto = " ".join(testi.values())
     parole = set(tutto.split())
     lunghezza = o.get("lunghezza_risposte")
+    solo_verifiche = " ".join(testi[d["id"]] for d in documenti if d.get("tipo") == "verifica")
+    scritti = " ".join([solo_verifiche] + [testi[f"E{i}"] for i, e in enumerate(esiti, start=1) if e.get("tipo") != "orale"])
+    orali = " ".join([testi[d["id"]] for d in documenti if d.get("tipo") == "interrogazione"]
+                     + [testi[f"E{i}"] for i, e in enumerate(esiti, start=1) if e.get("tipo") == "orale"])
     return {
+        "verifiche": modulo_dai_documenti("verifiche", o.get("verifiche"), scritti, set(scritti.split()),
+                                          copie=(solo_verifiche, set(solo_verifiche.split()))),
+        "interrogazioni": modulo_dai_documenti("interrogazioni", o.get("interrogazioni"), orali, set(orali.split())),
         "argomenti": argomenti,
         "tipi_domanda": tipi,
         "cosa_corregge": _con_prova(o.get("cosa_corregge"), tutto, parole),
@@ -227,6 +361,9 @@ def valida(o: dict) -> list[str]:
     for campo in ("cosa_corregge", "cosa_premia", "consigli"):
         if campo in o and not isinstance(o[campo], list):
             errori.append(f'"{campo}" deve essere una lista')
+    for parte in MODULO:
+        if o.get(parte) is not None and not isinstance(o[parte], dict):
+            errori.append(f'"{parte}" deve essere un oggetto, oppure null')
     return errori
 
 
@@ -275,7 +412,39 @@ def registra_modifiche(di_andrea: dict, vecchi: dict, nuovi: dict) -> dict:
     for campo in ("lunghezza_risposte", "tipi_domanda"):
         if campo in nuovi and nuovi[campo] != vecchi.get(campo):
             d[campo] = nuovi[campo]
+    for parte in MODULO:
+        if parte not in nuovi:
+            continue
+        prima_p, dopo_p = vecchi.get(parte) or modulo_vuoto(parte), nuovi[parte]
+        stato_p = d.setdefault("modulo", {}).setdefault(parte, {"campi": {}, "liste": {}})
+        for k, tipo in MODULO[parte].items():
+            if tipo == "lista":
+                _segna_lista(stato_p["liste"].setdefault(k, {"aggiunti": [], "tolti": []}), prima_p.get(k) or [], dopo_p.get(k) or [])
+            elif dopo_p.get(k) != prima_p.get(k):
+                stato_p["campi"][k] = dopo_p.get(k)
     return d
+
+
+def _segna_lista(stato: dict, prima: list[str], dopo: list[str]) -> None:
+    prima_k, dopo_k = {_chiave(x): x for x in prima}, {_chiave(x): x for x in dopo}
+    aggiunti = {_chiave(x): x for x in stato["aggiunti"]}
+    tolti = {_chiave(x): x for x in stato["tolti"]}
+    for k, x in dopo_k.items():
+        if k not in prima_k:
+            aggiunti[k] = x
+            tolti.pop(k, None)
+    for k, x in prima_k.items():
+        if k not in dopo_k:
+            tolti[k] = x
+            aggiunti.pop(k, None)
+    stato["aggiunti"], stato["tolti"] = list(aggiunti.values()), list(tolti.values())
+
+
+def _unisci_lista(voci: list[str], stato: dict) -> list[str]:
+    tolti = {_chiave(x) for x in stato.get("tolti", [])}
+    voci = [x for x in voci if _chiave(x) not in tolti]
+    presenti = {_chiave(x) for x in voci}
+    return voci + [x for x in stato.get("aggiunti", []) if _chiave(x) not in presenti]
 
 
 def unisci(dati_ai: dict, di_andrea: dict) -> dict:
@@ -296,6 +465,18 @@ def unisci(dati_ai: dict, di_andrea: dict) -> dict:
     for campo in ("lunghezza_risposte", "tipi_domanda"):
         if campo in di_andrea:
             uscita[campo] = di_andrea[campo]
+    for parte, stato_p in (di_andrea.get("modulo") or {}).items():
+        if parte not in MODULO:
+            continue
+        m = {**modulo_vuoto(parte), **(uscita.get(parte) or {})}
+        for k, stato in (stato_p.get("liste") or {}).items():
+            if k in m:
+                m[k] = _unisci_lista(m[k] or [], stato)
+        for k, v in (stato_p.get("campi") or {}).items():
+            if k in m:
+                m[k] = v
+        _sistema_numeri(m)
+        uscita[parte] = m
     return uscita
 
 
@@ -314,11 +495,14 @@ def modifica(conn: sqlite3.Connection, materia_id: int, cambi: dict) -> None:
                 nuovi[campo] = _lista_testi(cambi[campo], massimo_voci=20)
         if "lunghezza_risposte" in cambi:
             nuovi["lunghezza_risposte"] = _testo(cambi["lunghezza_risposte"] or "", 200)
+        for parte in MODULO:
+            if isinstance(cambi.get(parte), dict):
+                nuovi[parte] = normalizza_modulo(parte, cambi[parte], base=vecchi[parte])
         di_andrea = registra_modifiche(json.loads(r["di_andrea"] or "{}"), vecchi, nuovi)
         dati = {**vecchi, **nuovi}
         note = cambi["note_mie"] if "note_mie" in cambi else r["note_mie"]
         stato = r["stato"]
-        if stato == "vuota" and (any(dati[k] for k in CAMPI) or note):
+        if stato == "vuota" and (ha_contenuto(dati) or note):
             stato = "pronta"
         conn.execute(
             "UPDATE schede SET dati = ?, di_andrea = ?, note_mie = ?, stato = ? WHERE materia_id = ?",
@@ -345,7 +529,7 @@ def dopo_le_chiavi(db_path: str) -> None:
             if ha_fonti(conn, r["materia_id"]):
                 segna_da_aggiornare(conn, r["materia_id"])
             else:
-                stato = "pronta" if any(dati[k] for k in CAMPI) or r["note_mie"] else "vuota"
+                stato = "pronta" if ha_contenuto(dati) or r["note_mie"] else "vuota"
                 conn.execute("UPDATE schede SET stato = ? WHERE materia_id = ?", (stato, r["materia_id"]))
 
 
@@ -452,7 +636,7 @@ def aggiorna(ctx, materia_id: int) -> None:
         # Nessuna verifica né esito (per esempio un materiale passato da verifica ad appunti): di quello
         # che aveva scritto l'AI non resta niente, restano solo le parti scritte da Andrea.
         dati = unisci(vuota(), di_andrea)
-        chiudi("pronta" if any(dati[k] for k in CAMPI) or note else "vuota", dati=dati)
+        chiudi("pronta" if ha_contenuto(dati) or note else "vuota", dati=dati)
         return
     try:
         oggetto = ai.chiedi_json(

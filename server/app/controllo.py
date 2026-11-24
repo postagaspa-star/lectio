@@ -42,6 +42,8 @@ def _elenco_frasi(oggetto) -> list[tuple]:
     for contenitore, chiave in foglie(oggetto):
         if isinstance(contenitore, dict) and chiave == "testo" and contenitore.get("calcolo"):
             continue  # un esercizio con i numeri nuovi: i numeri non sono fatti da cercare nei documenti (contratto 21.1)
+        if isinstance(contenitore, dict) and chiave == "testo" and "da" in contenitore and contenitore.get("id"):
+            continue  # un testo da leggere della verifica (21.2): è copiato dai documenti e lo controlla il programma
         for i, frase in enumerate(stile.dividi_frasi(contenitore[chiave])):
             if not frase.rstrip().endswith("?"):
                 elenco.append((contenitore, chiave, i, frase))

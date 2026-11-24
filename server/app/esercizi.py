@@ -262,6 +262,8 @@ def _valore(c: dict, testo_visibile: str, numeri: set[Fraction]) -> dict:
         v = calcolo.calcola(albero, valori)
         esatto, u = calcolo.scrivi(v), f" {unita}" if unita else ""
         conto = "" if albero[0] in ("var", "num") else f"{calcolo.stampa(albero, valori)} = "
+        if len(conto) > 140:  # una deviazione standard scritta per intero non si legge: basta il risultato
+            conto = ""
         if regola and calcolo.scrivi(v, regola) != esatto:
             arrotondato = calcolo.scrivi(v, regola)
             frasi.append(f"{cosa}: {conto}{esatto}{u}, che arrotondato fa {arrotondato}{u}.")
@@ -286,6 +288,54 @@ def stessi_numeri(calcolo_pulito: dict, compatti_materiali: str, numeri_material
     pezzi = {"equazione": lambda c: [c["equazione"]], "disequazione": lambda c: [c["disequazione"]],
              "sistema": lambda c: c["equazioni"], "espressione": lambda c: [c["espressione"]]}[tipo](calcolo_pulito)
     return all(calcolo.compatta(p) in compatti_materiali for p in pezzi)
+
+
+# --------------------------------------------------------------------------- il procedimento nella consegna
+
+# Segnalato da Andrea il 24/11/2026: «Calcola l'errore relativo Δx/x» dà già il procedimento, che è proprio quello che la
+# verifica deve controllare. Una formula nel testo di un esercizio con un valore da calcolare si fa togliere al modello e,
+# se resta, la toglie il programma.
+_SIMBOLO = r"[A-Za-zΔΣρλμσθαβγδεωπ][A-Za-z0-9_ₐ-ₜ₀-₉]*[²³]?"
+_TERMINE = rf"(?:\(\s*{_SIMBOLO}(?:\s*[-−+]\s*{_SIMBOLO})+\s*\)|{_SIMBOLO})"
+_FORMULA = re.compile(rf"(?<![\w,.])({_TERMINE}(?:\s*[/·×*]\s*(?:{_TERMINE}|\d+(?:[.,]\d+)?))+)")
+_SOLO_UNITA = {"m", "cm", "mm", "km", "dm", "hm", "g", "kg", "mg", "hg", "t", "s", "h", "min", "ms", "l", "L", "ml", "mL",
+               "N", "J", "W", "Pa", "K", "V", "A", "mol", "m²", "m³", "cm²", "cm³", "dm³", "mm²", "mm³", "km²", "°C"}
+_ASSEGNATA = re.compile(rf"{_SIMBOLO}\s*=\s*$")
+_GIRO = r"(?:(?:con|usando|secondo) la (?:formula|relazione)|cioè|ovvero|dat[oa] da|come)"
+# "…, usando la formula Δm = sqrt(somma degli scarti al quadrato / numero delle misure)": tutta la frase dà il procedimento.
+_CLAUSOLA = re.compile(r",?\s*\(?\b(?:usando|applicando|utilizzando|con|secondo)\s+(?:la\s+|le\s+)?(?:formula|formule|relazione)\b"
+                       r"[^.?!;]*\)?", re.I)
+_RADICE = re.compile(rf"{_SIMBOLO}\s*=\s*(?:sqrt|√)\s*\((?:[^()]|\([^()]*\))*\)")
+
+
+def formule_nel_testo(testo: str) -> list[str]:
+    """Le formule che danno il procedimento ("Δx/x", "(xmax − xmin)/2", "v = Δs/Δt", "usando la formula …"), non le
+    unità di misura ("4,8 kg/m³", "in m/s")."""
+    trovate = [m.group(0).strip(" ,()") for m in _CLAUSOLA.finditer(testo or "")]
+    trovate += [m.group(0) for m in _RADICE.finditer(testo or "") if not any(m.group(0).rstrip(")") in t for t in trovate)]
+    for m in _FORMULA.finditer(testo or ""):
+        if any(m.group(1).strip() in t for t in trovate):
+            continue
+        pezzo, prima = m.group(1).strip(), (testo or "")[:m.start()].rstrip()
+        if pezzo.lower() == "e/o" or (prima and prima[-1].isdigit()):
+            continue
+        if all(s in _SOLO_UNITA for s in re.findall(_SIMBOLO, pezzo)) and not _ASSEGNATA.search(prima):
+            continue
+        trovate.append(pezzo)
+    return trovate
+
+
+def senza_formule(testo: str) -> str | None:
+    """Il testo senza le formule del procedimento, oppure None se senza di loro la richiesta non si capisce più."""
+    nuovo = _CLAUSOLA.sub("", testo)
+    nuovo = _RADICE.sub("", nuovo)
+    for f in formule_nel_testo(nuovo):
+        nucleo = rf"(?:{_SIMBOLO}\s*=\s*)?\(?{re.escape(f)}\)?(?:\s*[·×*]\s*\d+)?"  # anche "(Δx/x)·100"
+        nuovo = re.sub(rf"\s*(?:(?:{_GIRO}\s+)?{nucleo}|\(\s*(?:{_GIRO}\s*)?{nucleo}\s*\))", "", nuovo, count=1)
+    nuovo = re.sub(r"\s+([.,;:?!])", r"\1", re.sub(r"\(\s*\)", "", nuovo))
+    nuovo = re.sub(r"[ \t]{2,}", " ", nuovo).strip()
+    ultima = re.split(r"(?<=[.?!:])\s+", nuovo.rstrip(".?!: "))[-1]
+    return nuovo if len(re.findall(r"\w+", ultima)) >= 3 else None
 
 
 def testo_visibile(d: dict) -> str:

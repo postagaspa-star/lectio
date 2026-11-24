@@ -735,3 +735,125 @@ test('nei testi nuovi niente emoji e niente punti esclamativi', () => {
     for (const m of testo.matchAll(/'([^'\n]*[A-Za-zà-ù ]!)'/g)) assert.fail(f + ': punto esclamativo in ' + m[1]);
   }
 });
+
+// --- §5.1 Il modulo delle verifiche e §21.2 il testo da leggere (computer 1.5.0) ------------------------
+
+const MODULO = {
+  verifiche: {
+    struttura: 'Due parti', consegne: ['Scomponi i seguenti polinomi [8 punti]:'], punti: 'Accanto a ogni esercizio', punti_totali: 30, sufficienza: 18.5,
+    regole_punti: [], difficolta: '', approfondimento: '', cosa_da: '', richieste: ['Motivare i passaggi'],
+  },
+  interrogazioni: { inizio: '', andamento: '', durata: '', profondita: '', cosa_vuole: [], esempi: [] },
+};
+
+test('modulo: solo i campi pieni, citazioni tra « », i numeri dei punti prima del testo; parte vuota o server vecchio = niente', () => {
+  const v = L.righeModulo(MODULO, 'verifiche');
+  assert.deepEqual(v.map((r) => r.nome), ['Com\'è fatta', 'Consegne', 'Punti', 'Richieste']);
+  assert.deepEqual(v[1].voci, ['«Scomponi i seguenti polinomi [8 punti]:»']);
+  assert.deepEqual(v[2].voci, ['30 in tutto, sufficienza 18,5', 'Accanto a ogni esercizio']);
+  assert.deepEqual(L.righeModulo(MODULO, 'interrogazioni'), []);
+  assert.deepEqual(L.righeModulo({ argomenti: [] }, 'verifiche'), []);
+  assert.deepEqual(L.righeModulo({ interrogazioni: { esempi: ['«Chi era Seiano?»'] } }, 'interrogazioni')[0], { chiave: 'esempi', nome: 'Domande', voci: ['«Chi era Seiano?»'], citazioni: true });
+  assert.equal(L.frasePuntiModulo({ punti_totali: 100, sufficienza: null }), '100 in tutto');
+  assert.equal(L.frasePuntiModulo({ punti_totali: null, sufficienza: null }), null);
+  // Le etichette sono secche: poche parole, niente frasi.
+  for (const c of L.CAMPI_VERIFICHE.concat(L.CAMPI_INTERROGAZIONI)) assert.ok(c.nome.split(' ').length <= 3, c.nome);
+});
+
+test('modulo nella Modifica: testi una voce per riga, numeri all\'italiana, limiti del contratto con la frase del campo', () => {
+  const testi = L.campiModulo(MODULO);
+  assert.equal(testi.verifiche.consegne, 'Scomponi i seguenti polinomi [8 punti]:');
+  assert.equal(testi.verifiche.sufficienza, '18,5');
+  assert.equal(testi.interrogazioni.esempi, '');
+  const base = { argomenti: '', corregge: '', premia: '', lunghezza: '', consigli: '', note: '' };
+  const manda = (v, i) => L.schedaDaMandare({}, Object.assign({}, base, { verifiche: Object.assign({}, testi.verifiche, v), interrogazioni: Object.assign({}, testi.interrogazioni, i) }));
+  const ok = manda({ richieste: 'a\n\n b ' }, { esempi: 'Chi era Seiano?' });
+  assert.deepEqual(ok.verifiche.richieste, ['a', 'b']);
+  assert.equal(ok.verifiche.punti_totali, 30);
+  assert.equal(ok.verifiche.sufficienza, 18.5);
+  assert.deepEqual(ok.interrogazioni.esempi, ['Chi era Seiano?']);
+  assert.equal(L.controllaScheda(ok), null);
+  // Punti e sufficienza vuoti: null, va bene.
+  const vuoti = manda({ punti_totali: ' ', sufficienza: '' });
+  assert.equal(vuoti.verifiche.punti_totali, null);
+  assert.equal(vuoti.verifiche.sufficienza, null);
+  assert.equal(L.controllaScheda(vuoti), null);
+  assert.match(L.controllaScheda(manda({ struttura: 'x'.repeat(301) })), /Com'è fatta: al massimo 300 caratteri/);
+  assert.match(L.controllaScheda(manda({ consegne: Array(7).fill('c').join('\n') })), /Consegne: al massimo 6 righe/);
+  assert.match(L.controllaScheda(manda({ regole_punti: 'r'.repeat(201) })), /Regole dei punti: ogni riga al massimo 200/);
+  assert.match(L.controllaScheda(manda({}, { andamento: 'a'.repeat(301) })), /Come va avanti: al massimo 300/);
+  assert.match(L.controllaScheda(manda({ punti_totali: '0' })), /Punti in tutto: un numero intero da 1 a 1\.000/);
+  assert.match(L.controllaScheda(manda({ punti_totali: '30,5' })), /Punti in tutto/);
+  assert.match(L.controllaScheda(manda({ punti_totali: 'trenta' })), /Punti in tutto/);
+  assert.match(L.controllaScheda(manda({ punti_totali: '', sufficienza: '18' })), /Sufficienza: scrivi anche i punti in tutto/);
+  assert.match(L.controllaScheda(manda({ sufficienza: '30' })), /Sufficienza: meno dei punti in tutto/);
+  assert.match(L.controllaScheda(manda({ sufficienza: '0' })), /Sufficienza: un numero più grande di 0/);
+  // Senza i campi del modulo (una chiamata vecchia) il PUT resta quello di prima.
+  assert.equal('verifiche' in L.schedaDaMandare({}, base), false);
+});
+
+test('testo da leggere: una volta sola per le domande di fila con lo stesso brano, di nuovo quando cambia', () => {
+  const b = (testo, fonte) => ({ brano: { testo, fonte } });
+  const v = L.braniDaMostrare([b('Primo', 'Libro, pag. 3'), b('Primo ', null), { brano: null }, b('Primo', ''), b('Secondo', null), {}]);
+  assert.deepEqual(v, [{ testo: 'Primo', fonte: 'Libro, pag. 3' }, null, null, { testo: 'Primo', fonte: null }, { testo: 'Secondo', fonte: null }, null]);
+  assert.deepEqual(L.braniDaMostrare(undefined), []);
+});
+
+test('pagina della materia: sotto la scheda "Come fa le verifiche" e "Come interroga", solo i campi pieni', opz, async () => {
+  const p = await apri('#materia/1');
+  await p.aspetta(() => p.q('[data-modulo="verifiche"]'));
+  const v = p.q('[data-modulo="verifiche"]');
+  assert.match(v.textContent, /Come fa le verifiche/);
+  assert.match(v.querySelector('[data-campo-modulo="punti"]').textContent, /90 in tutto, sufficienza 54/);
+  assert.match(v.querySelector('[data-campo-modulo="consegne"]').textContent, /«Leggi il brano e rispondi alle domande\. \(15 punti\)»/);
+  assert.ok(v.querySelector('.citazione'));
+  const i = p.q('[data-modulo="interrogazioni"]');
+  assert.match(i.textContent, /Come interroga/);
+  assert.match(i.querySelector('[data-campo-modulo="esempi"]').textContent, /«Perché Tiberio si ritirò a Capri\?»/);
+  // Materia 2: solo verifiche, la parte delle interrogazioni non si vede; e i campi vuoti non ci sono.
+  p.A.vai('#materia/2');
+  await p.aspetta(() => p.q('[data-modulo="verifiche"]') && /Dieci domande brevi/.test(p.q('[data-modulo="verifiche"]').textContent));
+  assert.equal(p.q('[data-modulo="interrogazioni"]'), null);
+  assert.equal(p.q('[data-campo-modulo="difficolta"]'), null);
+});
+
+test('Modifica della scheda: i campi del modulo sono pieni, Salva manda verifiche e interrogazioni; sufficienza troppo alta ferma', opz, async () => {
+  const p = await apri('#materia/1/scheda');
+  await p.aspetta(() => p.q('[data-azione="salva-scheda"]') && p.q('#sc-v-struttura'));
+  assert.match(p.q('#sc-v-struttura').value, /Due parti/);
+  assert.equal(p.q('#sc-v-punti-totali').value, '90');
+  assert.equal(p.q('#sc-v-sufficienza').value, '54');
+  assert.match(p.q('#sc-i-esempi').value, /Capri\?\nChe cosa cambiò/);
+  p.scrivi(p.q('#sc-v-sufficienza'), '95');
+  p.clic(p.q('[data-azione="salva-scheda"]'));
+  await p.aspetta(() => /Sufficienza: meno dei punti in tutto/.test(p.testo()));
+  assert.equal(p.s.chiamate('PUT', '/server/api/materie/1/scheda').length, 0);
+  p.scrivi(p.q('#sc-v-sufficienza'), '54,5');
+  p.scrivi(p.q('#sc-i-durata'), '');
+  p.scrivi(p.q('#sc-v-richieste'), 'Scrivere le date\nCitare il libro');
+  p.clic(p.q('[data-azione="salva-scheda"]'));
+  await p.aspetta(() => p.s.chiamate('PUT', '/server/api/materie/1/scheda').length === 1);
+  const c = p.s.chiamate('PUT', '/server/api/materie/1/scheda')[0].corpo;
+  const corpo = typeof c === 'string' ? JSON.parse(c) : c;
+  assert.equal(corpo.verifiche.sufficienza, 54.5);
+  assert.equal(corpo.verifiche.punti_totali, 90);
+  assert.deepEqual(corpo.verifiche.richieste, ['Scrivere le date', 'Citare il libro']);
+  assert.equal(corpo.interrogazioni.durata, '');
+  assert.deepEqual(Object.keys(corpo.interrogazioni).sort(), ['andamento', 'cosa_vuole', 'durata', 'esempi', 'inizio', 'profondita']);
+});
+
+test('verifica di prova: il testo da leggere sta sopra la prima domanda del gruppo, una volta sola, anche nell\'esito', opz, async () => {
+  const p = await apri('#simulata/3');
+  await p.aspetta(() => p.q('.sim-domanda [data-risposta]'));
+  const brani = p.tutti('[data-brano]');
+  assert.equal(brani.length, 1);
+  assert.match(brani[0].textContent, /Testo da leggere/);
+  assert.match(brani[0].textContent, /Storia antica, pag\. 212/);
+  assert.match(brani[0].querySelector('.testo-brano').textContent, /Tarquinio il Superbo\.\nSi fece chiamare princeps/);
+  const prima = p.q('.sim-domanda[data-domanda="1"]');
+  assert.ok(brani[0].compareDocumentPosition(prima) & 4, 'il brano viene prima della domanda 1');
+  const p2 = await apri('#simulata/4');
+  await p2.aspetta(() => p2.q('[data-simulata="corretta"]'));
+  assert.equal(p2.tutti('[data-brano]').length, 1);
+  assert.ok(p2.q('[data-brano]').compareDocumentPosition(p2.q('.sim-esito[data-domanda="1"]')) & 4);
+});

@@ -12,6 +12,12 @@
   const CHIAVE_TEMPO = 'lectio.simulata.tempoNascosto';
   const inLavoro = (s) => s.stato === 'in_coda' || s.stato === 'in_preparazione';
 
+  /** §21.2 Il testo da leggere sopra la prima domanda del gruppo (da fare e nell'esito). */
+  function bloccoBrano(b) {
+    return h('section', { class: 'sim-brano', 'data-brano': 'si' }, h('span', { class: 'etichetta' }, 'Testo da leggere'),
+      b.fonte ? h('span', { class: 'fonte' }, b.fonte) : null, h('p', { class: 'testo-brano' }, b.testo));
+  }
+
   A.pagine.simulata = async function (box, rotta, vivo) {
     const id = rotta.id;
     const pag = h('div', { class: 'pagina' }, A.segnaposto(3), A.segnaposto(3));
@@ -434,12 +440,14 @@
 
       const sezioniViste = new Set();
       const schede = [];
-      for (const d of s.domande || []) {
+      const brani = L.braniDaMostrare(s.domande);
+      for (const [i, d] of (s.domande || []).entries()) {
         const n = String(d.n);
         if (d.sezione && !sezioniViste.has(d.sezione)) {
           sezioniViste.add(d.sezione);
           schede.push(h('h2', { class: 'sim-sezione' }, d.sezione));
         }
+        if (brani[i]) schede.push(bloccoBrano(brani[i]));
         const forma = L.formaDomanda(d);
         const conFormule = forma !== 'testo';
         const area = h('textarea', {
@@ -632,7 +640,7 @@
           h('span', { class: 'punti', 'data-punti': 'si' }, L.frasePunti(e)),
           h('span', { class: 'stima' }, 'È una stima di Lectio. Il voto vero lo dà il prof.'),
           oltre ? h('span', { class: 'stima', 'data-oltre': 'si' }, oltre) : null),
-        (s.domande || []).map(rigaDomanda),
+        (() => { const brani = L.braniDaMostrare(s.domande); return (s.domande || []).map((d, i) => [brani[i] ? bloccoBrano(brani[i]) : null, rigaDomanda(d)]); })(),
         h('div', { class: 'sim-fondo' },
           daRifare > 0 ? h('span', { class: 'frase-rifare', 'data-rifare': 'si' }, daRifare === 1 ? '1 domanda da rifare è già in Ripasso lampo.' : daRifare + ' domande da rifare sono già in Ripasso lampo.') : null,
           h('div', { class: 'azioni' },

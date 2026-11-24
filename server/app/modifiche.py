@@ -1052,7 +1052,7 @@ class PreparazioneModifica:
             base = prompt_studio.messaggi_simulata(lettura, minuti, simulata.domande_circa(minuti))
             # Gli esercizi con i numeri tornano al modello come li aveva scritti lui: il metodo e il "calcolo" (contratto 21.1).
             attuale = {"titolo": r["titolo"], "domande": [
-                {**{k: d.get(k) for k in ("n", "tipo", "testo", "punti", "sezione", "risposta_attesa", "calcolo", "tabella", "grafico")},
+                {**{k: d.get(k) for k in ("n", "tipo", "testo", "punti", "sezione", "brano", "risposta_attesa", "calcolo", "tabella", "grafico")},
                  **({"risposta_attesa": d.get("metodo") or ""} if d.get("calcolo") else {})} for d in domande]}
             ultima_n = max(numeri or [0])
             messaggi = base + [{"role": "assistant", "content": json.dumps(attuale, ensure_ascii=False)},

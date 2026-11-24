@@ -89,6 +89,49 @@ montata `/apk`).
 - Si aggiorna da sola (in sottofondo, ~1 centesimo) quando arriva materiale di tipo `verifica` o
   `interrogazione` o un esito; `POST /api/materie/{id}/scheda/aggiorna` la rifà a mano.
 
+### 5.1 Il modulo delle verifiche (server 1.6.0, computer 1.5.0)
+Richiesta di Andrea del 24/11/2026: oltre alla scheda, quando legge una verifica o un'interrogazione (corretta o no) Lectio
+compila un secondo modulo che serve solo a fare verifiche di prova e interrogazioni il più possibile uguali a quelle del prof.
+Si compila nella stessa chiamata della scheda (stessi documenti, nessun costo in più a parte poche righe di risposta).
+`GET /api/materie/{id}/scheda` ha in più (un'app che non li conosce li ignora):
+```json
+"verifiche": {
+  "struttura": "Una tabella di equivalenze, poi 4-5 problemi brevi; l'ultimo chiede di motivare il ragionamento.",
+  "consegne": ["Scomponi i seguenti polinomi [8 punti]:", "ILLUSTRA IL RAGIONAMENTO: motiva i passaggi logici."],
+  "punti": "Punti scritti accanto a ogni esercizio.", "punti_totali": 30, "sufficienza": 18,
+  "regole_punti": ["0,5 con imprecisione", "Il participio passato deve essere corretto"],
+  "difficolta": "Esercizi diretti sulle regole, l'ultimo più difficile (equazione con il parametro).",
+  "approfondimento": "Chiede il perché dei passaggi, non solo il risultato.",
+  "cosa_da": "Due testi da leggere con le domande sotto.",
+  "richieste": ["Specificare se l'equazione è pura, spuria o completa"]
+},
+"interrogazioni": {
+  "inizio": "Parte con una domanda larga sull'argomento e lascia parlare.",
+  "andamento": "Rilancia sui concetti che tiri fuori: «ti ricordi perché…».",
+  "durata": "Più studenti insieme, 4-6 domande a testa.",
+  "profondita": "Vuole le definizioni precise e il perché.",
+  "cosa_vuole": ["Definizioni precise"],
+  "esempi": ["Ti ricordi perché per i pitagorici il numero è il principio?"]
+}
+```
+- I due oggetti ci sono sempre; un campo vuoto è `""`, `[]` o `null`. Le app mostrano solo i campi pieni e nascondono una
+  parte del tutto vuota. `interrogazioni` l'AI la compila solo dalle interrogazioni e dagli esiti orali, `verifiche` solo
+  dalle verifiche e dagli esiti scritti: senza quei documenti resta vuota.
+- `consegne` ed `esempi` sono copiati parola per parola dai documenti (le `consegne` solo dalle verifiche, mai dagli esiti) e
+  arrivano senza il numero davanti e con le formule in testo normale; ogni altra voce l'AI la scrive solo con una prova
+  copiata dai documenti, e il server scarta quelle senza prova. `punti_totali` (intero) e `sufficienza` (numero, anche con
+  il mezzo punto) solo se sono scritti nei documenti.
+- Limiti: frasi al massimo 300 caratteri; `consegne` al massimo 6 voci da 300 caratteri; `regole_punti`, `richieste`,
+  `cosa_vuole` al massimo 6 voci da 200; `esempi` al massimo 6 da 200; `punti_totali` da 1 a 1000; `sufficienza` maggiore di
+  0 e minore di `punti_totali`.
+- `PUT /api/materie/{id}/scheda` accetta anche `verifiche` e `interrogazioni`, anche con solo alcuni campi: i campi mandati
+  diventano quelli di Andrea e un aggiornamento dell'AI non li cambia più (come il resto della scheda: le liste ricordano le
+  voci aggiunte e tolte, i testi e i numeri restano quelli scritti da lui; un testo svuotato resta vuoto).
+- Dove si usa: la verifica di prova segue `verifiche` (struttura, consegne, totale dei punti, difficoltà, approfondimento,
+  testi da leggere, richieste) anche quando tra i materiali scelti non c'è una verifica; la correzione segue `regole_punti`
+  e, se ci sono `punti_totali` e `sufficienza`, la sufficienza del prof (la soglia dell'esito e il voto stimato: la
+  sufficienza vale 6). Le lezioni fanno le domande dell'interrogazione come dice `interrogazioni`.
+
 ## 6. Materiale
 
 `Materiale`: `{"id":7,"materia_id":1,"tipo":"verifica","titolo":"Verifica 12 ottobre","data":"2026-10-12","origine":"file","nome_file":"verifica.pdf","caratteri":5321,"stato":"pronto","errore":null,"costo_eur":0.0,"creato_il":"…"}`
@@ -671,12 +714,34 @@ punto (`1.5`).
 La correzione conta solo quello che la domanda chiede (niente punti tolti per un arrotondamento o un'unità di misura non chiesti); negli
 esercizi un errore di calcolo con il metodo giusto vale circa metà dei punti.
 
+### 21.2 Testi da leggere (server 1.6.0, computer 1.5.0)
+Se il prof dà testi da leggere con le domande sotto (lo dice il modulo delle verifiche, §5.1), la verifica di prova mette un pezzo dei
+materiali copiato parola per parola. Ogni domanda di `domande` può avere `brano`: `null` oppure `{"testo": "…", "fonte": "Antropologia,
+pag. 45"}` (`testo` al massimo 1500 caratteri, a capo con `\n`; `fonte` il titolo del materiale, o `null`). Le domande sullo stesso testo
+hanno lo stesso `brano`: le app lo mostrano una volta sola, sopra la prima domanda del gruppo (e di nuovo quando cambia), anche nell'esito.
+Il server scarta un testo che non è copiato dai materiali. Il PDF lo stampa in un riquadro sopra la prima domanda.
+
+### 21.3 Come le verifiche del prof (server 1.6.0)
+Nessun cambio al formato: sono controlli del server su quello che scrive l'AI.
+- Tipi di domanda: ogni tipo compare al massimo quanto in `tipi_domanda` della scheda (§23), arrotondato per eccesso; un tipo che lì non
+  c'è non compare. Si conta come la scheda: un esercizio con i conti è un esercizio, una domanda che chiede che cos'è una cosa è una
+  definizione se la scheda conta le definizioni. Nelle materie con i numeri gli esercizi con i conti non sono mai di troppo e le domande
+  di teoria («che cos'è», «spiega come si calcola», «descrivi i passaggi») si contano a parte: nessuna se le verifiche del prof (tra i
+  materiali o nelle consegne del modulo) non ne hanno, se no al massimo la quota delle definizioni. Le domande di troppo si chiedono di
+  rifare; quelle che restano si tolgono, ma la verifica non perde mai più di metà delle domande.
+- La consegna di un esercizio con un valore da calcolare non dà la formula né il procedimento: se la dà, si chiede di toglierla e, se
+  resta, il server la toglie dal testo (o scarta l'esercizio se senza formula non si capisce cosa chiede).
+- La correzione giudica il significato: simboli diversi per la stessa grandezza, altre parole o un altro ordine sono giusti; una parola
+  imprecisa toglie al massimo mezzo punto.
+
 ## 22. Colori delle materie
 Sono 16: `ambra`, `rosa`, `petrolio`, `viola`, `blu`, `verde`, `arancio`, `oliva`, `giada`, `senape`, `orchidea`, `prugna`, `cacao`, `lavagna`, `salvia`, `lavanda`. I valori sono in `docs/aspetto.md`. `POST` e `PATCH` delle materie accettano solo questi; un nome che un'app non conosce diventa ambra.
 
 ## 23. Scheda del prof: numeri contati
 `argomenti[].volte`, `argomenti[].esempio` e `tipi_domanda` non li scrive più il modello: li conta il server dalle domande vere, una per una, copiate dai documenti.
 Una domanda vale "definizione" solo se chiede davvero di definire qualcosa. `cosa_corregge`, `cosa_premia` e `consigli` restano solo se hanno una prova copiata dai documenti.
+Dal server 1.6.0 un esercizio con tanti punti dello stesso tipo (frasi da completare, polinomi da scomporre) conta come una domanda sola, e
+`argomenti[].esempio` arriva senza il numero davanti e con le formule in testo normale (niente LaTeX), come le consegne del modulo (§5.1).
 
 ## 24. File con il nome sbagliato
 Un file `.pdf` che dentro è testo (per esempio Markdown) si legge come testo. Vale lo stesso per i file di testo con un'altra estensione ammessa.

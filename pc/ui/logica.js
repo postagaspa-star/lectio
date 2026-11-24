@@ -785,10 +785,11 @@
   /**
    * La scheda da mandare col PUT: argomenti dalle righe (tenendo volte ed esempio di quelli che c'erano; un argomento
    * nuovo ha volte 0 ed esempio vuoto, mai null), elenchi dalle righe, il resto com'è.
+   * §5.1: con `campi.verifiche` / `campi.interrogazioni` (i campi della Modifica, testi) manda anche il modulo, intero.
    */
   function schedaDaMandare(sc, campi) {
     const vecchi = new Map(((sc && sc.argomenti) || []).map((a) => [String(a.nome || '').toLowerCase(), a]));
-    return {
+    const c = {
       argomenti: righe(campi.argomenti).map((n) => {
         const v = vecchi.get(n.toLowerCase()) || {};
         return { nome: n, volte: Number.isInteger(v.volte) ? v.volte : 0, esempio: typeof v.esempio === 'string' ? v.esempio : '' };
@@ -800,6 +801,124 @@
       consigli: righe(campi.consigli),
       note_mie: String(campi.note || ''),
     };
+    if (campi.verifiche) c.verifiche = moduloDaCampi(CAMPI_VERIFICHE, campi.verifiche);
+    if (campi.interrogazioni) c.interrogazioni = moduloDaCampi(CAMPI_INTERROGAZIONI, campi.interrogazioni);
+    return c;
+  }
+
+  // ------------------------------------------------------------------ §5.1 Il modulo delle verifiche
+
+  /**
+   * I campi del modulo, nell'ordine in cui si mostrano: chiave, etichetta, forma ('frase' testo breve, 'voci' una per
+   * riga, 'citazioni' una per riga copiate dai documenti) e il limite del server (contratto §5.1).
+   */
+  const CAMPI_VERIFICHE = [
+    { chiave: 'struttura', nome: 'Com\'è fatta', forma: 'frase', max: 300 },
+    { chiave: 'consegne', nome: 'Consegne', forma: 'citazioni', max: 300, voci: 6 },
+    { chiave: 'punti', nome: 'Punti', forma: 'frase', max: 300 },
+    { chiave: 'regole_punti', nome: 'Regole dei punti', forma: 'voci', max: 200, voci: 6 },
+    { chiave: 'difficolta', nome: 'Difficoltà', forma: 'frase', max: 300 },
+    { chiave: 'approfondimento', nome: 'Approfondimento', forma: 'frase', max: 300 },
+    { chiave: 'cosa_da', nome: 'Cosa dà', forma: 'frase', max: 300 },
+    { chiave: 'richieste', nome: 'Richieste', forma: 'voci', max: 200, voci: 6 },
+  ];
+  const CAMPI_INTERROGAZIONI = [
+    { chiave: 'inizio', nome: 'Come comincia', forma: 'frase', max: 300 },
+    { chiave: 'andamento', nome: 'Come va avanti', forma: 'frase', max: 300 },
+    { chiave: 'durata', nome: 'Quanto dura', forma: 'frase', max: 300 },
+    { chiave: 'profondita', nome: 'Approfondimento', forma: 'frase', max: 300 },
+    { chiave: 'cosa_vuole', nome: 'Cosa vuole', forma: 'voci', max: 200, voci: 6 },
+    { chiave: 'esempi', nome: 'Domande', forma: 'citazioni', max: 200, voci: 6 },
+  ];
+  const LIMITI_MODULO = { puntiMin: 1, puntiMax: 1000 };
+
+  /** Un numero scritto da Andrea: "" → null, "18,5" → 18.5, una scritta non numerica → NaN (la ferma il controllo). */
+  function numeroScritto(testo) {
+    const t = String(testo == null ? '' : testo).trim().replace(/\s+/g, '');
+    if (!t) return null;
+    return /^\d+(?:[.,]\d+)?$/.test(t) ? Number(t.replace(',', '.')) : NaN;
+  }
+
+  function moduloDaCampi(campi, scritti) {
+    const fuori = {};
+    for (const c of campi) {
+      const v = scritti[c.chiave];
+      fuori[c.chiave] = c.forma === 'frase' ? String(v || '').replace(/\s+/g, ' ').trim() : righe(v);
+    }
+    if (campi === CAMPI_VERIFICHE) {
+      fuori.punti_totali = numeroScritto(scritti.punti_totali);
+      fuori.sufficienza = numeroScritto(scritti.sufficienza);
+    }
+    return fuori;
+  }
+
+  /** Il modulo come arriva dal server, sempre con tutti i campi (un server vecchio non lo manda: tutto vuoto). */
+  function modulo(sc) {
+    const pulisci = (campi, o) => {
+      const fuori = {};
+      for (const c of campi) {
+        const v = (o || {})[c.chiave];
+        fuori[c.chiave] = c.forma === 'frase' ? (typeof v === 'string' ? v.trim() : '') : (Array.isArray(v) ? v.map((x) => String(x || '').trim()).filter(Boolean) : []);
+      }
+      return fuori;
+    };
+    const v = pulisci(CAMPI_VERIFICHE, sc && sc.verifiche);
+    const numeroO = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+    v.punti_totali = numeroO(sc && sc.verifiche && sc.verifiche.punti_totali);
+    v.sufficienza = numeroO(sc && sc.verifiche && sc.verifiche.sufficienza);
+    return { verifiche: v, interrogazioni: pulisci(CAMPI_INTERROGAZIONI, sc && sc.interrogazioni) };
+  }
+
+  /** "30 in tutto, sufficienza 18" (le parti che ci sono), o null. */
+  function frasePuntiModulo(v) {
+    const parti = [];
+    if (v && v.punti_totali != null) parti.push(voto(v.punti_totali) + ' in tutto');
+    if (v && v.sufficienza != null) parti.push('sufficienza ' + voto(v.sufficienza));
+    return parti.length ? parti.join(', ') : null;
+  }
+
+  /**
+   * Le righe da mostrare nella pagina della materia: [{ chiave, nome, voci: [testi], citazioni }], solo i campi pieni.
+   * `parte` è 'verifiche' o 'interrogazioni'. Le citazioni vanno tra « ».
+   */
+  function righeModulo(sc, parte) {
+    const mod = modulo(sc)[parte];
+    const campi = parte === 'verifiche' ? CAMPI_VERIFICHE : CAMPI_INTERROGAZIONI;
+    const fuori = [];
+    for (const c of campi) {
+      let voci = c.forma === 'frase' ? (mod[c.chiave] ? [mod[c.chiave]] : []) : mod[c.chiave];
+      if (c.chiave === 'punti') {
+        const numeri = frasePuntiModulo(mod);
+        if (numeri) voci = [numeri].concat(voci);
+      }
+      if (c.forma === 'citazioni') voci = voci.map((x) => '«' + x.replace(/^[«"“]+|[»"”]+$/g, '') + '»');
+      if (voci.length) fuori.push({ chiave: c.chiave, nome: c.nome, voci, citazioni: c.forma === 'citazioni' });
+    }
+    return fuori;
+  }
+
+  /** I testi per i campi della Modifica: liste una per riga, numeri all'italiana. */
+  function campiModulo(sc) {
+    const mod = modulo(sc);
+    const testi = (campi, o) => Object.fromEntries(campi.map((c) => [c.chiave, c.forma === 'frase' ? o[c.chiave] : o[c.chiave].join('\n')]));
+    const v = testi(CAMPI_VERIFICHE, mod.verifiche);
+    v.punti_totali = mod.verifiche.punti_totali == null ? '' : voto(mod.verifiche.punti_totali);
+    v.sufficienza = mod.verifiche.sufficienza == null ? '' : voto(mod.verifiche.sufficienza);
+    return { verifiche: v, interrogazioni: testi(CAMPI_INTERROGAZIONI, mod.interrogazioni) };
+  }
+
+  function controllaModulo(campi, o) {
+    for (const c of campi) {
+      const v = o[c.chiave];
+      if (c.forma === 'frase') {
+        if (v.length > c.max) return c.nome + ': al massimo ' + c.max + ' caratteri.';
+      } else {
+        if (v.length > c.voci) return c.nome + ': al massimo ' + c.voci + ' righe.';
+        const x = v.find((r) => r.length > c.max);
+        if (x) return c.nome + ': ogni riga al massimo ' + c.max + ' caratteri ("' + x.slice(0, 30) + '…").';
+      }
+    }
+    return null;
   }
 
   /** null se la scheda va bene per il server, altrimenti la frase con cosa accorciare. */
@@ -815,6 +934,24 @@
     }
     if (c.lunghezza_risposte.length > LIMITI_SCHEDA.lunghezza) return 'Quanto scrivere: al massimo ' + LIMITI_SCHEDA.lunghezza + ' caratteri.';
     if (c.note_mie.length > LIMITI_SCHEDA.note) return 'Le tue note: al massimo ' + migliaia(LIMITI_SCHEDA.note) + ' caratteri.';
+    if (c.verifiche) {
+      const p = controllaModulo(CAMPI_VERIFICHE, c.verifiche);
+      if (p) return p;
+      const tot = c.verifiche.punti_totali;
+      const suf = c.verifiche.sufficienza;
+      if (tot != null && (!Number.isInteger(tot) || tot < LIMITI_MODULO.puntiMin || tot > LIMITI_MODULO.puntiMax)) {
+        return 'Punti in tutto: un numero intero da ' + LIMITI_MODULO.puntiMin + ' a ' + migliaia(LIMITI_MODULO.puntiMax) + '.';
+      }
+      if (suf != null) {
+        if (!Number.isFinite(suf) || suf <= 0) return 'Sufficienza: un numero più grande di 0.';
+        if (tot == null) return 'Sufficienza: scrivi anche i punti in tutto.';
+        if (suf >= tot) return 'Sufficienza: meno dei punti in tutto.';
+      }
+    }
+    if (c.interrogazioni) {
+      const p = controllaModulo(CAMPI_INTERROGAZIONI, c.interrogazioni);
+      if (p) return p;
+    }
     return null;
   }
 
@@ -1409,6 +1546,22 @@
 
   // --- Esercizi con i numeri: forma, barra della matematica, anteprima, grafici (contratto §21.1, guida §36.5) ---
 
+  /**
+   * §21.2 Il testo da leggere di ogni domanda, solo dove va mostrato: sopra la prima domanda di un gruppo di domande
+   * di fila con lo stesso testo, e di nuovo quando cambia. Un array lungo come `domande`: { testo, fonte } o null.
+   */
+  function braniDaMostrare(domande) {
+    let prima = null;
+    return (domande || []).map((d) => {
+      const b = d && d.brano;
+      const testo = b && typeof b.testo === 'string' ? b.testo.trim() : '';
+      if (!testo) { prima = null; return null; }
+      const uguale = testo === prima;
+      prima = testo;
+      return uguale ? null : { testo, fonte: typeof b.fonte === 'string' && b.fonte.trim() ? b.fonte.trim() : null };
+    });
+  }
+
   /** La forma della risposta: "testo", "formule" o "conti". Una forma che non conosciamo vale "testo". */
   function formaDomanda(d) {
     const f = d && d.forma;
@@ -1984,6 +2137,7 @@
     nomeCartellaDi, contaFile, messiDaLectio, materialeFuori, materialeDentro, gruppiMetti, sottoMetti, fraseMettiQui, fraseFattoMetti,
     articoloNumero, fraseEliminaConFile, fraseDentro, fraseCartellaEliminata, pulisciNomeCartella, cartelleConPronti, cartellaTuttaScelta, alternaCartella,
     LIMITI_SCHEDA, schedaDaMandare, controllaScheda,
+    CAMPI_VERIFICHE, CAMPI_INTERROGAZIONI, LIMITI_MODULO, numeroScritto, modulo, frasePuntiModulo, righeModulo, campiModulo, braniDaMostrare,
     creaSequenza, voceDi, statoVoci, sceltaVoce, etichettaPrepara, prontaIn,
     estensione, controllaFile, eImmagine, righe, testoInterrogazione, codiceValido, prof, plurale, sottoMateria, basataSu, leggiRotta,
     FORME_SCHEMA, LIVELLI_SCHEMA, SPUNTI_SCHEMA, TIPI_BLOCCO, BLOCCHI_CHIARIBILI, pezziGrassetto, senzaGrassetto, blocchiNoti, passaggioDelBlocco, fontiDelBlocco, segnoFonti, segniDeiBlocchi, testaOpera,

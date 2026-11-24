@@ -175,7 +175,7 @@ _PEDICI = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
 
 def _intero(x: str) -> str:
-    return x if re.fullmatch(r"[\w.,²³√]+", x) else f"({x})"
+    return x if re.fullmatch(r"[\w.,²³√⁰¹⁴-⁹⁻]+", x) else f"({x})"
 
 
 def formule_in_testo(testo: str) -> str:
@@ -187,6 +187,11 @@ def formule_in_testo(testo: str) -> str:
     t = t.replace("\\left", "").replace("\\right", "").replace("\\,", " ").replace("\\;", " ").replace("\\ ", " ")
     frazione = re.compile(r"\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}")
     radice = re.compile(r"\\sqrt\s*\{([^{}]*)\}")
+    # Gli esponenti e i pedici con i numeri prima delle frazioni: le loro graffe fermavano la frazione
+    # ("\frac{1,2 \cdot 10^{-18}}{…}" restava "frac1,2 · 10⁻¹⁸…", consegna di fisica del 24/11/2026).
+    t = re.sub(r"\^\{([0-9+\-n]+)\}", lambda m: m.group(1).translate(_APICI), t)
+    t = re.sub(r"\^(-?\d+)", lambda m: m.group(1).translate(_APICI), t)
+    t = re.sub(r"_\{([0-9]+)\}", lambda m: m.group(1).translate(_PEDICI), t)
     for _ in range(4):  # frazioni e radici una dentro l'altra
         t = frazione.sub(lambda m: f"{_intero(m.group(1).strip())}/{_intero(m.group(2).strip())}", t)
         t = radice.sub(lambda m: f"√{_intero(m.group(1).strip())}", t)

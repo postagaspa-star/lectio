@@ -225,3 +225,146 @@ def test_esercizio_senza_numeri_senza_soluzione_si_confronta_da_soli(client, aut
 def test_mezzo_punto():
     assert simulata._mezzi(1.4) == 1.5 and simulata._mezzi(2.0) == 2 and isinstance(simulata._mezzi(2.0), int)
     assert simulata._mezzi(0.2) == 0
+
+
+def test_la_consegna_non_da_il_procedimento():
+    """Segnalato da Andrea il 24/11/2026: «Calcola l'errore relativo Δx/x» dava già la formula."""
+    assert esercizi.formule_nel_testo("Calcola l'errore relativo Δx/x.") == ["Δx/x"]
+    assert esercizi.formule_nel_testo("Calcola la semidispersione con (xmax − xmin)/2.") == ["(xmax − xmin)/2"]
+    assert esercizi.formule_nel_testo("Calcola la densità ρ = m/V del corpo.") == ["m/V"]
+    # Le unità di misura non sono formule.
+    assert esercizi.formule_nel_testo("Massa 4,8 kg. Esprimi il risultato in kg/m³. Una macchina va a 90 km/h.") == []
+    assert esercizi.senza_formule("Un carrello percorre 12 m in 4 s. Calcola la velocità media v = Δs/Δt in m/s.") == \
+        "Un carrello percorre 12 m in 4 s. Calcola la velocità media in m/s."
+    assert esercizi.senza_formule("Calcola ρ = m/V.") is None  # senza la formula non resta niente da chiedere
+    brani = [{"id": "B1", "materiale_id": 1, "tipo": "appunti", "titolo": "Errori", "pagina": None, "rango": 4,
+              "testo": "L'errore relativo è il rapporto tra errore assoluto e misura."}]
+    esercizio = {"tipo": "esercizio", "punti": 3, "risposta_attesa": "Si divide l'errore assoluto per la misura.", "fonti": ["B1"],
+                 "testo": "Una misura è x = 2,40 cm con errore assoluto Δx = 0,06 cm. Calcola l'errore relativo Δx/x.",
+                 "calcolo": {"tipo": "valore", "dati": {"x": 2.40, "dx": 0.06},
+                             "richieste": [{"cosa": "Errore relativo", "formula": "dx / x", "unita": None, "arrotonda": None}]}}
+    rotte = simulata.domande_rotte({"domande": [esercizio]}, brani, numeri=True)
+    assert len(rotte) == 1 and "dà il procedimento" in rotte[0] and "«Δx/x»" in rotte[0]
+    d = simulata.normalizza({"domande": [esercizio]}, brani, numeri=True)[0]
+    assert d["testo"] == "Una misura è x = 2,40 cm con errore assoluto Δx = 0,06 cm. Calcola l'errore relativo."
+    assert d["forma"] == "conti" and "0,025" in d["risposta_attesa"]
+
+
+def test_formula_detta_con_le_parole_o_con_la_radice():
+    """Le altre forme dello stesso errore: «usando la formula …» e la radice scritta per intero."""
+    testo = ("Le misure di una massa sono in tabella. Calcola la media e la deviazione standard, usando la formula "
+             "Δm = sqrt(somma degli scarti al quadrato / numero delle misure).")
+    assert esercizi.formule_nel_testo(testo)
+    assert esercizi.senza_formule(testo) == "Le misure di una massa sono in tabella. Calcola la media e la deviazione standard."
+
+
+BRANI_FISICA = [
+    {"id": "B1", "materiale_id": 1, "tipo": "verifica", "titolo": "Verifica", "pagina": None, "rango": 2,
+     "testo": "1) Completa la seguente tabella. 2) Determina il risultato in notazione scientifica. 3) Un cubo ha "
+              "massa 120 g e lato 4 cm: qual è la sua densità? Illustra il ragionamento."},
+    {"id": "B2", "materiale_id": 2, "tipo": "appunti", "titolo": "Misure", "pagina": None, "rango": 4,
+     "testo": "Una misura si scrive x ± Δx. Due misure sono compatibili se i loro intervalli hanno una parte in comune. "
+              "L'errore relativo è il rapporto tra errore assoluto e misura."},
+]
+
+
+def _errore_relativo(x: str, dx: str) -> dict:
+    return {"tipo": "esercizio", "punti": 3, "risposta_attesa": "Si divide l'errore assoluto per la misura.", "fonti": ["B2"],
+            "testo": f"Una misura è x = {x} cm con errore assoluto Δx = {dx} cm. Calcola l'errore relativo.",
+            "calcolo": {"tipo": "valore", "dati": {"x": float(x.replace(",", ".")), "dx": float(dx.replace(",", "."))},
+                        "richieste": [{"cosa": "Errore relativo", "formula": "dx / x", "unita": None, "arrotonda": None}]}}
+
+
+def _aperta(testo: str, tipo: str = "aperta") -> dict:
+    return {"tipo": tipo, "punti": 3, "testo": testo, "risposta_attesa": "Come negli appunti.", "fonti": ["B2"]}
+
+
+TEORIA = [_aperta("Come si rappresenta una misura con il suo errore assoluto?"),
+          _aperta("Che cosa si intende per compatibilità tra misure?"),
+          _aperta("Descrivi i passaggi per calcolare la deviazione standard."),
+          _aperta("Spiega come si calcola la semidispersione massima di una serie di misure.")]
+ESERCIZI = [_errore_relativo("3,20", "0,08"), _errore_relativo("5,60", "0,07"),
+            _errore_relativo("8,40", "0,12"), _errore_relativo("2,50", "0,05")]
+
+
+def test_niente_teoria_se_il_prof_non_la_fa():
+    """24/11/2026, fisica: la verifica vera aveva solo esercizi e problemi, la prova quattro domande di teoria su otto."""
+    scheda = {"tipi_domanda": [{"tipo": "esercizio", "quota": 0.67}, {"tipo": "aperta", "quota": 0.33}],
+              "verifiche": {"struttura": "Una tabella da completare, esercizi di calcolo e problemi.",
+                            "consegne": ["Completa la seguente tabella:"], "richieste": []}}
+    assert simulata.teoria_esclusa(BRANI_FISICA, scheda)
+    o = {"domande": [ESERCIZI[0], TEORIA[0], ESERCIZI[1], TEORIA[1], ESERCIZI[2], TEORIA[2], ESERCIZI[3], TEORIA[3]]}
+    rotte = simulata.domande_rotte(o, BRANI_FISICA, numeri=True, scheda=scheda)
+    assert [r.split()[2] for r in rotte] == ["2", "4", "6", "8"] and all("teoria" in r for r in rotte)
+    domande = simulata.normalizza(o, BRANI_FISICA, numeri=True, scheda=scheda)
+    assert [d["forma"] for d in domande] == ["conti"] * 4 and [d["n"] for d in domande] == [1, 2, 3, 4]
+    # Senza sapere com'è una sua verifica non si toglie niente.
+    assert not simulata.domande_rotte(o, BRANI_FISICA[1:], numeri=True, scheda=None)
+    assert len(simulata.normalizza(o, BRANI_FISICA[1:], numeri=True)) == 8
+    # Se nelle sue verifiche c'è teoria, la teoria resta.
+    con_teoria = [dict(BRANI_FISICA[0], testo=BRANI_FISICA[0]["testo"] + " 4) Che cos'è la densità?")] + BRANI_FISICA[1:]
+    assert not simulata.teoria_esclusa(con_teoria, scheda)
+
+
+def test_nessun_tipo_piu_spesso_che_nelle_verifiche_del_prof():
+    """Andrea, 24/11/2026: se il prof fa il 20% di definizioni e la prova il 40%, è lo stesso errore in un'altra forma."""
+    scheda = {"tipi_domanda": [{"tipo": "aperta", "quota": 0.6}, {"tipo": "definizione", "quota": 0.2},
+                               {"tipo": "date", "quota": 0.2}]}
+    brani = [{"id": "B1", "materiale_id": 1, "tipo": "libro", "titolo": "Storia", "pagina": 1, "rango": 1,
+              "testo": "Il feudalesimo è un sistema di rapporti tra signori e vassalli. Carlo Magno fu incoronato nell'800."}]
+    definizioni = [_aperta("Che cos'è il feudalesimo?"), _aperta("Cosa si intende per vassallo?", "definizione"),
+                   _aperta("Definisci il beneficio."), _aperta("Cosa significa immunità?")]
+    aperte = [_aperta("Spiega perché i vassalli giuravano fedeltà."), _aperta("Racconta l'incoronazione di Carlo Magno."),
+              _aperta("Quali erano i doveri del signore verso il vassallo?"), _aperta("Perché l'impero si divise?"),
+              _aperta("Come vivevano i servi della gleba?"), _aperta("Che ruolo aveva la Chiesa?")]
+    o = {"domande": definizioni + aperte}  # 4 definizioni su 10 = 40%: ne può avere al massimo 2
+    rotte = simulata.domande_rotte(o, brani, scheda=scheda)
+    assert [r.split()[2] for r in rotte] == ["3", "4"] and "il prof ne fa circa il 20%" in rotte[0]
+    assert "4 su 10" in rotte[0] and "date 20%" in rotte[0]
+    domande = simulata.normalizza(o, brani, scheda=scheda)
+    assert len(domande) == 8 and [d["testo"] for d in domande[:2]] == ["Che cos'è il feudalesimo?", "Cosa si intende per vassallo?"]
+    # Un tipo che il prof non usa non c'è.
+    vf = {"tipo": "vero_falso", "punti": 1, "testo": "Carlo Magno fu incoronato nell'800.", "risposta_attesa": "Vero, nell'800."}
+    rotte = simulata.domande_rotte({"domande": aperte[:3] + definizioni[:1] + [vf]}, brani, scheda=scheda)
+    assert len(rotte) == 1 and rotte[0].startswith("la domanda 5 è di troppo") and "il prof non ne fa" in rotte[0]
+    # Nelle proporzioni giuste non si tocca niente; senza «Tipi di domanda» nemmeno.
+    date = [_aperta("In che anno fu incoronato Carlo Magno?", "date"), _aperta("Quando morì Carlo Magno?", "date")]
+    assert not simulata.domande_rotte({"domande": definizioni[:2] + aperte + date}, brani, scheda=scheda)
+    assert not simulata.domande_rotte(o, brani, scheda={})
+    # Non si toglie mai più di metà della verifica.
+    troppe = {"domande": definizioni + aperte[:1]}  # 3 definizioni di troppo su 5: se ne tolgono solo 2
+    assert [d["testo"] for d in simulata.normalizza(troppe, brani, scheda=scheda)] == \
+        ["Che cos'è il feudalesimo?", "Cosa si intende per vassallo?", "Spiega perché i vassalli giuravano fedeltà."]
+
+
+def test_esercizi_con_i_conti_mai_di_troppo():
+    """Il prof può chiamare «domande aperte» i suoi problemi: gli esercizi con i conti non si tolgono."""
+    scheda = {"tipi_domanda": [{"tipo": "aperta", "quota": 0.7}, {"tipo": "esercizio", "quota": 0.3}]}
+    assert not simulata.domande_rotte({"domande": ESERCIZI}, BRANI_FISICA[1:], numeri=True, scheda=scheda)
+
+
+def test_risposta_attesa_lunga_solo_col_risultato():
+    """Simulata 3 di fisica: la deviazione standard scritta per intero era illeggibile."""
+    valori = ["8,24", "8,29", "8,27", "8,22", "8,28"]
+    nomi = ["a", "b", "c", "d", "e"]
+    media = "(a + b + c + d + e) / 5"
+    formula = "sqrt((" + " + ".join(f"({n} - {media})^2" for n in nomi) + ") / 5)"
+    d = {"tipo": "esercizio", "punti": 5, "risposta_attesa": "Scarti, quadrati, somma, divisione e radice.", "fonti": [],
+         "testo": "Le misure di una massa sono nella tabella. Calcola la deviazione standard.",
+         "tabella": {"titolo": None, "colonne": ["m (g)"], "valori": [[v] for v in valori]},
+         "calcolo": {"tipo": "valore", "dati": {n: float(v.replace(",", ".")) for n, v in zip(nomi, valori)},
+                     "richieste": [{"cosa": "Deviazione standard", "formula": formula, "unita": "g", "arrotonda": None}]}}
+    voce = simulata.normalizza({"domande": [d]}, BRANI_FISICA, numeri=True)[0]
+    assert voce["risposta_attesa"].startswith("Scarti, quadrati, somma, divisione e radice. Deviazione standard: 0,02")
+    assert "√" not in voce["risposta_attesa"] and len(voce["risposta_attesa"]) < 120
+
+
+def test_regole_nuove_nei_prompt():
+    from app import prompt_studio
+    voci = [{"n": 1, "punti": 3, "testo": "Come si scrive una misura?", "risposta_attesa": "x ± Δx", "risposta": "m ± Δm"}]
+    correzione = prompt_studio.messaggi_correzione_simulata(voci, None)[1]["content"]
+    assert "Giudica il significato, non le parole" in correzione and "m e Δm al posto di x e Δx" in correzione
+    lettura = {"argomento": "Errori", "indicazioni": "", "materia": {"nome": "Fisica", "prof": None}, "evento": None,
+               "scheda": None, "brani": BRANI_FISICA}
+    verifica = prompt_studio.messaggi_simulata(lettura, 50, 8)[1]["content"]
+    assert "Stesse proporzioni tra i tipi di domanda" in verifica and "solo se il prof le fa" in verifica

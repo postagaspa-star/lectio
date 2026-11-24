@@ -434,6 +434,12 @@ textarea.campo { height: auto; min-height: 104px; padding: 12px 14px; line-heigh
 .tipi-domanda .legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; font-weight: 600; color: var(--tenue); }
 .elenco-breve { display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.45; }
 .note-mie { background: var(--fondo); border-radius: 16px; padding: 12px 14px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+/* §5.1 Il modulo delle verifiche nella scheda del prof: due parti sotto la scheda, divise da una riga. */
+.parte-modulo { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; border-top: 1px solid var(--riga); }
+.titolo-parte { font-size: 16px; font-weight: 800; }
+.elenco-breve .citazione { font-style: italic; overflow-wrap: anywhere; }
+.titolo-modulo { margin-top: 10px; }
+.campi-punti { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .colonna-destra { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 /* La zona Trascina qui comincia all'altezza della scheda del Materiale (sotto il titolo e Aggiungi), alta quanto serve. */
 .colonna-zona { padding-top: 50px; min-width: 0; }
@@ -1218,6 +1224,10 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 .sim-riga-domanda .pt { flex: 1 1 auto; font-size: 13px; font-weight: 500; color: var(--tenue); font-variant-numeric: tabular-nums; }
 .sim-riga-domanda svg.icona { width: 18px; height: 18px; color: var(--fatto); }
 .sim-sezione { font-size: 15px; font-weight: 800; color: var(--tenue); margin-top: 4px; }
+/* §21.2 Il testo da leggere: sopra la prima domanda del gruppo, righe non troppo lunghe. */
+.sim-brano { background: var(--sup2); border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.sim-brano .fonte { font-size: 13px; font-weight: 600; color: var(--tenue); }
+.sim-brano .testo-brano { max-width: 68ch; font-size: 16px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sim-domanda { background: var(--sup); border-radius: 22px; padding: 24px; box-shadow: var(--ombra); display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 16px; }
 .sim-domanda .testo-d { font-size: 18px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 .sim-risposta { display: block; width: 100%; min-height: 136px; padding: 12px 14px; border: 2px solid transparent; border-radius: 14px; background: var(--sup2); color: var(--testo); font-size: 16px; font-weight: 400; line-height: 1.45; resize: none; overflow: hidden; }

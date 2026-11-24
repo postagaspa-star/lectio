@@ -74,6 +74,42 @@ class TipoDomandaIn(Corpo):
     quota: float = Field(ge=0, le=1)
 
 
+def _voci(massimo: int):
+    def controlla(v):
+        if v is not None and any(len(x) > massimo for x in v):
+            raise ValueError("voce troppo lunga")
+        return v
+    return controlla
+
+
+class VerificheIn(Corpo):
+    """Il modulo delle verifiche (contratto 5.1): solo i campi mandati cambiano."""
+    struttura: str | None = Field(default=None, max_length=300)
+    consegne: list[str] | None = Field(default=None, max_length=6)
+    punti: str | None = Field(default=None, max_length=300)
+    punti_totali: int | None = Field(default=None, ge=1, le=1000)
+    sufficienza: float | None = Field(default=None, gt=0, le=1000)
+    regole_punti: list[str] | None = Field(default=None, max_length=6)
+    difficolta: str | None = Field(default=None, max_length=300)
+    approfondimento: str | None = Field(default=None, max_length=300)
+    cosa_da: str | None = Field(default=None, max_length=300)
+    richieste: list[str] | None = Field(default=None, max_length=6)
+
+    _consegne = field_validator("consegne")(_voci(300))
+    _brevi = field_validator("regole_punti", "richieste")(_voci(200))
+
+
+class InterrogazioniIn(Corpo):
+    inizio: str | None = Field(default=None, max_length=300)
+    andamento: str | None = Field(default=None, max_length=300)
+    durata: str | None = Field(default=None, max_length=300)
+    profondita: str | None = Field(default=None, max_length=300)
+    cosa_vuole: list[str] | None = Field(default=None, max_length=6)
+    esempi: list[str] | None = Field(default=None, max_length=6)
+
+    _brevi = field_validator("cosa_vuole", "esempi")(_voci(200))
+
+
 class SchedaPut(Corpo):
     argomenti: list[ArgomentoIn] | None = Field(default=None, max_length=30)
     tipi_domanda: list[TipoDomandaIn] | None = Field(default=None, max_length=9)
@@ -82,6 +118,8 @@ class SchedaPut(Corpo):
     lunghezza_risposte: str | None = Field(default=None, max_length=200)
     consigli: list[str] | None = Field(default=None, max_length=20)
     note_mie: str | None = Field(default=None, max_length=5000)
+    verifiche: VerificheIn | None = None
+    interrogazioni: InterrogazioniIn | None = None
 
     @field_validator("cosa_corregge", "cosa_premia", "consigli")
     @classmethod

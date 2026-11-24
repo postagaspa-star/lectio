@@ -49,7 +49,7 @@ CARATTERI_BLOCCO_MASSIMI = 14_000
 
 # Un aggiornamento della scheda: fino a 60.000 caratteri di verifiche + risposta.
 TOKEN_SCHEDA_ENTRATA = 20_000
-TOKEN_SCHEDA_USCITA = 6_000
+TOKEN_SCHEDA_USCITA = 8_000
 
 # Schemi e verifiche simulate (contratto 18 e 21).
 CARATTERI_MAPPA_SCHEMA = 40_000  # il modello piccolo legge il materiale a gruppi di questa misura e segna i punti

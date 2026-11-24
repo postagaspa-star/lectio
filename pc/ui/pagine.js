@@ -500,7 +500,7 @@
       h('button', { type: 'button', class: 'pulsante testo', 'data-azione': 'modifica-scheda', onclick: () => A.vai('#materia/' + m.id + '/scheda') }, 'Modifica'));
     const parti = [testa];
     if (!sc || sc.stato === 'vuota') {
-      parti.push(h('p', { class: 'secondario', stile: { fontSize: '15px' } }, 'Ancora vuota: la scrivo io quando aggiungi la prima verifica corretta.'));
+      parti.push(h('p', { class: 'secondario', stile: { fontSize: '15px' } }, 'Ancora vuota: la scrivo io quando aggiungi una verifica o un\'interrogazione.'));
     } else {
       if (sc.stato === 'in_aggiornamento') parti.push(h('div', { class: 'messaggio info' }, h('div', null, h('span', null, 'Sto aggiornando la scheda con le verifiche nuove.'))));
       if (sc.stato === 'errore') {
@@ -519,9 +519,17 @@
       const lista = (titolo, voci) => (voci && voci.length ? h('div', { class: 'elenco-breve' }, h('span', { class: 'etichetta' }, titolo), voci.map((v) => h('span', null, v))) : null);
       parti.push(lista('Cosa corregge', sc.cosa_corregge), lista('Cosa premia', sc.cosa_premia));
       if (sc.lunghezza_risposte) parti.push(h('div', { class: 'elenco-breve' }, h('span', { class: 'etichetta' }, 'Quanto scrivere'), h('span', null, sc.lunghezza_risposte)));
-      const base = L.basataSu(sc.basata_su);
-      if (base) parti.push(h('span', { class: 'moltotenue' }, base));
     }
+    // §5.1 Il modulo delle verifiche: due parti, solo i campi pieni; una parte tutta vuota non si vede.
+    for (const [parte, titolo] of [['verifiche', 'Come fa le verifiche'], ['interrogazioni', 'Come interroga']]) {
+      const righe = sc ? L.righeModulo(sc, parte) : [];
+      if (!righe.length) continue;
+      parti.push(h('div', { class: 'parte-modulo', 'data-modulo': parte }, h('h3', { class: 'titolo-parte' }, titolo),
+        righe.map((r) => h('div', { class: 'elenco-breve', 'data-campo-modulo': r.chiave }, h('span', { class: 'etichetta' }, r.nome),
+          r.voci.map((v) => h('span', { class: r.citazioni ? 'citazione' : null }, v))))));
+    }
+    const base = sc && sc.stato !== 'vuota' ? L.basataSu(sc.basata_su) : null;
+    if (base) parti.push(h('span', { class: 'moltotenue' }, base));
     if (sc && sc.note_mie && sc.note_mie.trim()) parti.push(h('div', { class: 'elenco-breve' }, h('span', { class: 'etichetta' }, 'Le tue note'), h('div', { class: 'note-mie' }, sc.note_mie)));
     svuota(box, parti);
   }
@@ -1023,12 +1031,30 @@
     const lunghezza = h('input', { class: 'campo', id: 'sc-lunghezza', value: sc.lunghezza_risposte || '', maxlength: '200' });
     const consigli = area(sc.consigli, 'sc-consigli', 3);
     const note = area(sc.note_mie || '', 'sc-note', 4);
+    // §5.1 Il modulo delle verifiche: un campo per voce, con gli stessi nomi della pagina della materia.
+    const testiModulo = L.campiModulo(sc);
+    const campiModulo = { verifiche: {}, interrogazioni: {} };
+    const campoModulo = (parte, c) => {
+      const id = 'sc-' + (parte === 'verifiche' ? 'v' : 'i') + '-' + c.chiave.replace(/_/g, '-');
+      const el = c.forma === 'frase'
+        ? h('textarea', { class: 'campo', id, rows: '2', maxlength: String(c.max) }, testiModulo[parte][c.chiave])
+        : area(testiModulo[parte][c.chiave], id, 3);
+      campiModulo[parte][c.chiave] = el;
+      return el;
+    };
+    const numeroModulo = (chiave, id) => {
+      const el = h('input', { class: 'campo', id, inputmode: 'decimal', autocomplete: 'off', value: testiModulo.verifiche[chiave], maxlength: '6' });
+      campiModulo.verifiche[chiave] = el;
+      return el;
+    };
+    const valoriModulo = (parte) => Object.fromEntries(Object.entries(campiModulo[parte]).map(([k, el]) => [k, el.value]));
     const esito = h('div');
     const salva = h('button', { type: 'button', class: 'pulsante pieno', 'data-azione': 'salva-scheda' }, 'Salva');
     salva.addEventListener('click', async () => {
       const corpo = L.schedaDaMandare(sc, {
         argomenti: argomenti.value, corregge: corregge.value, premia: premia.value,
         lunghezza: lunghezza.value, consigli: consigli.value, note: note.value,
+        verifiche: valoriModulo('verifiche'), interrogazioni: valoriModulo('interrogazioni'),
       });
       const problema = L.controllaScheda(corpo);
       if (problema) { svuota(esito, A.messaggio('errore', problema)); return; }
@@ -1041,6 +1067,15 @@
       A.vai('#materia/' + m.id);
     });
     const campo = (etichetta, el) => h('label', { class: 'campo-gruppo' }, h('span', { class: 'etichetta' }, etichetta), el);
+    const campiDi = (parte, campi) => campi.map((c) => (c.chiave === 'punti'
+      ? h('div', { class: 'campo-gruppo' }, campo('Punti', campoModulo(parte, c)),
+        h('div', { class: 'campi-punti' }, campo('Punti in tutto', numeroModulo('punti_totali', 'sc-v-punti-totali')), campo('Sufficienza', numeroModulo('sufficienza', 'sc-v-sufficienza'))))
+      : campo(c.nome, campoModulo(parte, c))));
+    // Due colonne come la parte sopra: i campi a metà, il resto nella seconda.
+    const dueColonne = (pezzi) => {
+      const meta = Math.ceil(pezzi.length / 2);
+      return h('div', { class: 'griglia-materia su-fondo' }, h('div', { class: 'colonna' }, pezzi.slice(0, meta)), h('div', { class: 'colonna' }, pezzi.slice(meta)));
+    };
     svuota(pag,
       h('div', { class: 'testa-pagina' }, h('div', null,
         h('button', { type: 'button', class: 'pulsante testo', stile: { paddingLeft: '0', alignSelf: 'flex-start' }, onclick: () => A.vai('#materia/' + m.id) }, icona('indietro'), m.nome),
@@ -1048,6 +1083,10 @@
       h('div', { class: 'griglia-materia su-fondo' },
         h('div', { class: 'colonna' }, campo('Argomenti che tornano', argomenti), campo('Cosa corregge', corregge), campo('Cosa premia', premia)),
         h('div', { class: 'colonna' }, campo('Quanto scrivere', lunghezza), campo('Consigli', consigli), campo('Le tue note', note))),
+      h('h2', { class: 'titolo-sezione titolo-modulo', 'data-modulo-modifica': 'verifiche' }, 'Come fa le verifiche'),
+      dueColonne(campiDi('verifiche', L.CAMPI_VERIFICHE)),
+      h('h2', { class: 'titolo-sezione titolo-modulo', 'data-modulo-modifica': 'interrogazioni' }, 'Come interroga'),
+      dueColonne(campiDi('interrogazioni', L.CAMPI_INTERROGAZIONI)),
       esito,
       h('div', { class: 'azioni' }, salva,
         h('button', { type: 'button', class: 'pulsante testo', onclick: async () => {

@@ -1071,6 +1071,48 @@ I punti possono avere il mezzo punto: "1,5 su 3", "10,5 punti su 15"; "1 punto" 
 **Esempio:** la verifica di Matematica "Verifica su misure, equazioni e grafici" (pronta, in corso, corretta) con
 una domanda `formule`, tre `conti`, una tabella, un grafico a linee e uno a punti.
 
+### 36.6 Il modulo delle verifiche e il testo da leggere (PC 1.5.0, contratto 5.1 e 21.2, richiesta di Andrea del 24/11)
+Lectio, quando legge una verifica o un'interrogazione, compila un secondo modulo che serve solo a fare verifiche di
+prova e interrogazioni uguali a quelle del prof. Andrea lo vuole anche modificabile a mano.
+
+**Nella pagina della materia**, dentro la scheda "Cosa chiede il prof", sotto "Quanto scrivere" e prima di "Basata
+su…", due parti, ognuna con una riga sottile sopra (`border-top` `--riga`) e un titolo da 16 px/800:
+- **Come fa le verifiche**: `COM'È FATTA`, `CONSEGNE`, `PUNTI`, `REGOLE DEI PUNTI`, `DIFFICOLTÀ`, `APPROFONDIMENTO`,
+  `COSA DÀ`, `RICHIESTE`.
+- **Come interroga**: `COME COMINCIA`, `COME VA AVANTI`, `QUANTO DURA`, `APPROFONDIMENTO`, `COSA VUOLE`, `DOMANDE`.
+
+Ogni voce è un `elenco-breve` come "Cosa corregge" (etichetta maiuscoletta, poi una riga per voce). Si vedono solo i
+campi pieni; una parte tutta vuota non c'è (senza interrogazioni "Come interroga" sparisce). Consegne e Domande sono
+citazioni dai documenti: tra « » e in corsivo. In PUNTI, se ci sono i numeri, la prima riga è "90 in tutto,
+sufficienza 54" (numeri all'italiana, "18,5"), poi il testo. Il modulo si vede anche con la scheda "vuota" se Andrea
+l'ha scritto a mano. La frase della scheda vuota ora è "Ancora vuota: la scrivo io quando aggiungi una verifica o
+un'interrogazione." (vale anche per le verifiche non corrette).
+
+**Nella Modifica** (`#materia/{id}/scheda`), sotto i campi di sempre, due titoli di sezione "Come fa le verifiche" e
+"Come interroga", ognuno con i suoi campi su due colonne (una sotto i 900 px), con gli stessi nomi della pagina della
+materia:
+- i testi (Com'è fatta, Punti, Difficoltà, Approfondimento, Cosa dà, Come comincia, Come va avanti, Quanto dura) sono
+  caselle di due righe, al massimo 300 caratteri;
+- le liste (Consegne, Regole dei punti, Richieste, Cosa vuole, Domande) sono caselle "una voce per riga" come Cosa
+  corregge: al massimo 6 righe, 300 caratteri per riga le Consegne, 200 le altre;
+- sotto Punti due campi piccoli affiancati, `PUNTI IN TUTTO` (intero da 1 a 1.000) e `SUFFICIENZA` (anche con la
+  virgola, più di 0 e meno dei punti in tutto; senza i punti in tutto non si può scrivere). Vuoti = non si sa.
+
+Salva manda le due parti intere; il server tiene come scritti da Andrea solo i campi cambiati. Gli errori sono frasi
+brevi col nome del campo, come quelli di sempre: "Sufficienza: meno dei punti in tutto.", "Consegne: al massimo 6
+righe.", "Punti in tutto: un numero intero da 1 a 1.000.".
+
+**Testo da leggere** (verifica di prova): se una domanda ha `brano`, sopra la prima domanda del gruppo (domande di
+fila con lo stesso testo) c'è un riquadro `--sup2`, raggio 18, con `TESTO DA LEGGERE`, sotto la fonte (13 px, tenue) se
+c'è, poi il testo a 16 px con interlinea 1,6, con i suoi a capo, largo al massimo 68 caratteri per riga. Si ripete
+solo quando il testo cambia. Sta dopo il titolo della sezione e prima della scheda della domanda; nell'esito sta prima
+della riga chiudibile della domanda e resta sempre aperto.
+
+**Esempio:** la scheda di Storia ha le due parti piene (90 punti, sufficienza 54); quella di Diritto solo "Com'è
+fatta" e una consegna, quindi niente "Come interroga". Nella verifica di Storia (pronta, in corso, corretta) le
+domande 1 e 2 hanno lo stesso brano del libro. Scene di prova: `scheda-modulo`, `scheda-modifica`, `simulata-corso`,
+`simulata-risultati`.
+
 ## 37. I 16 colori delle materie
 
 Nomi per il codice (minuscoli, senza accenti; il server e le app accettano solo questi, uno sconosciuto diventa

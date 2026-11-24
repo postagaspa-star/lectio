@@ -293,6 +293,18 @@ def _grafico_pdf(g: dict, colore) -> Drawing:
     return d
 
 
+def _brano_pdf(brano: dict, s: dict, colore) -> Table:
+    righe = [Paragraph("<b>Testo da leggere</b>", s["base"])]
+    righe += [Paragraph(_testo(r), s["base"]) for r in str(brano["testo"]).splitlines() if r.strip()]
+    if brano.get("fonte"):
+        righe.append(Paragraph(f"<font color='#6B7280'>{_testo(brano['fonte'])}</font>", s["base"]))
+    riquadro = Table([[r] for r in righe], colWidths=[LARGHEZZA])
+    riquadro.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, colore), ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                                  ("RIGHTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (0, 0), 8),
+                                  ("BOTTOMPADDING", (0, -1), (-1, -1), 8)]))
+    return riquadro
+
+
 def simulata_pdf(riga: dict, domande: list[dict], materia: dict) -> bytes:
     colore = colors.HexColor(COLORE_MATERIA.get(materia.get("colore"), COLORE_MATERIA["ambra"]))
     s = _stili(colore)
@@ -300,11 +312,18 @@ def simulata_pdf(riga: dict, domande: list[dict], materia: dict) -> bytes:
     storia: list = [Paragraph(_testo(riga.get("titolo") or riga.get("argomento")), s["titolo"]), Paragraph(_testo(sotto), s["sotto"]),
                     Paragraph("Nome e cognome: ________________________________     Data: ______________", s["base"]), Spacer(1, 8)]
     sezione_attuale = None
+    brano_attuale = None
     for d in domande:
         parti = []
         if d.get("sezione") and d["sezione"] != sezione_attuale:
             sezione_attuale = d["sezione"]
             parti.append(Paragraph(_testo(sezione_attuale), s["sezione"]))
+        brano = d.get("brano") if isinstance(d.get("brano"), dict) else None
+        if brano and brano.get("testo") and brano["testo"] != brano_attuale:
+            # 21.2: il testo da leggere una volta sola, sopra la prima domanda che lo usa.
+            storia.append(_brano_pdf(brano, s, colore))
+            storia.append(Spacer(1, 8))
+        brano_attuale = brano.get("testo") if brano else None
         punti = f"  <font color='#6B7280'>({d.get('punti')} punti)</font>" if d.get("punti") else ""
         parti.append(Paragraph(f"<b>{d.get('n')}.</b> {_testo(d.get('testo'))}{punti}", s["base"]))
         if d.get("tabella"):
