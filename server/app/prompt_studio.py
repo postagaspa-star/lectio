@@ -429,9 +429,9 @@ def messaggi_simulata(lettura: dict, minuti: int, domande_circa: int) -> list[di
     schema = {
         "titolo": "titolo breve",
         "testi_da_leggere": [{"id": "T1", "testo": "un pezzo del materiale copiato parola per parola", "da": "B3"}],
-        "domande": [{"tipo": "aperta", "testo": "come la scriverebbe il prof", "punti": 10, "sezione": None,
-                     "da_leggere": None, "risposta_attesa": "la risposta completa", "fonti": ["B1"], "dal_documento": "V1",
-                     "calcolo": None, "tabella": None, "grafico": None}],
+        "domande": [{"tipo": "aperta", "argomento": "l'argomento in poche parole", "testo": "come la scriverebbe il prof",
+                     "punti": 10, "sezione": None, "da_leggere": None, "risposta_attesa": "la risposta completa", "fonti": ["B1"],
+                     "dal_documento": "V1", "calcolo": None, "tabella": None, "grafico": None}],
     }
     come_lui = ""
     if modulo_verifiche(scheda):
@@ -495,6 +495,9 @@ secondo grado, senza l'incognita al denominatore); per una disequazione: {{"tipo
 esattamente come in "calcolo".
 - "risposta_attesa": per un esercizio con "calcolo" il metodo in una o due frasi, senza il risultato; per le altre \
 domande la risposta completa presa dai materiali. Le domande senza conti hanno "calcolo": null.
+- "argomento": di che cosa parla la domanda, in due-cinque parole, senza i numeri e senza la situazione dell'esercizio \
+(per esempio «Deviazione standard», «Compatibilità tra misure», «Le cause della Prima guerra mondiale»). Domande sulla \
+stessa cosa hanno lo stesso "argomento", scritto uguale.
 - Gli esercizi senza numeri (una traduzione, un'analisi) li riproponi solo se sono scritti nei materiali, identici; se \
 nei materiali non c'è la soluzione lascia "risposta_attesa": "" (lo studente confronterà da solo).
 - "tabella": quando i dati sono tanti (misure, valori) mettili in tabella e nel testo scrivi "i dati in tabella": \
@@ -855,5 +858,5 @@ def risposta_domande_simulata(scelte: list[int], ultima: int) -> str:
             "Cambia solo le domande che servono per la richiesta (anche tutte, se vale per tutta la verifica). ")
     return (solo + "Rispondi solo con le domande che cambi o che aggiungi, con lo stesso schema di prima e ognuna con il "
             f"suo numero \"n\" (per una domanda nuova usa un numero dopo il {ultima}); in \"togli\" i numeri delle domande "
-            'da togliere: {"domande": [{"n": 3, "tipo": "...", "testo": "...", "punti": 10, "sezione": null, '
+            'da togliere: {"domande": [{"n": 3, "tipo": "...", "argomento": "...", "testo": "...", "punti": 10, "sezione": null, '
             '"risposta_attesa": "...", "fonti": ["..."]}], "togli": [], "nota": null}. Rispondi con SOLO l\'oggetto JSON.')

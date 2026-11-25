@@ -135,7 +135,7 @@ test('Com\'è andata con il solo schema: si spuntano le parti dello schema; il g
   assert.equal(righe.length, 5);
   assert.match(righe[0].textContent, /Augusto e la nascita del principato/);
   assert.match(righe[0].textContent, /È uscita/);
-  assert.match(p.testo(), /Domande fuori dallo schema/);
+  assert.match(p.testo(), /Domande in più/);
   // Il giorno della verifica il voto non si sa ancora.
   assert.equal(p.q('#voto'), null);
   assert.doesNotMatch(p.testo(), /Voto/);
@@ -154,7 +154,7 @@ test('Com\'è andata dal giorno dopo: domande della lezione da spuntare e voto f
   p.A.vai('#racconta/4');
   await p.aspetta(() => p.q('[data-azione="salva-esito"]'));
   assert.match(p.testo(), /Le domande della lezione/);
-  assert.match(p.testo(), /Altre domande uscite/);
+  assert.match(p.testo(), /Domande in più/);
   assert.match(p.testo(), /Voto/);
   assert.doesNotMatch(p.testo(), /se lo sai/);
   const righe = Array.from(p.w.document.querySelectorAll('.domande-esito[data-fonte="lezione"] label'));
@@ -168,6 +168,44 @@ test('Com\'è andata dal giorno dopo: domande della lezione da spuntare e voto f
   assert.match(corpo.voci_uscite[0], /^domanda:\d+$/);
   assert.equal(corpo.voto, '7');
   assert.match(p.q('.anello').textContent.replace(/\s+/g, ' '), /1 di 1 ?domande previste/);
+});
+
+test('Com\'è andata con le verifiche di prova: argomenti senza doppioni e domande in più aggiunte una alla volta', opz, async () => {
+  const p = await apri({}, null, (s) => {
+    const st = s.esempio.stato;
+    st.eventi.find((x) => x.id === 4).lezione_id = null;
+    for (const x of st.simulate.filter((y) => y.id === 3 || y.id === 4)) x.evento_id = 4;
+  });
+  p.A.vai('#racconta/4');
+  await p.aspetta(() => p.q('[data-azione="salva-esito"]'));
+  // Non gli esercizi della verifica di prova (il prof non li ripete) ma i loro argomenti, ognuno una volta sola.
+  assert.match(p.testo(), /Gli argomenti delle verifiche di prova/);
+  assert.doesNotMatch(p.testo(), /Perché Augusto non si fece mai chiamare re/);
+  const righe = p.tutti('.domande-esito[data-fonte="simulata"] label');
+  assert.deepEqual(righe.map((r) => r.querySelector('.forte').textContent),
+    ['Il principato di Augusto', 'I poteri di Augusto', 'Tiberio', 'Seiano', 'Gli imperatori giulio-claudi', 'Caligola e Claudio', 'La fine dei giulio-claudi']);
+  assert.match(righe[0].textContent, /È uscito/);
+  p.clic(righe[3].querySelector('input'));
+  // Le domande in più: con Aggiungi, con Invio, più righe incollate insieme; si possono togliere.
+  assert.equal(p.q('.altre-domande').hidden, true);
+  p.scrivi(p.q('#altre-domande'), '  Chi era   Agrippina? ');
+  p.clic(p.q('[data-azione="aggiungi-domanda"]'));
+  assert.equal(p.q('#altre-domande').value, '');
+  p.scrivi(p.q('#altre-domande'), 'Che cos\'era il pretorio?');
+  p.tasto('Enter', null, p.q('#altre-domande'));
+  const incolla = new p.w.Event('paste', { bubbles: true, cancelable: true });
+  incolla.clipboardData = { getData: () => 'Quando morì Nerone?\nChi era Seneca?\n' };
+  p.q('#altre-domande').dispatchEvent(incolla);
+  assert.deepEqual(p.tutti('.altre-domande .riga').map((r) => r.textContent), ['Chi era Agrippina?', 'Che cos\'era il pretorio?', 'Quando morì Nerone?', 'Chi era Seneca?']);
+  p.clic(p.tutti('.altre-domande [data-azione="togli-domanda"]')[1]);
+  // Quella scritta e non ancora aggiunta conta lo stesso.
+  p.scrivi(p.q('#altre-domande'), 'Chi era Petronio?');
+  p.clic(p.q('[data-azione="salva-esito"]'));
+  await p.aspetta(() => /Ho aggiornato la scheda del prof/.test(p.testo()));
+  const corpo = p.s.chiamate('POST', '/server/api/eventi/4/esito')[0].corpo;
+  assert.deepEqual(corpo.voci_uscite, ['simulata:4:5']);
+  assert.equal(corpo.altre_domande, 'Chi era Agrippina?\nQuando morì Nerone?\nChi era Seneca?\nChi era Petronio?');
+  assert.match(p.q('.anello').textContent.replace(/\s+/g, ' '), /1 di 5 ?argomenti previsti/);
 });
 
 // --- Il lettore: fermate alle domande e risposte scritte ----------------------------------------------

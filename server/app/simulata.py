@@ -358,6 +358,36 @@ def domanda_chiusa_rotta(d: dict) -> str | None:
 _NON_SPECIFICATO = re.compile(r"\bnon (?:è |viene )?(?:specificat|indicat)[oa]\b|\bnon è detto nel\b", re.I)
 
 
+def argomento_breve(valore) -> str | None:
+    """1.6.3: l'argomento di una domanda in poche parole («Deviazione standard»), al massimo 60 caratteri."""
+    if not isinstance(valore, str):
+        return None
+    a = " ".join(valore.split()).strip(" .;:,«»\"'")
+    if not a:
+        return None
+    if len(a) > 60:
+        a = a[:60].rsplit(" ", 1)[0].rstrip(" ,;:")
+    return a[0].upper() + a[1:]
+
+
+_DI_CHE_COSA = re.compile(r"\s+(?:del|dello|della|dell['’]|dei|degli|delle|di)\s*\S.*$", re.I)
+
+
+def argomento_di(d: dict) -> str:
+    """1.6.3: l'argomento da spuntare in "Com'è andata" (il prof non ripete gli esercizi della verifica di prova, ma
+    chiede gli stessi argomenti). Quello scritto dall'AI; per le domande di prima, i nomi dei risultati senza
+    l'oggetto («Errore relativo del banco» → «Errore relativo»); se no l'inizio del testo."""
+    a = argomento_breve(d.get("argomento"))
+    if a:
+        return a
+    nomi = list(dict.fromkeys(_DI_CHE_COSA.sub("", " ".join(str(x).split())) for x in d.get("risultati") or [] if str(x).strip()))
+    if nomi:
+        return argomento_breve(" e ".join([nomi[0]] + [x[:1].lower() + x[1:] for x in nomi[1:2]])) or "Esercizio"
+    testo = " ".join(str(d.get("testo") or "").split())
+    frase = re.split(r"(?<=[.?!:])\s", testo, maxsplit=1)[0]
+    return frase if len(frase) <= 90 else frase[:90].rsplit(" ", 1)[0] + "…"
+
+
 def normalizza(o: dict, brani: list[dict], numeri: bool = False, scheda: dict | None = None) -> list[dict]:
     """Le domande utilizzabili. Un esercizio senza numeri che non è scritto nei documenti non passa; uno con i numeri
     passa solo con numeri nuovi e un calcolo che il programma sa risolvere (contratto 21.1). La teoria che il prof non
@@ -414,6 +444,7 @@ def normalizza(o: dict, brani: list[dict], numeri: bool = False, scheda: dict | 
         metodo = stile.formule_in_testo(" ".join(str(d.get("risposta_attesa") or "").split()))
         voce = {"n": len(uscita) + 1, "tipo": tipo, "testo": testo, "punti": punti,
                 "sezione": " ".join(str(d.get("sezione")).split())[:80] if d.get("sezione") else None, "brano": brano,
+                "argomento": argomento_breve(d.get("argomento")),
                 "risposta_attesa": metodo, "fonti": memoria.fonti_di(ids, brani),
                 "forma": "formule" if numeri and tipo not in esercizi.TIPI_CHIUSI else "testo",
                 "tabella": conti["tabella"] if conti else esercizi.tabella(d.get("tabella")),

@@ -151,13 +151,24 @@ def test_com_e_andata_con_la_lezione_e_la_simulata(client, auth, servizi):
     aggiungi_testo(client, auth, m["id"])
     e = evento(client, auth, m["id"], "2026-10-27")
     lez = lezione_pronta(client, auth, servizi, m["id"], evento_id=e["id"])
-    _simulata(servizi, m["id"], e["id"], "errore", [{"n": 1, "testo": "Non conta"}])
-    xid = _simulata(servizi, m["id"], e["id"], "corretta", [{"n": 1, "testo": "Chi era Tylor?"}, {"n": 2, "testo": "Che cos'è il kula?"}])
+    _simulata(servizi, m["id"], e["id"], "errore", [{"n": 1, "testo": "Non conta", "argomento": "Non conta"}])
+    vecchia = _simulata(servizi, m["id"], e["id"], "corretta", [
+        {"n": 1, "testo": "Chi era Tylor? Spiega.", "argomento": "Tylor e l'animismo"},
+        {"n": 2, "testo": "Che cos'è il kula? Rispondi in cinque righe."}])
+    xid = _simulata(servizi, m["id"], e["id"], "corretta", [
+        {"n": 1, "testo": "Descrivi il kula delle isole Trobriand.", "argomento": "il kula."},
+        {"n": 2, "testo": "Chi era Boas?", "argomento": "Boas"},
+        {"n": 3, "testo": "Che cosa intende Tylor per animismo?", "argomento": "Tylor e l'animismo"}])
     gruppi = client.get(f"/api/eventi/{e['id']}/previste", headers=auth).json()["gruppi"]
     assert [g["fonte"] for g in gruppi] == ["lezione", "simulata"]
     assert [v["chiave"] for v in gruppi[0]["voci"]] == [f"domanda:{d['id']}" for d in lez["domande"]]
-    assert gruppi[1]["voci"] == [{"chiave": f"simulata:{xid}:1", "testo": "Chi era Tylor?"},
-                                 {"chiave": f"simulata:{xid}:2", "testo": "Che cos'è il kula?"}]
+    # 1.6.3: non le domande della verifica di prova (il prof non le ripete) ma i loro argomenti, di tutte le verifiche
+    # di prova di questa verifica, dalla più recente, ognuno una volta sola; senza argomento, l'inizio del testo.
+    assert gruppi[1] == {"fonte": "simulata", "id": xid, "voci": [
+        {"chiave": f"simulata:{xid}:1", "testo": "Il kula"},
+        {"chiave": f"simulata:{xid}:2", "testo": "Boas"},
+        {"chiave": f"simulata:{xid}:3", "testo": "Tylor e l'animismo"},
+        {"chiave": f"simulata:{vecchia}:2", "testo": "Che cos'è il kula?"}]}
     d0 = lez["domande"][0]
     # La domanda della lezione con la chiave e con il vecchio elenco (telefono 1.3.3) conta una volta sola.
     r = client.post(f"/api/eventi/{e['id']}/esito", headers=auth, json={
@@ -166,4 +177,7 @@ def test_com_e_andata_con_la_lezione_e_la_simulata(client, auth, servizi):
     salvato = _esito_salvato(client, auth, e["id"])
     assert salvato["domande_uscite"] == [d0["id"]] and salvato["voci_uscite"] == [f"simulata:{xid}:2"] and salvato["voto"] == "7"
     with db.aperta(servizi.settings.db_path) as conn:
-        assert scheda._esiti(conn, m["id"])[0]["uscite"] == [d0["testo"], "Che cos'è il kula?"]
+        assert scheda._esiti(conn, m["id"])[0]["uscite"] == [d0["testo"], "argomento: Boas"]
+    # Una domanda con un argomento che c'è già (la 1 della vecchia) non ha una sua chiave da spuntare.
+    r = client.post(f"/api/eventi/{e['id']}/esito", headers=auth, json={"voci_uscite": [f"simulata:{vecchia}:1"]})
+    assert r.status_code == 422

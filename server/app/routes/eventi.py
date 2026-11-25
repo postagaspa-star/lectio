@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 
-from .. import clock, db, forme
+from .. import clock, db, forme, simulata
 from .. import scheda as schede
 from ..auth import richiede_token
 from ..db import get_conn
@@ -85,7 +85,7 @@ def _parti_dello_schema(contenuto: dict) -> list[tuple[int, str]]:
 
 def previste(conn: sqlite3.Connection, evento_id: int) -> list[dict]:
     """1.4.6: quello che Lectio aveva preparato per la verifica, da spuntare in "Com'è andata": le domande della
-    lezione, le domande della verifica simulata, le parti dello schema. Ogni voce ha una chiave stabile."""
+    lezione, gli argomenti delle verifiche di prova (1.6.3), le parti dello schema. Ogni voce ha una chiave stabile."""
     gruppi = []
     lezione_id = forme.lezione_dell_evento(conn, evento_id)
     if lezione_id is not None:
@@ -93,14 +93,22 @@ def previste(conn: sqlite3.Connection, evento_id: int) -> list[dict]:
             "SELECT id, testo FROM domande WHERE lezione_id = ? AND tolta = 0 ORDER BY n", (lezione_id,))]
         if voci:
             gruppi.append({"fonte": "lezione", "id": lezione_id, "voci": voci})
-    x = conn.execute(
-        f"SELECT id, domande FROM simulate WHERE evento_id = ? AND stato IN ({','.join('?' * len(STATI_SIMULATA_FATTA))})"
-        " ORDER BY id DESC LIMIT 1", (evento_id, *STATI_SIMULATA_FATTA)).fetchone()
-    if x is not None:
-        voci = [{"chiave": f"simulata:{x['id']}:{d['n']}", "testo": " ".join(str(d.get("testo") or "").split())}
-                for d in json.loads(x["domande"] or "[]") if isinstance(d, dict) and d.get("n") is not None and d.get("testo")]
-        if voci:
-            gruppi.append({"fonte": "simulata", "id": x["id"], "voci": voci})
+    # 1.6.3: il prof non ripete gli esercizi delle verifiche di prova, ma ne chiede gli argomenti: si spuntano gli
+    # argomenti di tutte le verifiche di prova della verifica (dalla più recente), ognuno una volta sola.
+    voci, visti, ultima = [], set(), None
+    for x in conn.execute(
+            f"SELECT id, domande FROM simulate WHERE evento_id = ? AND stato IN ({','.join('?' * len(STATI_SIMULATA_FATTA))})"
+            " ORDER BY id DESC", (evento_id, *STATI_SIMULATA_FATTA)):
+        ultima = ultima or x["id"]
+        for d in json.loads(x["domande"] or "[]"):
+            if not isinstance(d, dict) or d.get("n") is None or not d.get("testo"):
+                continue
+            testo = simulata.argomento_di(d)
+            if testo.casefold() not in visti:
+                visti.add(testo.casefold())
+                voci.append({"chiave": f"simulata:{x['id']}:{d['n']}", "testo": testo})
+    if voci:
+        gruppi.append({"fonte": "simulata", "id": ultima, "voci": voci})
     s = conn.execute("SELECT id, contenuto FROM schemi WHERE evento_id = ? AND stato = 'pronto' AND contenuto IS NOT NULL"
                      " ORDER BY id DESC LIMIT 1", (evento_id,)).fetchone()
     if s is not None:
@@ -140,7 +148,7 @@ def esito(evento_id: int, corpo: EsitoIn, conn: sqlite3.Connection = Depends(get
         if fonte == "lezione":
             ids.append(int(c.split(":")[1]))
         else:
-            altre_previste.append(f"argomento: {testo}" if fonte == "schema" else testo)
+            altre_previste.append(f"argomento: {testo}")
     ids = list(dict.fromkeys(ids))
     altre = [r.strip() for r in corpo.altre_domande.split("\n") if r.strip()]
     previste_uscite = len(ids) + len(altre_previste)

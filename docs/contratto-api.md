@@ -180,10 +180,20 @@ centesimi in più per ogni aggiornamento); se quella chiamata non riesce, resta 
   della scheda.
 - `GET /api/eventi/{id}/previste` (server 1.4.6) → `{"gruppi": [{"fonte": "lezione" | "simulata" | "schema", "id": 14,
   "voci": [{"chiave": "schema:14:3", "testo": "Victor dell'Aveyron"}]}]}`: quello che Lectio aveva preparato per la
-  verifica, da spuntare in "Com'è andata", in quest'ordine: le domande dell'ultima lezione (`domanda:{id}`), le domande
-  dell'ultima verifica simulata pronta, in corso o corretta (`simulata:{id}:{n}`), le parti con un titolo dell'ultimo
+  verifica, da spuntare in "Com'è andata", in quest'ordine: le domande dell'ultima lezione (`domanda:{id}`), gli
+  argomenti delle verifiche simulate (`simulata:{id}:{n}`), le parti con un titolo dell'ultimo
   schema pronto (`schema:{id}:{n}`, n da 1; il quadro d'insieme finale, una sola tabella, resta fuori). Un gruppo
   senza voci non c'è; 404 se l'evento non c'è.
+- Dal server 1.6.3 (richiesta di Andrea del 25/11/2026: "è impossibile che ci faccia le stesse domande della verifica
+  simulata") il gruppo `simulata` non elenca più le domande dell'ultima verifica di prova ma i loro **argomenti**, di
+  tutte le verifiche di prova dell'evento pronte, in corso o corrette, dalla più recente, ognuno una volta sola
+  (`"testo": "Deviazione standard"`; la chiave è quella della prima domanda con quell'argomento; `id` del gruppo =
+  la verifica di prova più recente). L'argomento lo scrive l'AI quando prepara la verifica di prova (2-5 parole, senza
+  numeri né situazione); per le domande senza, il server usa i nomi dei risultati senza l'oggetto («Errore relativo del
+  banco» → «Errore relativo») o l'inizio del testo. Nell'esito un argomento spuntato resta come "argomento: …", come
+  le parti dello schema. Il computer (1.5.2) li mostra come "Gli argomenti delle verifiche di prova", con "È uscito",
+  e le domande in più si aggiungono una alla volta (campo con Aggiungi o Invio; righe incollate insieme diventano più
+  domande; si tolgono con la X); arrivano al server come prima, in `altre_domande` una per riga.
 - Dal server 1.4.6 l'esito accetta anche `"voci_uscite": ["schema:14:3", "simulata:4:2", "domanda:31"]` (al massimo
   300, ognuna tra quelle di `/previste`, se no 422 sul campo `voci_uscite`). Le `domanda:` si uniscono alle
   `domande_uscite` (contate una volta sola); le altre contano tra le `previste_uscite` e restano nell'esito come

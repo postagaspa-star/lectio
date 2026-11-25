@@ -325,13 +325,16 @@ Prototipo `Lettore.dc.html`:
 ## 8. Com'è andata (dopo la verifica)
 
 Una pagina: titolo "Com'è andata la verifica di Storia?"; quello che Lectio aveva preparato, a gruppi con la loro
-etichetta: **Le domande della lezione**, **Le domande della verifica simulata**, **Le parti dello schema** (PC 1.3.13,
+etichetta: **Le domande della lezione**, **Gli argomenti delle verifiche di prova** (PC 1.5.2, server 1.6.3: prima
+erano le domande intere dell'ultima verifica di prova, che il prof non ripete), **Le parti dello schema** (PC 1.3.13,
 server 1.4.6: prima con il solo schema non c'era niente da spuntare), ogni voce come riga con interruttore
-**È uscita**; campo **Altre domande uscite** (una per riga; con il solo schema si chiama **Domande fuori dallo
-schema**, senza niente preparato **Le domande uscite**); pulsante pieno **Salva**. Il **voto** non c'è il giorno
+**È uscita** (per gli argomenti **È uscito**); sezione **Domande in più** (senza niente preparato **Le domande
+uscite**): le domande aggiunte in elenco, ognuna con la X per toglierla, e sotto un campo "Scrivi una domanda che ti
+ha fatto" con il pulsante **Aggiungi** (anche con Invio; più righe incollate diventano più domande; quella scritta e
+non aggiunta conta lo stesso); pulsante pieno **Salva**. Il **voto** non c'è il giorno
 della verifica (la scheda compare dalle 13 e il voto non si sa ancora): dal giorno dopo c'è il campo facoltativo
 **Voto** (solo la parola, senza frasi aggiunte). Risultato: anello "4 di 6 domande
-previste" (con il solo schema "argomenti previsti") che si riempie, frase "Ho aggiornato la scheda del prof",
+previste" (senza le domande della lezione "argomenti previsti") che si riempie, frase "Ho aggiornato la scheda del prof",
 pulsante **Carica la verifica corretta** (apre Aggiungi con tipo già scelto). Niente feste.
 
 ## 9. Per Gemini

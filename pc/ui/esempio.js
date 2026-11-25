@@ -470,14 +470,14 @@
 
   function domandeSimulata() {
     return [
-      { n: 1, tipo: 'aperta', testo: 'Perché Augusto non si fece mai chiamare re?', punti: 15, sezione: 'Prima parte: il principato', brano: copia(BRANO_AUGUSTO) },
-      { n: 2, tipo: 'definizione', testo: 'Che cos\'è il principato?', punti: 10, sezione: 'Prima parte: il principato', brano: copia(BRANO_AUGUSTO) },
-      { n: 3, tipo: 'aperta', testo: 'Quali poteri tenne per sé Augusto?', punti: 15, sezione: 'Prima parte: il principato' },
-      { n: 4, tipo: 'date', testo: 'In che anno Tiberio si ritirò a Capri?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
-      { n: 5, tipo: 'aperta', testo: 'Chi era Seiano e perché cadde?', punti: 15, sezione: 'Seconda parte: gli imperatori' },
-      { n: 6, tipo: 'esercizio', testo: 'Sulla linea del tempo segna gli anni di governo di ogni imperatore.', punti: 10, sezione: 'Seconda parte: gli imperatori' },
-      { n: 7, tipo: 'aperta', testo: 'Confronta Caligola e Claudio.', punti: 15, sezione: 'Seconda parte: gli imperatori' },
-      { n: 8, tipo: 'aperta', testo: 'Perché nel 68 finisce la dinastia giulio-claudia?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
+      { n: 1, argomento: 'Il principato di Augusto', tipo: 'aperta', testo: 'Perché Augusto non si fece mai chiamare re?', punti: 15, sezione: 'Prima parte: il principato', brano: copia(BRANO_AUGUSTO) },
+      { n: 2, argomento: 'Il principato di Augusto', tipo: 'definizione', testo: 'Che cos\'è il principato?', punti: 10, sezione: 'Prima parte: il principato', brano: copia(BRANO_AUGUSTO) },
+      { n: 3, argomento: 'I poteri di Augusto', tipo: 'aperta', testo: 'Quali poteri tenne per sé Augusto?', punti: 15, sezione: 'Prima parte: il principato' },
+      { n: 4, argomento: 'Tiberio', tipo: 'date', testo: 'In che anno Tiberio si ritirò a Capri?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
+      { n: 5, argomento: 'Seiano', tipo: 'aperta', testo: 'Chi era Seiano e perché cadde?', punti: 15, sezione: 'Seconda parte: gli imperatori' },
+      { n: 6, argomento: 'Gli imperatori giulio-claudi', tipo: 'esercizio', testo: 'Sulla linea del tempo segna gli anni di governo di ogni imperatore.', punti: 10, sezione: 'Seconda parte: gli imperatori' },
+      { n: 7, argomento: 'Caligola e Claudio', tipo: 'aperta', testo: 'Confronta Caligola e Claudio.', punti: 15, sezione: 'Seconda parte: gli imperatori' },
+      { n: 8, argomento: 'La fine dei giulio-claudi', tipo: 'aperta', testo: 'Perché nel 68 finisce la dinastia giulio-claudia?', punti: 10, sezione: 'Seconda parte: gli imperatori' },
     ];
   }
 
@@ -1168,8 +1168,20 @@
         const l = e.lezione_id ? s.lezioni.find((x) => x.id === e.lezione_id) : null;
         const dl = l ? (l.domande || []).filter((d) => !d.tolta) : [];
         if (dl.length) gruppi.push({ fonte: 'lezione', id: l.id, voci: dl.map((d) => ({ chiave: 'domanda:' + d.id, testo: d.testo })) });
-        const x = s.simulate.filter((y) => y.evento_id === e.id && ['pronta', 'in_corso', 'in_correzione', 'corretta'].includes(y.stato)).sort((a, b) => b.id - a.id)[0];
-        if (x && (x.domande || []).length) gruppi.push({ fonte: 'simulata', id: x.id, voci: x.domande.map((d) => ({ chiave: 'simulata:' + x.id + ':' + d.n, testo: d.testo })) });
+        // Come il server 1.6.3: gli argomenti di tutte le verifiche di prova, dalla più recente, ognuno una volta sola.
+        const visti = new Set();
+        const vs = [];
+        let ultima = null;
+        for (const x of s.simulate.filter((y) => y.evento_id === e.id && ['pronta', 'in_corso', 'in_correzione', 'corretta'].includes(y.stato)).sort((a, b) => b.id - a.id)) {
+          ultima = ultima || x.id;
+          for (const d of x.domande || []) {
+            const t = String(d.argomento || String(d.testo || '').split(/(?<=[.?!:])\s/)[0]).trim();
+            if (!t || visti.has(t.toLowerCase())) continue;
+            visti.add(t.toLowerCase());
+            vs.push({ chiave: 'simulata:' + x.id + ':' + d.n, testo: t });
+          }
+        }
+        if (vs.length) gruppi.push({ fonte: 'simulata', id: ultima, voci: vs });
         const sc = s.schemi.filter((y) => y.evento_id === e.id && y.stato === 'pronto' && y.contenuto).sort((a, b) => b.id - a.id)[0];
         if (sc) {
           const sez = sc.contenuto.sezioni || [];

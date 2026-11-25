@@ -898,6 +898,15 @@ select.campo { height: 44px; padding: 0 12px; min-width: 260px; }
 /* ------------------------------------------------------------------ Com'è andata */
 
 .domande-esito .riga { gap: 16px; }
+/* 1.5.2: le domande in più, aggiunte una alla volta. */
+.altre-domande[hidden] { display: none; }
+.altre-domande .riga { gap: 12px; min-height: 52px; }
+.tondo.togli-domanda { width: 36px; height: 36px; background: transparent; color: var(--tenue); margin-right: -4px; }
+.tondo.togli-domanda:hover:not(:disabled) { background: var(--sup2); color: var(--testo); filter: none; }
+.tondo.togli-domanda svg.icona { width: 18px; height: 18px; }
+.aggiungi-domanda { display: flex; gap: 10px; align-items: center; }
+.aggiungi-domanda .campo { flex: 1; min-width: 0; }
+.aggiungi-domanda .pulsante { flex-shrink: 0; }
 .anello { width: 140px; height: 140px; position: relative; align-self: center; }
 .anello svg { width: 140px; height: 140px; transform: rotate(-90deg); }
 .anello circle { fill: none; stroke-width: 12; }

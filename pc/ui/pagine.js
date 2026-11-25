@@ -1433,18 +1433,43 @@
     if (!vivo()) return;
     if (!rp.ok) { svuota(pag, A.erroreConRiprova(rp, () => A.disegna())); return; }
     const gruppi = ((rp.dati && rp.dati.gruppi) || []).filter((g) => (g.voci || []).length);
-    const soloSchema = gruppi.length > 0 && gruppi.every((g) => g.fonte === 'schema');
-    const NOMI = { lezione: 'Le domande della lezione', simulata: 'Le domande della verifica simulata', schema: 'Le parti dello schema' };
+    // 1.5.2: dalle verifiche di prova arrivano gli argomenti (il prof non ripete gli esercizi), come le parti dello schema.
+    const soloArgomenti = gruppi.length > 0 && gruppi.every((g) => g.fonte !== 'lezione');
+    const NOMI = { lezione: 'Le domande della lezione', simulata: 'Gli argomenti delle verifiche di prova', schema: 'Le parti dello schema' };
+    const USCITA = { simulata: 'È uscito' };
     const cosa = ev.tipo === 'orale' ? 'l\'interrogazione' : 'la verifica';
     const uscite = new Set();
-    const altre = h('textarea', { class: 'campo', id: 'altre-domande', rows: '4', placeholder: 'Una domanda per riga' });
+    // 1.5.2: le domande che Lectio non proponeva si aggiungono una alla volta e restano in elenco (si possono togliere).
+    const altreTesti = [];
+    const elencoAltre = h('div', { class: 'elenco altre-domande', hidden: true });
+    const altre = h('input', { class: 'campo', id: 'altre-domande', type: 'text', maxlength: '300', autocomplete: 'off', placeholder: 'Scrivi una domanda che ti ha fatto' });
+    const aggiungi = h('button', { type: 'button', class: 'pulsante tenue', 'data-azione': 'aggiungi-domanda' }, 'Aggiungi');
+    function disegnaAltre() {
+      svuota(elencoAltre, altreTesti.map((t, i) => h('div', { class: 'riga' },
+        h('span', { class: 'testi' }, h('span', { class: 'forte', stile: { fontSize: '15px' } }, t)),
+        h('button', { type: 'button', class: 'tondo togli-domanda', 'aria-label': 'Togli', title: 'Togli', 'data-azione': 'togli-domanda', onclick: () => { altreTesti.splice(i, 1); disegnaAltre(); } }, icona('chiudi')))));
+      elencoAltre.hidden = !altreTesti.length;
+    }
+    function aggiungiAltre(testo) {
+      for (const r of String(testo || '').split(/\r?\n/)) if (r.trim()) altreTesti.push(r.trim().replace(/\s+/g, ' '));
+      disegnaAltre();
+    }
+    aggiungi.addEventListener('click', () => { aggiungiAltre(altre.value); altre.value = ''; altre.focus(); });
+    altre.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); aggiungi.click(); } });
+    // Più righe incollate insieme diventano più domande.
+    altre.addEventListener('paste', (e) => {
+      const t = e.clipboardData ? e.clipboardData.getData('text') : '';
+      if (/\n/.test(t.trim())) { e.preventDefault(); aggiungiAltre(t); }
+    });
     // Il giorno della verifica il voto non c'è ancora: il campo compare dal giorno dopo, e resta facoltativo.
     const voto = ev.data < L.iso() ? h('input', { class: 'campo', id: 'voto', maxlength: '10', stile: { width: '140px' } }) : null;
     const esito = h('div');
     const salva = h('button', { type: 'button', class: 'pulsante pieno', 'data-azione': 'salva-esito' }, 'Salva');
     salva.addEventListener('click', async () => {
       salva.disabled = true;
-      const r = await A.api.post('/server/api/eventi/' + ev.id + '/esito', { voci_uscite: Array.from(uscite), altre_domande: altre.value, voto: voto ? voto.value.trim() || null : null });
+      // Anche la domanda scritta e non ancora aggiunta conta.
+      const tutte = altreTesti.concat(altre.value.trim() ? [altre.value.trim()] : []);
+      const r = await A.api.post('/server/api/eventi/' + ev.id + '/esito', { voci_uscite: Array.from(uscite), altre_domande: tutte.join('\n'), voto: voto ? voto.value.trim() || null : null });
       salva.disabled = false;
       if (!r.ok) { svuota(esito, A.messaggio('errore', r.errore)); return; }
       risultato(r.dati || {});
@@ -1467,7 +1492,7 @@
         h('h1', { class: 'titolo-pagina' }, 'Com\'è andata ' + cosa + ' di ' + m.nome + '?'),
         h('div', { class: 'scheda rilievo', stile: { alignItems: 'center', textAlign: 'center', maxWidth: '520px' } },
           // Senza niente da spuntare non c'è un "0 di 3 previste" da mostrare.
-          gruppi.length ? h('div', { class: 'anello' }, svg, h('div', { class: 'numero' }, (d.previste_uscite || 0) + ' di ' + (d.totale_vere || 0), h('span', null, soloSchema ? 'argomenti previsti' : 'domande previste'))) : null,
+          gruppi.length ? h('div', { class: 'anello' }, svg, h('div', { class: 'numero' }, (d.previste_uscite || 0) + ' di ' + (d.totale_vere || 0), h('span', null, soloArgomenti ? 'argomenti previsti' : 'domande previste'))) : null,
           h('p', { class: 'forte' }, 'Ho aggiornato la scheda del prof.'),
           h('button', { type: 'button', class: 'pulsante tenue', onclick: () => { A.vai('#materia/' + m.id); setTimeout(() => { const mm = A.materiaDi(m.id); if (mm) A.apriAggiungi(mm, { tipo: 'verifica' }); }, 120); } }, 'Carica la verifica corretta')));
     }
@@ -1477,10 +1502,13 @@
         h('div', { class: 'elenco domande-esito', 'data-fonte': g.fonte }, g.voci.map((v) => {
           const id = 'uscita-' + String(v.chiave).replace(/[^a-z0-9]+/gi, '-');
           const input = h('input', { type: 'checkbox', id, onchange: () => { if (input.checked) uscite.add(v.chiave); else uscite.delete(v.chiave); } });
-          return h('label', { class: 'riga interruttore', for: id }, h('span', { class: 'testi' }, h('span', { class: 'forte', stile: { fontSize: '15px' } }, v.testo), h('span', { class: 'secondario' }, 'È uscita')), input, h('span', { class: 'binario', 'aria-hidden': 'true' }));
+          return h('label', { class: 'riga interruttore', for: id }, h('span', { class: 'testi' }, h('span', { class: 'forte', stile: { fontSize: '15px' } }, v.testo), h('span', { class: 'secondario' }, USCITA[g.fonte] || 'È uscita')), input, h('span', { class: 'binario', 'aria-hidden': 'true' }));
         })))),
       h('div', { class: 'su-fondo', stile: { display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '640px' } },
-        h('label', { class: 'campo-gruppo', for: 'altre-domande' }, h('span', { class: 'etichetta' }, soloSchema ? 'Domande fuori dallo schema' : gruppi.length ? 'Altre domande uscite' : 'Le domande uscite'), altre),
+        h('div', { class: 'sezione' },
+          h('label', { class: 'etichetta', for: 'altre-domande' }, gruppi.length ? 'Domande in più' : 'Le domande uscite'),
+          elencoAltre,
+          h('div', { class: 'aggiungi-domanda' }, altre, aggiungi)),
         voto ? h('label', { class: 'campo-gruppo', for: 'voto' }, h('span', { class: 'etichetta' }, 'Voto'), voto) : null),
       esito,
       h('div', null, salva));

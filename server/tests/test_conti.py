@@ -244,6 +244,7 @@ def test_la_consegna_non_da_il_procedimento():
     brani = [{"id": "B1", "materiale_id": 1, "tipo": "appunti", "titolo": "Errori", "pagina": None, "rango": 4,
               "testo": "L'errore relativo è il rapporto tra errore assoluto e misura."}]
     esercizio = {"tipo": "esercizio", "punti": 3, "risposta_attesa": "Si divide l'errore assoluto per la misura.", "fonti": ["B1"],
+                 "argomento": "  errore   relativo. ",
                  "testo": "Una misura è x = 2,40 cm con errore assoluto Δx = 0,06 cm. Calcola l'errore relativo Δx/x.",
                  "calcolo": {"tipo": "valore", "dati": {"x": 2.40, "dx": 0.06},
                              "richieste": [{"cosa": "Errore relativo", "formula": "dx / x", "unita": None, "arrotonda": None}]}}
@@ -252,6 +253,23 @@ def test_la_consegna_non_da_il_procedimento():
     d = simulata.normalizza({"domande": [esercizio]}, brani, numeri=True)[0]
     assert d["testo"] == "Una misura è x = 2,40 cm con errore assoluto Δx = 0,06 cm. Calcola l'errore relativo."
     assert d["forma"] == "conti" and "0,025" in d["risposta_attesa"]
+    assert d["argomento"] == "Errore relativo"  # 1.6.3: per "Com'è andata"
+
+
+def test_argomento_di_una_domanda():
+    """1.6.3: in "Com'è andata" si spuntano gli argomenti, non gli esercizi della verifica di prova."""
+    assert simulata.argomento_di({"argomento": "deviazione standard", "testo": "Con una bilancia…"}) == "Deviazione standard"
+    lungo = simulata.argomento_breve("Il calcolo della deviazione standard di una serie di misure fatte con la bilancia")
+    assert len(lungo) <= 60 and lungo.startswith("Il calcolo della deviazione standard") and not lungo.endswith(" ")
+    assert simulata.argomento_breve("  ") is None and simulata.argomento_breve(None) is None
+    # Le domande di prima, senza argomento: i nomi dei risultati senza l'oggetto misurato.
+    assert simulata.argomento_di({"risultati": ["Errore relativo del banco", "Errore relativo della sedia"]}) == "Errore relativo"
+    assert simulata.argomento_di({"risultati": ["Media delle misure", "Semidispersione massima"]}) == \
+        "Media e semidispersione massima"
+    assert simulata.argomento_di({"testo": "Che cos'è il kula? Spiega bene."}) == "Che cos'è il kula?"
+    corto = simulata.argomento_di({"testo": "Con un calibro misuri quattro volte il diametro di una biglia e ottieni 2,43 cm; "
+                                            "2,48 cm; 2,45 cm; 2,41 cm e poi calcoli la semidispersione"})
+    assert corto.endswith("…") and len(corto) <= 91
 
 
 def test_formula_detta_con_le_parole_o_con_la_radice():
